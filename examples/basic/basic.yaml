@@ -1,0 +1,51 @@
+---
+suite: Basic Test Suite
+nodes:
+  - name: local
+    type: local
+    options:
+      shell: /bin/bash
+setup:
+  - name: step 1
+    node: local
+    step:
+      type: simulated
+      options:
+        time: 4
+        message: installing fake package 1
+  - name: step 2
+    node: local
+    step:
+      type: simulated
+      options:
+        time: 4
+        message: installing fake package 2
+  - name: step 3
+    node: local
+    step:
+      type: simulated
+      options:
+        time: 4
+        message: installing fake package 3
+tests:
+  - name: Hello World Test - Type 1
+    node: local
+    execute: sleep 4 && echo "Hello World"
+    check:
+      match: "Hello World"
+  - name: Hello World Test - Type 2
+    node: local
+    execute: sleep 5 && echo "Hello World" | grep "Hello World"
+    check:
+      exit_code: 0
+  - name: Hello World Test - Multiple Checks
+    node: local
+    execute: sleep 3 && echo "Hello World"
+    check:
+      match: "Hello World"
+      exit_code: 0
+#  - name: Hello World Failure Test
+#    node: local
+#    execute: sleep 5 && echo "Hello Dork"
+#    check:
+#      match: "Hello World"
