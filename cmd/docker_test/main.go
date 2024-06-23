@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/bgrewell/dart/internal/docker"
+	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"log"
 )
@@ -31,6 +33,29 @@ func main() {
 	for _, image := range images {
 		log.Printf("Image: %s\n", image.RepoTags)
 	}
+
+	// Create a container
+	cc := &container.Config{
+		Image: "alpine",
+		Cmd:   []string{"tail", "-f", "/dev/null"},
+	}
+	id, err := docker.CreateContainer(ctx, cli, cc, nil, nil, "test_container")
+	if err != nil {
+		log.Fatalf("Could not create container: %v", err)
+	}
+	fmt.Println(id)
+
+	// Start a container
+	err = docker.StartContainer(ctx, cli, id)
+	if err != nil {
+		log.Fatalf("Could not start container: %v", err)
+	}
+
+	// Remove a container
+	//err = cli.ContainerRemove(ctx, id, container.RemoveOptions{})
+	//if err != nil {
+	//	log.Fatalf("Could not remove container: %v", err)
+	//}
 
 	// Build Docker image
 	//dockerfilePath := "/home/ben/repos/dart/examples/docker/dockerfiles/client.dockerfile"

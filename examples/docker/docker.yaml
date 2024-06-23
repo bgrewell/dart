@@ -1,0 +1,71 @@
+---
+# General test suite configuration
+suite: Docker Example Test Suite
+
+# Define the nodes that will be used in the test suite
+nodes:
+  - name: docker-server
+    type: docker
+    options:
+      dockerfile: dockerfiles/server.dockerfile
+      networks:
+        - name: test_net
+          subnet: 192.168.200.0/24
+          ip: 192.168.200.10
+
+  - name: docker-client
+    type: docker
+    options:
+      dockerfile: dockerfiles/client.dockerfile
+      networks:
+        - name: test_net
+          subnet: 192.168.200.0/24
+          ip: 192.168.200.100
+
+# Define the setup steps that will be executed before the tests begin
+setup:
+  - name: step 1
+    node: local
+    step:
+      type: simulated
+      options:
+        time: 2
+        message: installing fake package 1
+  - name: step 2
+    node: local
+    step:
+      type: simulated
+      options:
+        time: 2
+        message: installing fake package 2
+  - name: step 3
+    node: local
+    step:
+      type: simulated
+      options:
+        time: 2
+        message: installing fake package 3
+
+# Define the tests that will be executed
+tests:
+  - name: Hello World Test - Type 1
+    node: local
+    execute: sleep 4 && echo "Hello World"
+    check:
+      match: "Hello World"
+  - name: Hello World Test - Type 2
+    node: local
+    execute: sleep 5 && echo "Hello World" | grep "Hello World"
+    check:
+      exit_code: 0
+  - name: Hello World Test - Multiple Checks
+    node: local
+    execute: sleep 3 && echo "Hello World" && false
+    check:
+      match: "Hello World"
+      exit_code: 0
+  - name: Hello World Failure Test
+    node: local
+    execute: sleep 5 && echo "Hello Dork"
+    check:
+      match: "Hello World"
