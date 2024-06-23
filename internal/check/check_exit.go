@@ -1,6 +1,7 @@
 package check
 
 import (
+	"github.com/bgrewell/dart/internal/eval"
 	"github.com/bgrewell/dart/internal/execution"
 )
 
@@ -11,9 +12,18 @@ type ExitCodeCheck struct {
 
 // Verify is a method that verifies that the expected exit code matches the actual exit code
 func (e *ExitCodeCheck) Verify(execResult *execution.ExecutionResult) (result *CheckResult) {
+	passed := execResult.ExitCode == e.Expected
+	var details interface{} = execResult.ExitCode
+	if !passed {
+		details = &eval.EvalIntFailResult{
+			Expected: e.Expected,
+			Actual:   execResult.ExitCode,
+		}
+	}
+
 	return &CheckResult{
-		Passed:  execResult.ExitCode == e.Expected,
-		Details: execResult.ExitCode,
+		Passed:  passed,
+		Details: details,
 		Err:     nil,
 	}
 }

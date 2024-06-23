@@ -2,6 +2,7 @@ package formatters
 
 import (
 	"fmt"
+	"github.com/bgrewell/dart/internal/eval"
 	"github.com/fatih/color"
 	"github.com/theckman/yacspin"
 	"strconv"
@@ -14,15 +15,20 @@ var _ Formatter = &StandardFormatter{}
 var (
 	headerColor        = color.New(color.FgHiBlue).Add(color.Bold)
 	headerPrefixColor  = color.New(color.FgHiWhite).Add(color.Bold)
+	headerFailColor    = color.New(color.FgHiRed).Add(color.Bold)
+	headerPassColor    = color.New(color.FgHiGreen).Add(color.Bold)
 	numberColor        = color.New(color.FgHiCyan)
 	numberPaddingColor = color.New(color.FgHiBlack)
-	passNumberColor    = color.New(color.FgHiGreen)
-	failNumberColor    = color.New(color.FgHiRed)
+	labelFailColor     = color.New(color.FgHiRed)
+	valueColor         = color.New(color.FgHiCyan)
+	valuePassColor     = color.New(color.FgHiGreen)
+	valueFailColor     = color.New(color.FgHiRed)
 )
 
 func NewStandardFormatter() *StandardFormatter {
 	return &StandardFormatter{
-		indent: 2,
+		indent:       2,
+		detailIndent: 7,
 	}
 }
 
@@ -30,6 +36,39 @@ type StandardFormatter struct {
 	taskColumnWidth int
 	testColumnWidth int
 	indent          int
+	detailIndent    int
+}
+
+func (sf *StandardFormatter) PrintPass(name string, details interface{}) {
+	fmt.Printf("%s%s:\n", strings.Repeat(" ", sf.detailIndent-sf.indent), headerPassColor.Sprintf(name))
+	switch details.(type) {
+	case string:
+		lines := strings.Split(details.(string), "\n")
+		for _, line := range lines {
+			fmt.Printf("%s%s\n", strings.Repeat(" ", sf.detailIndent), valueColor.Sprintf(line))
+		}
+	case int:
+		fmt.Printf("%s%s\n", strings.Repeat(" ", sf.detailIndent), valueColor.Sprintf(strconv.Itoa(details.(int))))
+	}
+}
+
+func (sf *StandardFormatter) PrintFail(name string, details interface{}) {
+	fmt.Printf("%s%s:\n", strings.Repeat(" ", sf.detailIndent-sf.indent), headerFailColor.Sprintf(name))
+	switch details.(type) {
+	case string:
+		lines := strings.Split(details.(string), "\n")
+		for _, line := range lines {
+			fmt.Printf("%s%s\n", strings.Repeat(" ", sf.detailIndent), valueColor.Sprintf(line))
+		}
+	case int:
+		fmt.Printf("%s%s\n", strings.Repeat(" ", sf.detailIndent), valueColor.Sprintf(strconv.Itoa(details.(int))))
+	case *eval.EvalStringFailResult:
+		fmt.Printf("%s%s: %s\n", strings.Repeat(" ", sf.detailIndent), labelFailColor.Sprintf("Expected"), details.(*eval.EvalStringFailResult).Expected)
+		fmt.Printf("%s%s: %s\n", strings.Repeat(" ", sf.detailIndent), labelFailColor.Sprintf("Actual"), details.(*eval.EvalStringFailResult).Actual)
+	case *eval.EvalIntFailResult:
+		fmt.Printf("%s%s: %d\n", strings.Repeat(" ", sf.detailIndent), labelFailColor.Sprintf("Expected"), details.(*eval.EvalIntFailResult).Expected)
+		fmt.Printf("%s%s: %d\n", strings.Repeat(" ", sf.detailIndent), labelFailColor.Sprintf("Actual"), details.(*eval.EvalIntFailResult).Actual)
+	}
 }
 
 func (sf *StandardFormatter) PrintEmpty() {
@@ -41,8 +80,8 @@ func (sf *StandardFormatter) PrintResults(pass, fail int) {
 	p := 5 - (len(strconv.Itoa(pass)))
 	f := 5 - (len(strconv.Itoa(fail)))
 
-	passVal := passNumberColor.Sprintf(strconv.Itoa(pass))
-	failVal := failNumberColor.Sprintf(strconv.Itoa(fail))
+	passVal := strconv.Itoa(pass)
+	failVal := strconv.Itoa(fail)
 
 	if pass == 0 {
 		p = 5
@@ -58,8 +97,8 @@ func (sf *StandardFormatter) PrintResults(pass, fail int) {
 
 	indent := strings.Repeat(" ", sf.indent)
 	sf.PrintHeader("Results")
-	fmt.Printf("%sPass: %s%s\n", indent, numberPaddingColor.Sprintf(passPad), passNumberColor.Sprintf(passVal))
-	fmt.Printf("%sFail: %s%s\n", indent, numberPaddingColor.Sprintf(failPad), failNumberColor.Sprintf(failVal))
+	fmt.Printf("%sPass: %s%s\n", indent, numberPaddingColor.Sprintf(passPad), valuePassColor.Sprintf(passVal))
+	fmt.Printf("%sFail: %s%s\n", indent, numberPaddingColor.Sprintf(failPad), valueFailColor.Sprintf(failVal))
 }
 
 func (sf *StandardFormatter) PrintHeader(header string) {
@@ -172,16 +211,25 @@ func (s StandardTestCompleter) Update(status string) {
 }
 
 func (s StandardTestCompleter) Complete(passed []bool) {
-	s.spinner.StopColors()
-	chars := []string{}
+	//s.spinner.StopColors()
+	//chars := []string{}
+	//for _, p := range passed {
+	//	if p {
+	//		chars = append(chars, passNumberColor.Sprintf("✓"))
+	//	} else {
+	//		chars = append(chars, failNumberColor.Sprintf("✗"))
+	//	}
+	//}
+	//s.spinner.StopCharacter(strings.Join(chars, " "))
+	//s.spinner.Stop()
+
 	for _, p := range passed {
-		if p {
-			chars = append(chars, passNumberColor.Sprintf("✓"))
-		} else {
-			chars = append(chars, failNumberColor.Sprintf("✗"))
+		if !p {
+			s.spinner.StopFail()
+			return
 		}
 	}
-	s.spinner.StopCharacter(strings.Join(chars, " "))
+
 	s.spinner.Stop()
 }
 

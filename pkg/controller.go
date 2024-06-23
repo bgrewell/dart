@@ -14,6 +14,7 @@ func NewTestController(suite string, nodes map[string]Node, tests []Test, setup 
 		Setup:     setup,
 		Teardown:  teardown,
 		formatter: formatter,
+		verbose:   false,
 	}
 }
 
@@ -24,6 +25,7 @@ type TestController struct {
 	Tests     []Test
 	Teardown  []Step
 	formatter formatters.Formatter
+	verbose   bool
 }
 
 func (tc *TestController) Run() error {
@@ -62,12 +64,21 @@ func (tc *TestController) Run() error {
 	testResults := make(map[string]map[string]*check.CheckResult)
 	tc.formatter.PrintHeader("Running tests")
 	for idx, test := range tc.Tests {
-		f := tc.formatter.StartTest(strconv.Itoa(idx), test.Name())
+		id := idx + 1
+		f := tc.formatter.StartTest(strconv.Itoa(id), test.Name())
 		results, err := test.Run(f)
 		if err != nil {
 			return err
 		}
 		testResults[test.Name()] = results
+
+		for name, result := range results {
+			if result.Passed && tc.verbose {
+				tc.formatter.PrintPass(name, result.Details)
+			} else if !result.Passed {
+				tc.formatter.PrintFail(name, result.Details)
+			}
+		}
 	}
 	tc.formatter.PrintEmpty()
 
@@ -87,14 +98,19 @@ func (tc *TestController) Run() error {
 	// Count the passes and fails and print the test results
 	passed, failed := 0, 0
 	for _, results := range testResults {
+		// Count the tests, not the checks so any failed check is a failed test
+		testPassed := true
 		for _, result := range results {
-			if result.Passed {
-				passed++
-			} else {
-				failed++
+			if !result.Passed {
+				testPassed = false
+				break
 			}
 		}
-
+		if testPassed {
+			passed++
+		} else {
+			failed++
+		}
 	}
 	tc.formatter.PrintResults(passed, failed)
 

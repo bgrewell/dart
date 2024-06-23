@@ -1,6 +1,7 @@
 package check
 
 import (
+	"github.com/bgrewell/dart/internal/eval"
 	"github.com/bgrewell/dart/internal/execution"
 	"io"
 	"strings"
@@ -28,9 +29,18 @@ func (m *MatchCheck) Verify(execResult *execution.ExecutionResult) (result *Chec
 		actual = strings.TrimRight(actual, "\n ")
 	}
 
+	var details interface{} = actual
+	passed := actual == m.Expected
+	if !passed {
+		details = &eval.EvalStringFailResult{
+			Expected: m.Expected,
+			Actual:   actual,
+		}
+	}
+
 	return &CheckResult{
-		Passed:  actual == m.Expected,
-		Details: actual,
+		Passed:  passed,
+		Details: details,
 		Err:     nil,
 	}
 }

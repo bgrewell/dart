@@ -3,10 +3,11 @@
 Docker Automated Regression Testing
 
 ## Next Tasks
-- Summary of the test results
+[x] - Summary of the test results
 - Verbose output
 - Failed test details
 - General cleanup of formatter and controller
+- Ability to load a series of tests from recursive folders of yaml files
 
 ## Requirements
 

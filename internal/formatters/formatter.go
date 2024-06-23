@@ -7,6 +7,8 @@ type Formatter interface {
 	StartTest(id, name string) TestCompleter
 	PrintHeader(header string)
 	PrintResults(pass, fail int)
+	PrintPass(name string, details interface{})
+	PrintFail(name string, details interface{})
 	PrintEmpty()
 }
 
