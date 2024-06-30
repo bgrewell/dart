@@ -9,6 +9,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
+	"io"
 	"path/filepath"
 )
 
@@ -204,7 +205,7 @@ func (w *Wrapper) RemoveNetworkIsolationRules() error {
 	return helpers.WrapError("not implemented")
 }
 
-func (w *Wrapper) ExecuteInContainer(containerName, command string) (int, string, error) {
+func (w *Wrapper) ExecuteInContainer(containerName, command string) (exitCode int, stdout, stderr io.Reader, err error) {
 	id := w.containerNamesToId[containerName]
 	return RunCommandInContainer(w.cli, id, command)
 }

@@ -90,9 +90,11 @@ func ParseConfiguration(data []byte, location string) (config *Configuration, er
 	}
 
 	// Ensure that the Dockerfile paths that are relative to the execution point
-	for _, image := range config.Docker.Images {
-		if !strings.HasPrefix(image.Dockerfile, "/") {
-			image.Dockerfile = path.Join(location, image.Dockerfile)
+	if config.Docker != nil {
+		for _, image := range config.Docker.Images {
+			if !strings.HasPrefix(image.Dockerfile, "/") {
+				image.Dockerfile = path.Join(location, image.Dockerfile)
+			}
 		}
 	}
 

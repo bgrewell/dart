@@ -116,7 +116,7 @@ func RemoveContainer(ctx context.Context, cli client.APIClient, containerID stri
 }
 
 // RunCommandInContainer runs a command in a specified Docker container
-func RunCommandInContainer(cli *client.Client, containerID string, command string) (int, string, error) {
+func RunCommandInContainer(cli *client.Client, containerID string, command string) (exitCode int, stdout, stderr io.Reader, err error) {
 	ctx := context.Background()
 
 	// Create an exec instance
@@ -127,35 +127,31 @@ func RunCommandInContainer(cli *client.Client, containerID string, command strin
 	}
 	execIDResp, err := cli.ContainerExecCreate(ctx, containerID, execConfig)
 	if err != nil {
-		return -1, "", fmt.Errorf("could not create exec instance: %v", err)
+		return -1, nil, nil, fmt.Errorf("could not create exec instance: %v", err)
 	}
 	execID := execIDResp.ID
 
 	// Start the exec instance
 	resp, err := cli.ContainerExecAttach(ctx, execID, types.ExecStartCheck{})
 	if err != nil {
-		return -1, "", fmt.Errorf("could not attach to exec instance: %v", err)
+		return -1, nil, nil, fmt.Errorf("could not attach to exec instance: %v", err)
 	}
 	defer resp.Close()
 
 	// Read the output
-	var stdout, stderr bytes.Buffer
-	_, err = stdcopy.StdCopy(&stdout, &stderr, resp.Reader)
+	var sout, serr bytes.Buffer
+	_, err = stdcopy.StdCopy(&sout, &serr, resp.Reader)
 	if err != nil {
-		return -1, "", fmt.Errorf("could not copy exec output: %v", err)
+		return -1, &sout, &serr, fmt.Errorf("could not copy exec output: %v", err)
 	}
 
 	// Inspect the exec instance to get the exit code
 	inspectResp, err := cli.ContainerExecInspect(ctx, execID)
 	if err != nil {
-		return -1, "", fmt.Errorf("could not inspect exec instance: %v", err)
+		return -1, &sout, &serr, fmt.Errorf("could not inspect exec instance: %v", err)
 	}
 
-	// Return the result based on the exit code
-	if inspectResp.ExitCode != 0 {
-		return inspectResp.ExitCode, stderr.String(), nil
-	}
-	return inspectResp.ExitCode, stdout.String(), nil
+	return inspectResp.ExitCode, &sout, &serr, nil
 }
 
 func ContainerLogs(ctx context.Context, cli client.APIClient, containerID string) (io.ReadCloser, error) {

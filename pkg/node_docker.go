@@ -5,8 +5,6 @@ import (
 	"github.com/bgrewell/dart/internal/docker"
 	"github.com/bgrewell/dart/internal/execution"
 	"github.com/bgrewell/dart/internal/helpers"
-	"io"
-	"strings"
 )
 
 var _ Node = &DockerNode{}
@@ -68,19 +66,9 @@ func (d *DockerNode) Teardown() error {
 }
 
 func (d *DockerNode) Execute(command string, options ...execution.ExecutionOption) (result *execution.ExecutionResult, err error) {
-	code, outerr, err := d.wrapper.ExecuteInContainer(d.name, command)
+	code, stdout, stderr, err := d.wrapper.ExecuteInContainer(d.name, command)
 	if err != nil {
 		return nil, err
-	}
-
-	var stdout, stderr io.Reader
-
-	if code != 0 {
-		stderr = strings.NewReader(outerr)
-		stdout = strings.NewReader("")
-	} else {
-		stdout = strings.NewReader(outerr)
-		stderr = strings.NewReader("")
 	}
 
 	return &execution.ExecutionResult{
