@@ -8,7 +8,19 @@ import (
 	"strconv"
 )
 
-func NewTestController(suite string, wrapper *docker.Wrapper, nodes map[string]Node, tests []Test, setup []Step, teardown []Step, formatter formatters.Formatter) *TestController {
+func NewTestController(
+	suite string,
+	wrapper *docker.Wrapper,
+	nodes map[string]Node,
+	tests []Test,
+	setup []Step,
+	teardown []Step,
+	verbose bool,
+	stopOnFail bool,
+	pauseOnFail bool,
+	setupOnly bool,
+	teardownOnly bool,
+	formatter formatters.Formatter) *TestController {
 	return &TestController{
 		Suite:         suite,
 		Nodes:         nodes,
@@ -17,7 +29,11 @@ func NewTestController(suite string, wrapper *docker.Wrapper, nodes map[string]N
 		Teardown:      teardown,
 		DockerWrapper: wrapper,
 		formatter:     formatter,
-		verbose:       false,
+		verbose:       verbose,
+		stopOnFail:    stopOnFail,
+		pauseOnFail:   pauseOnFail,
+		setupOnly:     setupOnly,
+		teardownOnly:  teardownOnly,
 	}
 }
 
@@ -30,6 +46,10 @@ type TestController struct {
 	DockerWrapper *docker.Wrapper
 	formatter     formatters.Formatter
 	verbose       bool
+	stopOnFail    bool
+	pauseOnFail   bool
+	setupOnly     bool
+	teardownOnly  bool
 }
 
 func (tc *TestController) Run() error {

@@ -44,7 +44,7 @@ func (sf *StandardFormatter) PrintError(err error) {
 }
 
 func (sf *StandardFormatter) PrintPass(name string, details interface{}) {
-	fmt.Printf("%s%s:\n", strings.Repeat(" ", sf.detailIndent-sf.indent), headerPassColor.Sprintf(name))
+	fmt.Printf("%s+%s:\n", strings.Repeat(" ", sf.detailIndent-sf.indent), headerPassColor.Sprintf(name))
 	switch details.(type) {
 	case string:
 		lines := strings.Split(details.(string), "\n")
@@ -57,7 +57,7 @@ func (sf *StandardFormatter) PrintPass(name string, details interface{}) {
 }
 
 func (sf *StandardFormatter) PrintFail(name string, details interface{}) {
-	fmt.Printf("%s%s:\n", strings.Repeat(" ", sf.detailIndent-sf.indent), headerFailColor.Sprintf(name))
+	fmt.Printf("%s-%s:\n", strings.Repeat(" ", sf.detailIndent-sf.indent), headerFailColor.Sprintf(name))
 	switch details.(type) {
 	case string:
 		lines := strings.Split(details.(string), "\n")
@@ -125,11 +125,11 @@ func (sf *StandardFormatter) StartTask(task, status string) TaskCompleter {
 		ShowCursor:        false,
 		SpinnerAtEnd:      true,
 		CharSet:           yacspin.CharSets[14],
-		Colors:            []string{"fgHiGreen"},
+		Colors:            []string{"fgHiCyan"},
 		StopColors:        []string{"fgHiGreen"},
 		StopFailColors:    []string{"fgHiRed"},
-		StopFailCharacter: "✗",
-		StopCharacter:     "✓",
+		StopFailCharacter: "error", //"✗",
+		StopCharacter:     "done",  //"✓",
 	})
 	c := &StandardTaskCompleter{
 		BaseCompleter: BaseCompleter{
@@ -154,11 +154,11 @@ func (sf *StandardFormatter) StartTest(id, name string) TestCompleter {
 		ShowCursor:        false,
 		SpinnerAtEnd:      true,
 		CharSet:           yacspin.CharSets[14],
-		Colors:            []string{"fgHiGreen"},
+		Colors:            []string{"fgHiCyan"},
 		StopColors:        []string{"fgHiGreen"},
 		StopFailColors:    []string{"fgHiRed"},
-		StopFailCharacter: "✗",
-		StopCharacter:     "✓",
+		StopFailCharacter: "failed", //"✗",
+		StopCharacter:     "passed", //"✓",
 	})
 
 	c := &StandardTestCompleter{

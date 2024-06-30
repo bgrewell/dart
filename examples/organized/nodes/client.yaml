@@ -1,0 +1,9 @@
+- name: docker-client
+  type: docker
+  options:
+    image: test_client:latest
+    exec_opts:
+      shell: /bin/bash
+    networks:
+      - name: test_net
+        ip: 192.168.200.100

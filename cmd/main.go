@@ -2,14 +2,25 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/bgrewell/dart/internal/config"
 	"github.com/bgrewell/dart/internal/docker"
 	"github.com/bgrewell/dart/internal/formatters"
 	"github.com/bgrewell/dart/internal/logger"
 	"github.com/bgrewell/dart/pkg"
+	"github.com/bgrewell/usage"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
 )
+
+type CmdlineFlags struct {
+	ConfigFile   *string
+	Verbose      *bool
+	StopOnError  *bool
+	PauseOnError *bool
+	SetupOnly    *bool
+	TeardownOnly *bool
+}
 
 type ControllerParams struct {
 	fx.In
@@ -20,6 +31,7 @@ type ControllerParams struct {
 	//Teardown  []pkg.Step `group:"teardown"`
 	Wrapper   *docker.Wrapper
 	Formatter formatters.Formatter
+	Flags     *CmdlineFlags
 }
 
 type RunParams struct {
@@ -29,11 +41,11 @@ type RunParams struct {
 	Ctrl       *pkg.TestController
 }
 
-func Configuration() (*config.Configuration, error) {
+func Configuration(cmdFlags *CmdlineFlags) (*config.Configuration, error) {
 	// Read in the test configuration file
 	//cfg, err := config.LoadConfiguration("examples/basic/basic.yaml")
 	//cfg, err := config.LoadConfiguration("examples/docker/docker.yaml")
-	cfg, err := config.LoadConfiguration("examples/ssh/ssh.yaml")
+	cfg, err := config.LoadConfiguration(*cmdFlags.ConfigFile)
 	if err != nil {
 		return nil, err
 	}
@@ -109,6 +121,11 @@ func Controller(params ControllerParams) (ctrl *pkg.TestController, err error) {
 		params.Tests,
 		setup,
 		teardown,
+		*params.Flags.Verbose,
+		*params.Flags.StopOnError,
+		*params.Flags.PauseOnError,
+		*params.Flags.SetupOnly,
+		*params.Flags.TeardownOnly,
 		//params.Setup,
 		//params.Teardown,
 		params.Formatter), nil
@@ -133,6 +150,27 @@ func RegisterHooks(params RunParams) {
 
 func main() {
 
+	u := usage.NewUsage(
+		usage.WithApplicationName("dart"),
+		usage.WithApplicationVersion("dev"),
+		usage.WithApplicationBuildDate("dev"),
+		usage.WithApplicationCommitHash("dev"),
+		usage.WithApplicationBranch("dev"),
+		usage.WithApplicationDescription("DART is a distributed systems testing framework designed to make it easy to perform automation and integration testing on a wide variety of distributed systems."),
+	)
+
+	cfgFlags := &CmdlineFlags{}
+	cfgFlags.ConfigFile = u.AddStringOption("c", "config", "config.yaml", "The path to the configuration file", "", nil)
+	cfgFlags.Verbose = u.AddBooleanOption("v", "verbose", false, "Enable verbose output", "", nil)
+	cfgFlags.PauseOnError = u.AddBooleanOption("p", "pause-on-error", false, "Pause on error", "", nil)
+	cfgFlags.StopOnError = u.AddBooleanOption("s", "stop-on-error", false, "Stop on error", "", nil)
+	cfgFlags.SetupOnly = u.AddBooleanOption("setup", "setup-only", false, "Only run the setup steps", "", nil)
+	cfgFlags.TeardownOnly = u.AddBooleanOption("teardown", "teardown-only", false, "Only run the teardown steps", "", nil)
+
+	if !u.Parse() {
+		u.PrintError(fmt.Errorf("Failed to parse command line arguments"))
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -143,6 +181,9 @@ func main() {
 			return logger.NewLogger()
 		}),
 		fx.Provide(
+			func() *CmdlineFlags {
+				return cfgFlags
+			},
 			Nodes,
 			Tests,
 			fx.Annotate(

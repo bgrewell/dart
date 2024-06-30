@@ -2,7 +2,23 @@
 
 Docker Automated Regression Testing
 
+## Task Types
+
+- [ ] APT Package Management
+- [ ] SNAP Package Management
+- [ ] git clone
+- [ ] command execution
+
 ## Next Tasks
+- [ ] Flags
+  - [ ] Verbose
+  - [ ] Pause on fail
+  - [ ] Stop on fail
+  - [ ] Setup only
+  - [ ] Teardown only
+  - [ ] Skip teardown
+  - [ ] Skip setup
+  
 [x] - Summary of the test results
 - Verbose output
 - Failed test details
@@ -21,16 +37,16 @@ Docker Automated Regression Testing
 
 ### Types of tests
 
-- Command Execution
-- File Read
-- File Write
-- File Exist
-- TCP Socket
-- UDP Socket
-- ICMP Socket
-- Unix Socket
-- HTTP Request
-- HTTPS Request
-- gRPC Request
-- DNS Request
-- (Plugins)
+- [x] Command Execution
+- [ ] File Read
+- [ ] File Write
+- [ ] File Exist
+- [ ] TCP Socket
+- [ ] UDP Socket
+- [ ] ICMP Socket
+- [ ] Unix Socket
+- [ ] HTTP Request
+- [ ] HTTPS Request
+- [ ] gRPC Request
+- [ ] DNS Request
+- [ ] (Plugins)

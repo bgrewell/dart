@@ -1,5 +1,5 @@
 ---
-suite: Basic Test Suite
+suite: SSH Test Suite
 nodes:
   - name: client
     type: ssh

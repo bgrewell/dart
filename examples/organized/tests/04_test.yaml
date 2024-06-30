@@ -1,0 +1,5 @@
+- name: Hello World Failure Test
+  node: docker-client
+  execute: sleep 5 && echo "Hello Dork"
+  check:
+    match: "Hello World"

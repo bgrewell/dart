@@ -1,0 +1,5 @@
+- name: Hello World Test - Type 2
+  node: docker-client
+  execute: sleep 5 && echo "Hello World" | grep "Hello World"
+  check:
+    exit_code: 0

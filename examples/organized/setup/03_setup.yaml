@@ -1,0 +1,7 @@
+- name: step 3
+  node: docker-client
+  step:
+    type: simulated
+    options:
+      time: 2
+      message: installing fake package 3

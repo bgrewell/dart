@@ -1,20 +1,9 @@
 package logger
 
 import (
-	"fmt"
-	"time"
-
 	"github.com/sirupsen/logrus"
 	"go.uber.org/fx/fxevent"
 )
-
-// CustomFormatter formats the logs in a more human-readable way
-type CustomFormatter struct{}
-
-func (f *CustomFormatter) Format(entry *logrus.Entry) ([]byte, error) {
-	timestamp := entry.Time.Format(time.RFC3339)
-	return []byte(fmt.Sprintf("[%s] [%s] %s\n", timestamp, entry.Level.String(), entry.Message)), nil
-}
 
 func NewLogger() *LogrusLogger {
 	log := logrus.New()
