@@ -13,11 +13,11 @@ import (
 
 type ControllerParams struct {
 	fx.In
-	Cfg       *config.Configuration
-	Nodes     map[string]pkg.Node
-	Tests     []pkg.Test
-	Setup     []pkg.Step `group:"setup"`
-	Teardown  []pkg.Step `group:"teardown"`
+	Cfg   *config.Configuration
+	Nodes map[string]pkg.Node
+	Tests []pkg.Test
+	//Setup     []pkg.Step `group:"setup"`
+	//Teardown  []pkg.Step `group:"teardown"`
 	Wrapper   *docker.Wrapper
 	Formatter formatters.Formatter
 }
@@ -31,7 +31,9 @@ type RunParams struct {
 
 func Configuration() (*config.Configuration, error) {
 	// Read in the test configuration file
-	cfg, err := config.LoadConfiguration("examples/docker/docker.yaml")
+	//cfg, err := config.LoadConfiguration("examples/basic/basic.yaml")
+	//cfg, err := config.LoadConfiguration("examples/docker/docker.yaml")
+	cfg, err := config.LoadConfiguration("examples/ssh/ssh.yaml")
 	if err != nil {
 		return nil, err
 	}
@@ -88,14 +90,27 @@ func DockerWrapper(cfg *config.Configuration) (*docker.Wrapper, error) {
 }
 
 func Controller(params ControllerParams) (ctrl *pkg.TestController, err error) {
+	// TODO: Setup and Teardown are called here because of an issue passing them in the params (not being called in the proper order)
+	setup, err := Setup(params.Cfg, params.Nodes)
+	if err != nil {
+		return nil, err
+	}
+
+	teardown, err := Teardown(params.Cfg, params.Nodes)
+	if err != nil {
+		return nil, err
+	}
+
 	// Create the test controller
 	return pkg.NewTestController(
 		params.Cfg.Suite,
 		params.Wrapper,
 		params.Nodes,
 		params.Tests,
-		params.Setup,
-		params.Teardown,
+		setup,
+		teardown,
+		//params.Setup,
+		//params.Teardown,
 		params.Formatter), nil
 }
 

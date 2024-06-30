@@ -1,0 +1,53 @@
+---
+suite: Basic Test Suite
+nodes:
+  - name: client
+    type: ssh
+    host: 10.114.143.151
+  - name: server
+    type: ssh
+    host: 10.114.143.9
+setup:
+  - name: step 1
+    node: client
+    step:
+      type: simulated
+      options:
+        time: 2
+        message: installing fake package 1
+  - name: step 2
+    node: client
+    step:
+      type: simulated
+      options:
+        time: 2
+        message: installing fake package 2
+  - name: step 3
+    node: client
+    step:
+      type: simulated
+      options:
+        time: 2
+        message: installing fake package 3
+tests:
+  - name: Hello World Test - Type 1
+    node: client
+    execute: sleep 4 && echo "Hello World"
+    check:
+      match: "Hello World"
+  - name: Hello World Test - Type 2
+    node: server
+    execute: sleep 5 && echo "Hello World" | grep "Hello World"
+    check:
+      exit_code: 0
+  - name: Hello World Test - Multiple Checks
+    node: client
+    execute: sleep 3 && echo "Hello World" && false
+    check:
+      match: "Hello World"
+      exit_code: 0
+  - name: Hello World Failure Test
+    node: server
+    execute: sleep 5 && echo "Hello Dork"
+    check:
+      match: "Hello World"
