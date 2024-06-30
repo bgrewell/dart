@@ -1,0 +1,8 @@
+---
+suite: Organized Test Suite Example
+
+docker: !!load_from(docker)
+nodes: !!load_from(nodes)
+setup: !!load_from(setup)
+teardown: !!load_from(teardown)
+tests: !!load_from(tests)

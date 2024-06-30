@@ -1,9 +1,13 @@
 package config
 
 import (
+	"bytes"
+	"fmt"
 	"gopkg.in/yaml.v3"
+	"io/fs"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 )
 
@@ -79,6 +83,11 @@ func LoadConfiguration(cfgPath string) (config *Configuration, err error) {
 }
 
 func ParseConfiguration(data []byte, location string) (config *Configuration, err error) {
+	data, err = processLoadFromDirectives(data, location)
+	if err != nil {
+		return nil, err
+	}
+
 	config = &Configuration{}
 	err = yaml.Unmarshal(data, config)
 	if err != nil {
@@ -99,4 +108,63 @@ func ParseConfiguration(data []byte, location string) (config *Configuration, er
 	}
 
 	return config, nil
+}
+
+func processLoadFromDirectives(data []byte, location string) ([]byte, error) {
+	lines := strings.Split(string(data), "\n")
+	var outputLines []string
+
+	for _, line := range lines {
+		if strings.Contains(line, "!!load_from(") {
+			startIdx := strings.Index(line, "!!load_from(") + len("!!load_from(")
+			endIdx := strings.Index(line[startIdx:], ")")
+			dir := line[startIdx : startIdx+endIdx]
+
+			loadedData, err := loadFromDirectory(path.Join(location, dir))
+			if err != nil {
+				return nil, err
+			}
+			indentedLoadedData := indent(loadedData, "  ") // Indent the loaded data
+			outputLines = append(outputLines, fmt.Sprintf("%s\n%s", line[:startIdx-len("!!load_from(")], indentedLoadedData))
+		} else {
+			outputLines = append(outputLines, line)
+		}
+	}
+
+	return []byte(strings.Join(outputLines, "\n")), nil
+}
+
+func loadFromDirectory(dir string) ([]byte, error) {
+	var buffer bytes.Buffer
+
+	err := filepath.Walk(dir, func(path string, info fs.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && (strings.HasSuffix(info.Name(), ".yaml") || strings.HasSuffix(info.Name(), ".yml")) {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			buffer.Write(data)
+			buffer.WriteString("\n")
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return buffer.Bytes(), nil
+}
+
+func indent(data []byte, prefix string) string {
+	lines := strings.Split(string(data), "\n")
+	for i, line := range lines {
+		if line != "" {
+			lines[i] = prefix + line
+		}
+	}
+	return strings.Join(lines, "\n")
 }
