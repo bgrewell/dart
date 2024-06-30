@@ -3,10 +3,16 @@ suite: Basic Test Suite
 nodes:
   - name: client
     type: ssh
-    host: 10.114.143.151
+    options:
+      host: 10.114.143.151
+      user: ubuntu
+      key: /home/ben/.ssh/id_dart
   - name: server
     type: ssh
-    host: 10.114.143.9
+    options:
+      host: 10.114.143.9
+      user: ubuntu
+      key: /home/ben/.ssh/id_dart
 setup:
   - name: step 1
     node: client
@@ -42,7 +48,7 @@ tests:
       exit_code: 0
   - name: Hello World Test - Multiple Checks
     node: client
-    execute: sleep 3 && echo "Hello World" && false
+    execute: sleep 3 && echo "Hello World"
     check:
       match: "Hello World"
       exit_code: 0
