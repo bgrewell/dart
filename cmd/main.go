@@ -2,16 +2,25 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"github.com/bgrewell/dart/internal/config"
+	"github.com/bgrewell/dart/internal/docker"
 	"github.com/bgrewell/dart/internal/formatters"
+	"github.com/bgrewell/dart/internal/logger"
 	"github.com/bgrewell/dart/pkg"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"log"
 )
+
+type ControllerParams struct {
+	fx.In
+	Cfg       *config.Configuration
+	Nodes     map[string]pkg.Node
+	Tests     []pkg.Test
+	Setup     []pkg.Step `group:"setup"`
+	Teardown  []pkg.Step `group:"teardown"`
+	Wrapper   *docker.Wrapper
+	Formatter formatters.Formatter
+}
 
 type RunParams struct {
 	fx.In
@@ -22,7 +31,7 @@ type RunParams struct {
 
 func Configuration() (*config.Configuration, error) {
 	// Read in the test configuration file
-	cfg, err := config.LoadConfiguration("examples/basic/basic.yaml")
+	cfg, err := config.LoadConfiguration("examples/docker/docker.yaml")
 	if err != nil {
 		return nil, err
 	}
@@ -33,9 +42,9 @@ func Formatter() (formatters.Formatter, error) {
 	return formatters.NewStandardFormatter(), nil
 }
 
-func Nodes(cfg *config.Configuration) (map[string]pkg.Node, error) {
+func Nodes(cfg *config.Configuration, wrapper *docker.Wrapper) (map[string]pkg.Node, error) {
 	// Create nodes for testing
-	nodes, err := pkg.CreateNodes(cfg.Nodes)
+	nodes, err := pkg.CreateNodes(cfg.Nodes, wrapper)
 	if err != nil {
 		return nil, err
 	}
@@ -69,25 +78,25 @@ func Teardown(cfg *config.Configuration, nodes map[string]pkg.Node) (teardown []
 	return teardown, nil
 }
 
-func Controller(cfg *config.Configuration, formater formatters.Formatter) (ctrl *pkg.TestController, err error) {
+func DockerWrapper(cfg *config.Configuration) (*docker.Wrapper, error) {
+	// Create the Docker wrapper
+	dw, err := docker.NewWrapper(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return dw, nil
+}
+
+func Controller(params ControllerParams) (ctrl *pkg.TestController, err error) {
 	// Create the test controller
-	nodes, err := Nodes(cfg)
-	if err != nil {
-		return nil, err
-	}
-	tests, err := Tests(cfg, nodes)
-	if err != nil {
-		return nil, err
-	}
-	setup, err := Setup(cfg, nodes)
-	if err != nil {
-		return nil, err
-	}
-	teardown, err := Teardown(cfg, nodes)
-	if err != nil {
-		return nil, err
-	}
-	return pkg.NewTestController(cfg.Suite, nodes, tests, setup, teardown, formater), nil
+	return pkg.NewTestController(
+		params.Cfg.Suite,
+		params.Wrapper,
+		params.Nodes,
+		params.Tests,
+		params.Setup,
+		params.Teardown,
+		params.Formatter), nil
 }
 
 func RegisterHooks(params RunParams) {
@@ -112,16 +121,24 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	log := logger.NewLogger().Logger
+
 	app := fx.New(
-		fx.WithLogger(func(log *zap.Logger) fxevent.Logger {
-			return &fxevent.ZapLogger{Logger: log}
+		fx.WithLogger(func() fxevent.Logger {
+			return logger.NewLogger()
 		}),
 		fx.Provide(
-			func() (*zap.Logger, error) {
-				cfg := zap.NewProductionConfig()
-				cfg.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
-				return cfg.Build()
-			},
+			Nodes,
+			Tests,
+			fx.Annotate(
+				Setup,
+				fx.ResultTags(`group:"setup"`),
+			),
+			fx.Annotate(
+				Teardown,
+				fx.ResultTags(`group:"teardown"`),
+			),
+			DockerWrapper,
 			Configuration,
 			Formatter,
 			Controller,
@@ -130,12 +147,12 @@ func main() {
 	)
 
 	if err := app.Start(ctx); err != nil {
-		log.Fatalf("Error starting application: %v", err)
+		log.Fatalf("Failed to start: %v", err)
 	}
 	<-app.Done()
 
 	if err := app.Stop(ctx); err != nil {
-		fmt.Println("Failed to stop:", err)
+		log.Errorf("Failed to stop: %v", err)
 		return
 	}
 }

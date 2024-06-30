@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func CreateSteps(configs []config.StepConfig, nodes map[string]Node) (steps []Step, err error) {
+func CreateSteps(configs []*config.StepConfig, nodes map[string]Node) (steps []Step, err error) {
 	steps = make([]Step, 0)
 
 	for _, c := range configs {

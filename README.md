@@ -8,7 +8,7 @@ Docker Automated Regression Testing
 - Failed test details
 - General cleanup of formatter and controller
 - Ability to load a series of tests from recursive folders of yaml files
-
+- Ability to do something like monitor cpu usage over the test then evaluate at the end of the test what the avg cpu usage was
 ## Requirements
 
 1. Execute test command/script and get results

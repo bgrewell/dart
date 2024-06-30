@@ -39,6 +39,10 @@ type StandardFormatter struct {
 	detailIndent    int
 }
 
+func (sf *StandardFormatter) PrintError(err error) {
+	fmt.Printf("%s%s\n", strings.Repeat(" ", sf.detailIndent-sf.indent), valueFailColor.Sprintf(err.Error()))
+}
+
 func (sf *StandardFormatter) PrintPass(name string, details interface{}) {
 	fmt.Printf("%s%s:\n", strings.Repeat(" ", sf.detailIndent-sf.indent), headerPassColor.Sprintf(name))
 	switch details.(type) {

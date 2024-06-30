@@ -7,8 +7,8 @@ import (
 )
 
 // CreateNetwork creates a new container network
-func CreateNetwork(ctx context.Context, cli client.APIClient, name string) (string, error) {
-	resp, err := cli.NetworkCreate(ctx, name, network.CreateOptions{})
+func CreateNetwork(ctx context.Context, cli client.APIClient, name string, options network.CreateOptions) (id string, err error) {
+	resp, err := cli.NetworkCreate(ctx, name, options)
 	if err != nil {
 		return "", err
 	}
@@ -27,8 +27,8 @@ func RemoveNetwork(ctx context.Context, cli client.APIClient, id string) error {
 }
 
 // AttachNetwork attaches a container to a network
-func AttachNetwork(ctx context.Context, cli client.APIClient, networkID string, containerID string) error {
-	err := cli.NetworkConnect(ctx, networkID, containerID, nil)
+func AttachNetwork(ctx context.Context, cli client.APIClient, networkID string, containerID string, settings *network.EndpointSettings) error {
+	err := cli.NetworkConnect(ctx, networkID, containerID, settings)
 	if err != nil {
 		return err
 	}

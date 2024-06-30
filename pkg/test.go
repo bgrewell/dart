@@ -82,7 +82,7 @@ func (t *ExecutionTest) Run(updater formatters.TestCompleter) (results map[strin
 }
 
 // CreateTests creates a slice of Test objects from a slice of TestConfig objects
-func CreateTests(configs []config.TestConfig, nodes map[string]Node) (tests []Test, err error) {
+func CreateTests(configs []*config.TestConfig, nodes map[string]Node) (tests []Test, err error) {
 	tests = make([]Test, 0)
 
 	// Sort tests by order

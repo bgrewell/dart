@@ -1,19 +1,97 @@
 package pkg
 
-import "github.com/bgrewell/dart/internal/execution"
+import (
+	"encoding/json"
+	"github.com/bgrewell/dart/internal/docker"
+	"github.com/bgrewell/dart/internal/execution"
+	"github.com/bgrewell/dart/internal/helpers"
+	"io"
+	"strings"
+)
 
-func NewDockerNode() Node {
-	return &DockerNode{}
+var _ Node = &DockerNode{}
+
+type DockerNetworkOpts struct {
+	Name   string `yaml:"name,omitempty" json:"name"`
+	Subnet string `yaml:"subnet,omitempty" json:"subnet"`
+	Ip     string `yaml:"ip,omitempty" json:"ip"`
 }
 
-type DockerNode struct{}
-
-func (d DockerNode) Execute(command string, options ...execution.ExecutionOption) (result *execution.ExecutionResult, err error) {
-	//TODO implement me
-	panic("implement me")
+type DockerNodeOpts struct {
+	Image       string                 `yaml:"image,omitempty" json:"image"`
+	ExecOptions map[string]interface{} `yaml:"exec_opts,omitempty" json:"exec_opts"`
+	Networks    []DockerNetworkOpts    `yaml:"networks,omitempty" json:"networks"`
 }
 
-func (d DockerNode) Close() error {
+func NewDockerNode(wrapper *docker.Wrapper, name string, opts NodeOptions) (node Node, err error) {
+
+	jsonData, err := json.Marshal(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	var nodeopts DockerNodeOpts
+	err = json.Unmarshal(jsonData, &nodeopts)
+	if err != nil {
+		return nil, err
+	}
+
+	return &DockerNode{
+		name:    name,
+		wrapper: wrapper,
+		options: nodeopts,
+	}, nil
+}
+
+type DockerNode struct {
+	name    string
+	wrapper *docker.Wrapper
+	options DockerNodeOpts
+}
+
+func (d *DockerNode) Setup() error {
+	priv := docker.WithPrivileged()
+	if err := d.wrapper.CreateContainer(d.name, d.name, d.options.Image, priv); err != nil {
+		return err
+	}
+	if err := d.wrapper.StartContainer(d.name); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (d *DockerNode) Teardown() error {
+	if err := d.wrapper.StopContainer(d.name); err != nil {
+		return err
+	}
+	return d.wrapper.RemoveContainer(d.name)
+}
+
+func (d *DockerNode) Execute(command string, options ...execution.ExecutionOption) (result *execution.ExecutionResult, err error) {
+	code, outerr, err := d.wrapper.ExecuteInContainer(d.name, command)
+	if err != nil {
+		return nil, err
+	}
+
+	var stdout, stderr io.Reader
+
+	if code != 0 {
+		stderr = strings.NewReader(outerr)
+		stdout = strings.NewReader("")
+	} else {
+		stdout = strings.NewReader(outerr)
+		stderr = strings.NewReader("")
+	}
+
+	return &execution.ExecutionResult{
+		ExecutionId: helpers.GetRandomId(),
+		ExitCode:    code,
+		Stdout:      stdout,
+		Stderr:      stderr,
+	}, nil
+}
+
+func (d *DockerNode) Close() error {
 	//TODO implement me
-	panic("implement me")
+	return helpers.WrapError("not implemented")
 }

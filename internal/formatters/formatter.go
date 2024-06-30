@@ -10,6 +10,7 @@ type Formatter interface {
 	PrintPass(name string, details interface{})
 	PrintFail(name string, details interface{})
 	PrintEmpty()
+	PrintError(err error)
 }
 
 type TaskCompleter interface {

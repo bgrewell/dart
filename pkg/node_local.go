@@ -8,14 +8,30 @@ import (
 	"syscall"
 )
 
-func NewLocalNode(defaultOptions ...execution.ExecutionOption) Node {
+var _ Node = &LocalNode{}
+
+func NewLocalNode(opts NodeOptions) Node {
+
+	var options []execution.ExecutionOption
+	if opts != nil {
+		options = execution.OptionsToExecutionOptions(*opts)
+	}
+
 	return &LocalNode{
-		defaultOptions: defaultOptions,
+		defaultOptions: options,
 	}
 }
 
 type LocalNode struct {
 	defaultOptions []execution.ExecutionOption
+}
+
+func (l *LocalNode) Setup() error {
+	return nil
+}
+
+func (l *LocalNode) Teardown() error {
+	return nil
 }
 
 func (l *LocalNode) Close() error {

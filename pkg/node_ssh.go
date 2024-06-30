@@ -1,12 +1,14 @@
 package pkg
 
 import (
-	"fmt"
 	"github.com/bgrewell/dart/internal/execution"
+	"github.com/bgrewell/dart/internal/helpers"
 	"golang.org/x/crypto/ssh"
 )
 
-func NewSshNode() (n Node, err error) {
+var _ Node = &SshNode{}
+
+func NewSshNode(opts NodeOptions) (node Node, err error) {
 	// Create a new ssh configuration
 	config := &ssh.ClientConfig{
 		Config: ssh.Config{},
@@ -43,6 +45,16 @@ type SshNode struct {
 	session *ssh.Session
 }
 
+func (s *SshNode) Setup() error {
+	//TODO implement me
+	return helpers.WrapError("not implemented")
+}
+
+func (s *SshNode) Teardown() error {
+	//TODO implement me
+	return helpers.WrapError("not implemented")
+}
+
 func (s *SshNode) Close() error {
 
 	// Close the session
@@ -59,5 +71,5 @@ func (s *SshNode) Close() error {
 }
 
 func (s *SshNode) Execute(command string, options ...execution.ExecutionOption) (result *execution.ExecutionResult, err error) {
-	return nil, fmt.Errorf("not implemented")
+	return nil, helpers.WrapError("not implemented")
 }

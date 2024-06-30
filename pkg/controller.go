@@ -1,37 +1,78 @@
 package pkg
 
 import (
+	"fmt"
 	"github.com/bgrewell/dart/internal/check"
+	"github.com/bgrewell/dart/internal/docker"
 	"github.com/bgrewell/dart/internal/formatters"
 	"strconv"
 )
 
-func NewTestController(suite string, nodes map[string]Node, tests []Test, setup []Step, teardown []Step, formatter formatters.Formatter) *TestController {
+func NewTestController(suite string, wrapper *docker.Wrapper, nodes map[string]Node, tests []Test, setup []Step, teardown []Step, formatter formatters.Formatter) *TestController {
 	return &TestController{
-		Suite:     suite,
-		Nodes:     nodes,
-		Tests:     tests,
-		Setup:     setup,
-		Teardown:  teardown,
-		formatter: formatter,
-		verbose:   false,
+		Suite:         suite,
+		Nodes:         nodes,
+		Tests:         tests,
+		Setup:         setup,
+		Teardown:      teardown,
+		DockerWrapper: wrapper,
+		formatter:     formatter,
+		verbose:       false,
 	}
 }
 
 type TestController struct {
-	Suite     string
-	Nodes     map[string]Node
-	Setup     []Step
-	Tests     []Test
-	Teardown  []Step
-	formatter formatters.Formatter
-	verbose   bool
+	Suite         string
+	Nodes         map[string]Node
+	Setup         []Step
+	Tests         []Test
+	Teardown      []Step
+	DockerWrapper *docker.Wrapper
+	formatter     formatters.Formatter
+	verbose       bool
 }
 
 func (tc *TestController) Run() error {
 
+	nodeSetupMsg := "running setup on %s"
+	nodeTeardownMsg := "running teardown on %s"
+
+	// Setup completed nodes
+	var setupCompletedNodes []string
+
+	cleanupComplete := false
+	defer func() {
+		if !cleanupComplete {
+			tc.formatter.PrintHeader("Cleaning up after error")
+			for _, name := range setupCompletedNodes {
+				node := tc.Nodes[name]
+				c := tc.formatter.StartTask(fmt.Sprintf(nodeTeardownMsg, name), "running")
+				err := node.Teardown()
+				if err != nil {
+					c.Error()
+					fmt.Sprintf("Error cleaning up node %s: %s", name, err)
+				}
+				c.Complete()
+			}
+			t := tc.formatter.StartTask("tearing down docker environment", "running")
+			_ = tc.DockerWrapper.Teardown()
+			t.Complete()
+		}
+	}()
+
+	// TODO: Need to rework so that nodes who have completed setup are always cleaned up even if there is an error. This
+	//   could be done via a defer function that will always run when the function exits
+
 	// Get the max length of the setup/teardown and the tests
 	longestSetup := 0
+	for name, _ := range tc.Nodes {
+		if len(fmt.Sprintf(nodeSetupMsg, name)) > longestSetup {
+			longestSetup = len(fmt.Sprintf(nodeSetupMsg, name))
+		}
+		if len(fmt.Sprintf(nodeTeardownMsg, name)) > longestSetup {
+			longestSetup = len(fmt.Sprintf(nodeTeardownMsg, name))
+		}
+	}
 	for _, step := range append(tc.Setup, tc.Teardown...) {
 		if step.TitleLen() > longestSetup {
 			longestSetup = step.TitleLen()
@@ -48,8 +89,33 @@ func (tc *TestController) Run() error {
 	tc.formatter.SetTestColumnWidth(longestTest)
 
 	// Run the setup steps
+	tc.formatter.PrintHeader("Running test setup")
+
+	if tc.DockerWrapper.Configured() {
+		// Run the docker set up steps
+		t := tc.formatter.StartTask("setting up docker environment", "running")
+		err := tc.DockerWrapper.Setup()
+		if err != nil {
+			t.Error()
+			tc.formatter.PrintError(err)
+			return err
+		}
+		t.Complete()
+	}
+
+	for name, node := range tc.Nodes {
+		c := tc.formatter.StartTask(fmt.Sprintf(nodeSetupMsg, name), "running")
+		err := node.Setup()
+		if err != nil {
+			c.Error()
+			tc.formatter.PrintError(err)
+			return err
+		}
+		setupCompletedNodes = append(setupCompletedNodes, name)
+		c.Complete()
+	}
+
 	if len(tc.Setup) > 0 {
-		tc.formatter.PrintHeader("Running test setup")
 		for _, step := range tc.Setup {
 			f := tc.formatter.StartTask(step.Title(), "running")
 			err := step.Run(f)
@@ -68,6 +134,7 @@ func (tc *TestController) Run() error {
 		f := tc.formatter.StartTest(strconv.Itoa(id), test.Name())
 		results, err := test.Run(f)
 		if err != nil {
+			tc.formatter.PrintFail(test.Name(), err.Error())
 			return err
 		}
 		testResults[test.Name()] = results
@@ -83,8 +150,18 @@ func (tc *TestController) Run() error {
 	tc.formatter.PrintEmpty()
 
 	// Run the teardown steps
+	tc.formatter.PrintHeader("Running test teardown")
+	for name, node := range tc.Nodes {
+		c := tc.formatter.StartTask(fmt.Sprintf(nodeTeardownMsg, name), "running")
+		err := node.Teardown()
+		if err != nil {
+			c.Error()
+			return err
+		}
+		c.Complete()
+	}
+
 	if len(tc.Teardown) > 0 {
-		tc.formatter.PrintHeader("Running test teardown")
 		for _, step := range tc.Teardown {
 			f := tc.formatter.StartTask(step.Title(), "running")
 			err := step.Run(f)
@@ -92,12 +169,30 @@ func (tc *TestController) Run() error {
 				return err
 			}
 		}
-		tc.formatter.PrintEmpty()
 	}
+
+	if tc.DockerWrapper.Configured() {
+		// Run the docker teardown steps
+		t := tc.formatter.StartTask("tearing down docker environment", "running")
+		err := tc.DockerWrapper.Teardown()
+		if err != nil {
+			t.Error()
+			tc.formatter.PrintError(err)
+			return err
+		}
+		t.Complete()
+	}
+	tc.formatter.PrintEmpty()
 
 	// Count the passes and fails and print the test results
 	passed, failed := 0, 0
 	for _, results := range testResults {
+
+		if len(results) == 0 {
+			failed++
+			continue
+		}
+
 		// Count the tests, not the checks so any failed check is a failed test
 		testPassed := true
 		for _, result := range results {
@@ -113,6 +208,7 @@ func (tc *TestController) Run() error {
 		}
 	}
 	tc.formatter.PrintResults(passed, failed)
+	cleanupComplete = true
 
 	return nil
 }

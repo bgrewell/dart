@@ -13,8 +13,6 @@ RUN apt-get update && \
 # Create a directory for supervisor configuration files
 RUN mkdir -p /etc/supervisor/conf.d
 
-# Add a default supervisor configuration file
-COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # Create a directory for supervisor logs
 RUN mkdir -p /var/log/supervisor
