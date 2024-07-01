@@ -1,5 +1,7 @@
 - name: Hello World Test - Type 1
   node: docker-client
-  execute: sleep 4 && echo "Hello World"
-  check:
-    match: "Hello World"
+  type: execute
+  options:
+    command: sleep 4 && echo "Hello World"
+    evaluate:
+      match: "Hello World"

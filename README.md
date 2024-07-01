@@ -18,6 +18,8 @@ Docker Automated Regression Testing
   - [ ] Teardown only
   - [ ] Skip teardown
   - [ ] Skip setup
+- [ ] Support multiple nodes for tests
+- [ ] More details on setup/docker steps when verbose is enabled
   
 [x] - Summary of the test results
 - Verbose output

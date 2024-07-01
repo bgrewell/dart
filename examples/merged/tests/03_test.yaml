@@ -1,6 +1,8 @@
 - name: Hello World Test - Multiple Checks
   node: docker-client
-  execute: sleep 3 && echo "Hello World"
-  check:
-    match: "Hello World"
-    exit_code: 0
+  type: execute
+  options:
+    command: sleep 3 && echo "Hello World"
+    evaluate:
+      match: "Hello World"
+      exit_code: 0

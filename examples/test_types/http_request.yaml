@@ -1,0 +1,11 @@
+- name: HTTP Request Example
+  node: client
+  type: http_request
+  options:
+    url: http://example.com
+    method: GET
+    headers:
+      User-Agent: "Mozilla/5.0"
+    evaluate:
+      status_code: 200
+      contains: "Hello World"

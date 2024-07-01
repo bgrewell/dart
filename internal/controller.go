@@ -1,9 +1,9 @@
-package pkg
+package internal
 
 import (
 	"fmt"
-	"github.com/bgrewell/dart/internal/check"
 	"github.com/bgrewell/dart/internal/docker"
+	"github.com/bgrewell/dart/internal/eval"
 	"github.com/bgrewell/dart/internal/formatters"
 	"strconv"
 )
@@ -147,7 +147,7 @@ func (tc *TestController) Run() error {
 	}
 
 	// Run the tests
-	testResults := make(map[string]map[string]*check.CheckResult)
+	testResults := make(map[string]map[string]*eval.EvaluateResult)
 	tc.formatter.PrintHeader("Running tests")
 	for idx, test := range tc.Tests {
 		id := idx + 1
@@ -205,11 +205,11 @@ func (tc *TestController) Run() error {
 	tc.formatter.PrintEmpty()
 
 	// Count the passes and fails and print the test results
-	passed, failed := 0, 0
+	passed, failed, ran := 0, 0, 0
 	for _, results := range testResults {
 
 		if len(results) == 0 {
-			failed++
+			ran++
 			continue
 		}
 
@@ -227,7 +227,7 @@ func (tc *TestController) Run() error {
 			failed++
 		}
 	}
-	tc.formatter.PrintResults(passed, failed)
+	tc.formatter.PrintResults(passed, failed, ran)
 	cleanupComplete = true
 
 	return nil

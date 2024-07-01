@@ -1,7 +1,6 @@
-package pkg
+package internal
 
 import (
-	"github.com/bgrewell/dart/internal"
 	"github.com/bgrewell/dart/internal/config"
 	"github.com/bgrewell/dart/internal/docker"
 	"github.com/bgrewell/dart/internal/execution"
@@ -24,12 +23,12 @@ func CreateNodes(configs []*config.NodeConfig, wrapper *docker.Wrapper) (nodes m
 	localNodeExists := false
 	for _, cfg := range configs {
 		if _, ok := nodes[cfg.Name]; ok {
-			return nil, internal.ErrNodeAlreadyExists
+			return nil, ErrNodeAlreadyExists
 		}
 		switch cfg.Type {
 		case "local":
 			if localNodeExists {
-				return nil, internal.ErrLocalNodeAlreadyExists
+				return nil, ErrLocalNodeAlreadyExists
 			}
 
 			nodes[cfg.Name] = NewLocalNode(&cfg.Options)
@@ -46,7 +45,7 @@ func CreateNodes(configs []*config.NodeConfig, wrapper *docker.Wrapper) (nodes m
 			}
 			nodes[cfg.Name] = node
 		default:
-			return nil, internal.ErrUnknownNodeType
+			return nil, ErrUnknownNodeType
 		}
 	}
 	return

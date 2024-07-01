@@ -2,7 +2,7 @@ package formatters
 
 import (
 	"fmt"
-	"github.com/bgrewell/dart/internal/eval"
+	"github.com/bgrewell/dart/internal/results"
 	"github.com/fatih/color"
 	"github.com/theckman/yacspin"
 	"strconv"
@@ -23,6 +23,7 @@ var (
 	valueColor         = color.New(color.FgHiCyan)
 	valuePassColor     = color.New(color.FgHiGreen)
 	valueFailColor     = color.New(color.FgHiRed)
+	valueRanColor      = color.New(color.FgHiYellow)
 )
 
 func NewStandardFormatter() *StandardFormatter {
@@ -66,12 +67,12 @@ func (sf *StandardFormatter) PrintFail(name string, details interface{}) {
 		}
 	case int:
 		fmt.Printf("%s%s\n", strings.Repeat(" ", sf.detailIndent), valueColor.Sprintf(strconv.Itoa(details.(int))))
-	case *eval.EvalStringFailResult:
-		fmt.Printf("%s%s: %s\n", strings.Repeat(" ", sf.detailIndent), labelFailColor.Sprintf("Expected"), details.(*eval.EvalStringFailResult).Expected)
-		fmt.Printf("%s%s: %s\n", strings.Repeat(" ", sf.detailIndent), labelFailColor.Sprintf("Actual"), details.(*eval.EvalStringFailResult).Actual)
-	case *eval.EvalIntFailResult:
-		fmt.Printf("%s%s: %d\n", strings.Repeat(" ", sf.detailIndent), labelFailColor.Sprintf("Expected"), details.(*eval.EvalIntFailResult).Expected)
-		fmt.Printf("%s%s: %d\n", strings.Repeat(" ", sf.detailIndent), labelFailColor.Sprintf("Actual"), details.(*eval.EvalIntFailResult).Actual)
+	case *results.ResultStringMatchFail:
+		fmt.Printf("%s%s: %s\n", strings.Repeat(" ", sf.detailIndent), labelFailColor.Sprintf("Expected"), details.(*results.ResultStringMatchFail).Expected)
+		fmt.Printf("%s%s: %s\n", strings.Repeat(" ", sf.detailIndent), labelFailColor.Sprintf("Actual"), details.(*results.ResultStringMatchFail).Actual)
+	case *results.ResultIntMatchFail:
+		fmt.Printf("%s%s: %d\n", strings.Repeat(" ", sf.detailIndent), labelFailColor.Sprintf("Expected"), details.(*results.ResultIntMatchFail).Expected)
+		fmt.Printf("%s%s: %d\n", strings.Repeat(" ", sf.detailIndent), labelFailColor.Sprintf("Actual"), details.(*results.ResultIntMatchFail).Actual)
 	}
 }
 
@@ -79,13 +80,15 @@ func (sf *StandardFormatter) PrintEmpty() {
 	fmt.Println()
 }
 
-func (sf *StandardFormatter) PrintResults(pass, fail int) {
+func (sf *StandardFormatter) PrintResults(pass, fail, ran int) {
 
 	p := 5 - (len(strconv.Itoa(pass)))
 	f := 5 - (len(strconv.Itoa(fail)))
+	r := 5 - (len(strconv.Itoa(ran)))
 
 	passVal := strconv.Itoa(pass)
 	failVal := strconv.Itoa(fail)
+	ranVal := strconv.Itoa(ran)
 
 	if pass == 0 {
 		p = 5
@@ -98,11 +101,16 @@ func (sf *StandardFormatter) PrintResults(pass, fail int) {
 
 	passPad := strings.Repeat("0", p)
 	failPad := strings.Repeat("0", f)
+	ranPad := strings.Repeat("0", r)
 
 	indent := strings.Repeat(" ", sf.indent)
 	sf.PrintHeader("Results")
 	fmt.Printf("%sPass: %s%s\n", indent, numberPaddingColor.Sprintf(passPad), valuePassColor.Sprintf(passVal))
 	fmt.Printf("%sFail: %s%s\n", indent, numberPaddingColor.Sprintf(failPad), valueFailColor.Sprintf(failVal))
+	if ran > 0 {
+		fmt.Printf("%sRan:  %s%s\n", indent, numberPaddingColor.Sprintf(ranPad), valueRanColor.Sprintf(ranVal))
+
+	}
 }
 
 func (sf *StandardFormatter) PrintHeader(header string) {
@@ -215,17 +223,12 @@ func (s StandardTestCompleter) Update(status string) {
 }
 
 func (s StandardTestCompleter) Complete(passed []bool) {
-	//s.spinner.StopColors()
-	//chars := []string{}
-	//for _, p := range passed {
-	//	if p {
-	//		chars = append(chars, passNumberColor.Sprintf("✓"))
-	//	} else {
-	//		chars = append(chars, failNumberColor.Sprintf("✗"))
-	//	}
-	//}
-	//s.spinner.StopCharacter(strings.Join(chars, " "))
-	//s.spinner.Stop()
+	if len(passed) == 0 {
+		s.spinner.StopColors("fgHiYellow")
+		s.spinner.StopCharacter("ran")
+		s.spinner.Stop()
+		return
+	}
 
 	for _, p := range passed {
 		if !p {

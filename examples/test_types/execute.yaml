@@ -1,0 +1,7 @@
+- name: Execute Example
+  node: client
+  type: execute
+  options:
+    command: echo "Hello World"
+    evaluate:
+      match: "Hello World"

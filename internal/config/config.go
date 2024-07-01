@@ -11,6 +11,22 @@ import (
 	"strings"
 )
 
+// Configuration is the top-level configuration for the test suite
+type Configuration struct {
+	Suite    string        `json:"suite" yaml:"suite"`
+	Docker   *DockerConfig `json:"docker" yaml:"docker"`
+	Setup    []*StepConfig `json:"setup" yaml:"setup"`
+	Teardown []*StepConfig `json:"teardown" yaml:"teardown"`
+	Nodes    []*NodeConfig `json:"nodes" yaml:"nodes"`
+	Tests    []*TestConfig `json:"tests" yaml:"tests"`
+}
+
+// DockerConfig is the configuration for Docker
+type DockerConfig struct {
+	Networks []*NetworkConfig `json:"networks" yaml:"networks"`
+	Images   []*ImageConfig   `json:"images" yaml:"images"`
+}
+
 // StepConfig is the configuration for a single setup/teardown step
 type StepConfig struct {
 	Name string      `json:"name" yaml:"name"`
@@ -18,6 +34,7 @@ type StepConfig struct {
 	Step StepDetails `json:"step" yaml:"step"`
 }
 
+// StepDetails is the details of a single step
 type StepDetails struct {
 	Type    string                 `json:"type" yaml:"type"`
 	Options map[string]interface{} `json:"options" yaml:"options"`
@@ -32,19 +49,13 @@ type NodeConfig struct {
 
 // TestConfig is the configuration for a single test
 type TestConfig struct {
-	Order       int                    `json:"-" yaml:"-"`
-	Name        string                 `json:"name" yaml:"name"`
-	Node        string                 `json:"node" yaml:"node"`
-	PreExecute  []string               `json:"preExecute" yaml:"preExecute"`
-	Execute     string                 `json:"execute" yaml:"execute"`
-	PostExecute []string               `json:"postExecute" yaml:"postExecute"`
-	Check       map[string]interface{} `json:"check" yaml:"check"`
-}
-
-// DockerConfig is the configuration for Docker
-type DockerConfig struct {
-	Networks []*NetworkConfig `json:"networks" yaml:"networks"`
-	Images   []*ImageConfig   `json:"images" yaml:"images"`
+	Order    int                    `json:"-" yaml:"-"`
+	Name     string                 `json:"name" yaml:"name"`
+	Node     string                 `json:"node" yaml:"node"`
+	Setup    []string               `json:"setup" yaml:"setup"`
+	Teardown []string               `json:"teardown" yaml:"teardown"`
+	Type     string                 `json:"type" yaml:"type"`
+	Options  map[string]interface{} `json:"options" yaml:"options"`
 }
 
 // NetworkConfig is the configuration for a single network
@@ -59,16 +70,6 @@ type ImageConfig struct {
 	Name       string `json:"name" yaml:"name"`
 	Tag        string `json:"tag" yaml:"tag"`
 	Dockerfile string `json:"dockerfile" yaml:"dockerfile"`
-}
-
-// Configuration is the top-level configuration for the test suite
-type Configuration struct {
-	Suite    string        `json:"suite" yaml:"suite"`
-	Docker   *DockerConfig `json:"docker" yaml:"docker"`
-	Setup    []*StepConfig `json:"setup" yaml:"setup"`
-	Nodes    []*NodeConfig `json:"nodes" yaml:"nodes"`
-	Tests    []*TestConfig `json:"tests" yaml:"tests"`
-	Teardown []*StepConfig `json:"teardown" yaml:"teardown"`
 }
 
 func LoadConfiguration(cfgPath string) (config *Configuration, err error) {

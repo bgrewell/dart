@@ -17,4 +17,6 @@ var (
 	ErrUnknownCheckType = helpers.WrapError("unknown check type")
 	// ErrUnknownNodeType is returned when an unknown node type is encountered
 	ErrUnknownNodeType = helpers.WrapError("unknown node type")
+	// ErrUnknownTestType is returned when an unknown test type is encountered
+	ErrUnknownTestType = helpers.WrapError("unknown test type")
 )

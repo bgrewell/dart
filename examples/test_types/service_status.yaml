@@ -1,0 +1,7 @@
+- name: Service Status Example
+  node: client
+  type: service_status
+  options:
+    service: ssh
+    evaluate:
+      status: "active"

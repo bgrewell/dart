@@ -1,0 +1,7 @@
+- name: Exists Example
+  node: client
+  type: exists
+  options:
+    path: /tmp/test.txt
+    evaluate:
+      exists: true

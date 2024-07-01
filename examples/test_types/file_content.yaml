@@ -1,0 +1,7 @@
+- name: File Content Example
+  node: client
+  type: file_content
+  options:
+    filename: /tmp/test.txt
+    evaluate:
+      match: "test"

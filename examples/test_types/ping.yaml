@@ -1,0 +1,10 @@
+- name: Ping Example
+  node: client
+  type: ping
+  options:
+    target: google.com
+    count: 5
+    evaluate:
+      packet_loss: 0
+      rtt_min: 0
+      rtt_max: 10

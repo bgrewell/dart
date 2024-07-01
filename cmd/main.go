@@ -3,11 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/bgrewell/dart/internal"
 	"github.com/bgrewell/dart/internal/config"
 	"github.com/bgrewell/dart/internal/docker"
 	"github.com/bgrewell/dart/internal/formatters"
 	"github.com/bgrewell/dart/internal/logger"
-	"github.com/bgrewell/dart/pkg"
 	"github.com/bgrewell/usage"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
@@ -25,8 +25,8 @@ type CmdlineFlags struct {
 type ControllerParams struct {
 	fx.In
 	Cfg   *config.Configuration
-	Nodes map[string]pkg.Node
-	Tests []pkg.Test
+	Nodes map[string]internal.Node
+	Tests []internal.Test
 	//Setup     []pkg.Step `group:"setup"`
 	//Teardown  []pkg.Step `group:"teardown"`
 	Wrapper   *docker.Wrapper
@@ -38,7 +38,7 @@ type RunParams struct {
 	fx.In
 	LC         fx.Lifecycle
 	Shutdowner fx.Shutdowner
-	Ctrl       *pkg.TestController
+	Ctrl       *internal.TestController
 }
 
 func Configuration(cmdFlags *CmdlineFlags) (*config.Configuration, error) {
@@ -56,36 +56,36 @@ func Formatter() (formatters.Formatter, error) {
 	return formatters.NewStandardFormatter(), nil
 }
 
-func Nodes(cfg *config.Configuration, wrapper *docker.Wrapper) (map[string]pkg.Node, error) {
+func Nodes(cfg *config.Configuration, wrapper *docker.Wrapper) (map[string]internal.Node, error) {
 	// Create nodes for testing
-	nodes, err := pkg.CreateNodes(cfg.Nodes, wrapper)
+	nodes, err := internal.CreateNodes(cfg.Nodes, wrapper)
 	if err != nil {
 		return nil, err
 	}
 	return nodes, nil
 }
 
-func Tests(cfg *config.Configuration, nodes map[string]pkg.Node) (tests []pkg.Test, err error) {
+func Tests(cfg *config.Configuration, nodes map[string]internal.Node) (tests []internal.Test, err error) {
 	// Create the tests
-	tests, err = pkg.CreateTests(cfg.Tests, nodes)
+	tests, err = internal.CreateTests(cfg.Tests, nodes)
 	if err != nil {
 		return nil, err
 	}
 	return tests, nil
 }
 
-func Setup(cfg *config.Configuration, nodes map[string]pkg.Node) (setup []pkg.Step, err error) {
+func Setup(cfg *config.Configuration, nodes map[string]internal.Node) (setup []internal.Step, err error) {
 	// Create the steps
-	setup, err = pkg.CreateSteps(cfg.Setup, nodes)
+	setup, err = internal.CreateSteps(cfg.Setup, nodes)
 	if err != nil {
 		return nil, err
 	}
 	return setup, nil
 }
 
-func Teardown(cfg *config.Configuration, nodes map[string]pkg.Node) (teardown []pkg.Step, err error) {
+func Teardown(cfg *config.Configuration, nodes map[string]internal.Node) (teardown []internal.Step, err error) {
 	// Create the steps
-	teardown, err = pkg.CreateSteps(cfg.Teardown, nodes)
+	teardown, err = internal.CreateSteps(cfg.Teardown, nodes)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +101,7 @@ func DockerWrapper(cfg *config.Configuration) (*docker.Wrapper, error) {
 	return dw, nil
 }
 
-func Controller(params ControllerParams) (ctrl *pkg.TestController, err error) {
+func Controller(params ControllerParams) (ctrl *internal.TestController, err error) {
 	// TODO: Setup and Teardown are called here because of an issue passing them in the params (not being called in the proper order)
 	setup, err := Setup(params.Cfg, params.Nodes)
 	if err != nil {
@@ -114,7 +114,7 @@ func Controller(params ControllerParams) (ctrl *pkg.TestController, err error) {
 	}
 
 	// Create the test controller
-	return pkg.NewTestController(
+	return internal.NewTestController(
 		params.Cfg.Suite,
 		params.Wrapper,
 		params.Nodes,

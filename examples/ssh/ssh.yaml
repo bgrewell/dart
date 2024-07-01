@@ -38,22 +38,30 @@ setup:
 tests:
   - name: Hello World Test - Type 1
     node: client
-    execute: sleep 4 && echo "Hello World"
-    check:
-      match: "Hello World"
+    type: execute
+    options:
+      command: sleep 4 && echo "Hello World"
+      evaluate:
+        match: "Hello World"
   - name: Hello World Test - Type 2
     node: server
-    execute: sleep 5 && echo "Hello World" | grep "Hello World"
-    check:
-      exit_code: 0
+    type: execute
+    options:
+      command: sleep 5 && echo "Hello World" | grep "Hello World"
+      evaluate:
+        exit_code: 0
   - name: Hello World Test - Multiple Checks
     node: client
-    execute: sleep 3 && echo "Hello World"
-    check:
-      match: "Hello World"
-      exit_code: 0
+    type: execute
+    options:
+      command: sleep 3 && echo "Hello World"
+      evaluate:
+        match: "Hello World"
+        exit_code: 0
   - name: Hello World Failure Test
     node: server
-    execute: sleep 5 && echo "Hello Dork"
-    check:
-      match: "Hello World"
+    type: execute
+    options:
+      command: sleep 5 && echo "Hello Dork"
+      evaluate:
+        match: "Hello World"

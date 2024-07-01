@@ -1,0 +1,8 @@
+- name: Port Check Example
+  node: client
+  type: port_check
+  options:
+    host: example.com
+    port: 80
+    evaluate:
+      status: open

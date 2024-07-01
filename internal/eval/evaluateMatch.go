@@ -1,23 +1,23 @@
-package check
+package eval
 
 import (
-	"github.com/bgrewell/dart/internal/eval"
 	"github.com/bgrewell/dart/internal/execution"
+	"github.com/bgrewell/dart/internal/results"
 	"io"
 	"strings"
 )
 
-// MatchCheck is a struct that contains the expected string to match in the output
-type MatchCheck struct {
+// EvaluateMatch is a struct that contains the expected string to match in the output
+type EvaluateMatch struct {
 	Expected string
 	Trim     bool
 }
 
 // Verify is a method that verifies that the expected string matches the output
-func (m *MatchCheck) Verify(execResult *execution.ExecutionResult) (result *CheckResult) {
+func (m *EvaluateMatch) Verify(execResult *execution.ExecutionResult) (result *EvaluateResult) {
 	actualBytes, err := io.ReadAll(execResult.Stdout)
 	if err != nil {
-		return &CheckResult{
+		return &EvaluateResult{
 			Passed:  false,
 			Details: nil,
 			Err:     err,
@@ -32,13 +32,13 @@ func (m *MatchCheck) Verify(execResult *execution.ExecutionResult) (result *Chec
 	var details interface{} = actual
 	passed := actual == m.Expected
 	if !passed {
-		details = &eval.EvalStringFailResult{
+		details = &results.ResultStringMatchFail{
 			Expected: m.Expected,
 			Actual:   actual,
 		}
 	}
 
-	return &CheckResult{
+	return &EvaluateResult{
 		Passed:  passed,
 		Details: details,
 		Err:     nil,

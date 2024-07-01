@@ -1,0 +1,7 @@
+- name: Resource Usage Example
+  node: client
+  type: resource
+  options:
+    evaluate:
+      cpu: < 10
+      memory: < 10
