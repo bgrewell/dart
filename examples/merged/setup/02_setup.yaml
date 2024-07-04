@@ -1,7 +1,6 @@
-- name: step 2
+- name: install neovim
   node: docker-client
   step:
-    type: simulated
+    type: execute
     options:
-      time: 2
-      message: installing fake package 2
+      command: snap install nvim --classic

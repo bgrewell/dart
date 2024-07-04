@@ -140,6 +140,8 @@ func (tc *TestController) Run() error {
 			f := tc.formatter.StartTask(step.Title(), "running")
 			err := step.Run(f)
 			if err != nil {
+				f.Error()
+				tc.formatter.PrintError(err)
 				return err
 			}
 		}

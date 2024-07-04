@@ -1,7 +1,6 @@
-- name: step 1
+- name: install build-essential
   node: docker-client
   step:
-    type: simulated
+    type: execute
     options:
-      time: 2
-      message: installing fake package 1
+      command: apt-get update && apt-get install -y build-essential
