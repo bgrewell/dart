@@ -21,4 +21,8 @@ var (
 	ErrUnknownTestType = helpers.WrapError("unknown test type")
 	// ErrUnknownStepType is returned when an unknown step type is encountered
 	ErrUnknownStepType = helpers.WrapError("unknown step type")
+	// ErrPackagesNotArray is returned when the packages field is not an array
+	ErrPackagesNotArray = helpers.WrapError("packages field is not an array")
+	// ErrPackageNotString is returned when a package is not a string
+	ErrPackageNotString = helpers.WrapError("package is not a string")
 )

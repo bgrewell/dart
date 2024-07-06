@@ -1,6 +1,6 @@
-- name: install neovim
+- name: ensuring files exist
   node: docker-client
   step:
     type: execute
     options:
-      command: snap install nvim --classic
+      command: touch /tmp/neovim_installed
