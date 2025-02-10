@@ -1,6 +1,6 @@
 # DART
 
-Docker Automated Regression Testing
+Dynamic Assessment & Regression Toolkit
 
 ## Task Types
 
