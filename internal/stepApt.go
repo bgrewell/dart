@@ -23,7 +23,7 @@ func (s *AptStep) Run(updater formatters.TaskCompleter) error {
 	// Check to see if /var/lib/apt/periodic/update-success-stamp exists and if so what the timestamp is. If it is older
 	// than 24 hours or doesn't exist, run apt-get update.
 	if s.AptUpdateNeeded() {
-		result, err := s.node.Execute("apt-get update")
+		result, err := s.node.Execute("sudo apt-get update")
 		if err != nil {
 			updater.Error()
 			return err
@@ -36,7 +36,7 @@ func (s *AptStep) Run(updater formatters.TaskCompleter) error {
 
 	// Build a command to install the list of packages
 	packages := strings.Join(s.packages, " ")
-	command := fmt.Sprintf("apt-get install -y %s", packages)
+	command := fmt.Sprintf("sudo apt-get install -y %s", packages)
 
 	result, err := s.node.Execute(command)
 	if err != nil {
