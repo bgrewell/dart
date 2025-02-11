@@ -62,10 +62,11 @@ func (tc *TestController) Run() error {
 
 	// Create a defer function to clean up after a failure/error
 	cleanupComplete := false
+	cleanupMsg := "cleaning up after error"
 	defer func() {
 		// This only runs if the normal cleanup didn't run due to an error
 		if !cleanupComplete {
-			tc.formatter.PrintHeader("Cleaning up after error")
+			tc.formatter.PrintHeader(cleanupMsg)
 			for _, name := range setupCompletedNodes {
 				node := tc.Nodes[name]
 				c := tc.formatter.StartTask(fmt.Sprintf(nodeTeardownMsg, name), "running")
@@ -109,6 +110,15 @@ func (tc *TestController) Run() error {
 	}
 	tc.formatter.SetTestColumnWidth(longestTest)
 
+	// If teardown only is set, skip the setup and tests
+	if tc.teardownOnly {
+		cleanupMsg = "Running teardown only"
+		for name, _ := range tc.Nodes {
+			setupCompletedNodes = append(setupCompletedNodes, name)
+		}
+		return nil // The defered function will handle the teardown
+	}
+
 	// Run the setup steps
 	tc.formatter.PrintHeader("Running test setup")
 
@@ -119,7 +129,6 @@ func (tc *TestController) Run() error {
 		err := tc.DockerWrapper.Setup()
 		if err != nil {
 			t.Error()
-			// TODO: We need to handle the errors better including pausing/stopping if the flags are set
 			tc.formatter.PrintError(err)
 			return err
 		}
@@ -151,6 +160,12 @@ func (tc *TestController) Run() error {
 		tc.formatter.PrintEmpty()
 	}
 
+	// If setup only is set, skip the tests and cleanup
+	if tc.setupOnly {
+		cleanupComplete = true
+		return nil
+	}
+
 	// Run the tests
 	testResults := make(map[string]map[string]*eval.EvaluateResult)
 	tc.formatter.PrintHeader("Running tests")
@@ -159,9 +174,13 @@ func (tc *TestController) Run() error {
 		f := tc.formatter.StartTest(strconv.Itoa(id), test.Name())
 		results, err := test.Run(f)
 		if err != nil {
-			// TODO: Revisit naming, should have a clear and consistent difference between a failed test and
-			//  a test that had an error running it.
+			// TODO: This is an error not a fail, there should be a distinction since they are handled differently
 			tc.formatter.PrintFail(test.Name(), err.Error())
+			if tc.pauseOnFail {
+				fmt.Println("Press enter to continue")
+				var input string
+				fmt.Scanln(&input)
+			}
 			return err
 		}
 		testResults[test.Name()] = results
@@ -171,6 +190,14 @@ func (tc *TestController) Run() error {
 				tc.formatter.PrintPass(name, result.Details)
 			} else if !result.Passed {
 				tc.formatter.PrintFail(name, result.Details)
+				if tc.stopOnFail {
+					return fmt.Errorf("test %s failed", test.Name())
+				}
+				if tc.pauseOnFail {
+					fmt.Println("Press enter to continue")
+					var input string
+					fmt.Scanln(&input)
+				}
 			}
 		}
 	}

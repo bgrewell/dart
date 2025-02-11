@@ -1,0 +1,30 @@
+- name: Execute Multi-Line Example (Literal)
+  node: client
+  type: execute
+  options:
+    command: |
+      # Write "hello world" (with a trailing newline) to a file
+      echo "hello world" > /tmp/test_literal.txt
+
+      # Generate and print an MD5 sum of the file
+      md5sum /tmp/test_literal.txt
+
+    # This MD5 corresponds to "hello world\n" (the newline from echo).
+    evaluate:
+      match: "b10a8db164e0754105b7a99be72e3fe5"
+
+
+- name: Execute Multi-Line Example (Folded)
+  node: client
+  type: execute
+  options:
+    command: >
+      # In folded style, these lines get joined into one shell command
+      # separated by '&&', so they run in sequence.
+      echo "hello folded" > /tmp/test_folded.txt &&
+      md5sum /tmp/test_folded.txt
+
+    # This is just a placeholder example. You should confirm the exact
+    # MD5 on your system for "hello folded\n".
+    evaluate:
+      match: "3b87a5c9a06c53cfe1451849afc4a0ac"
