@@ -18,6 +18,8 @@ DART is a testing framework built to simplify the creation of complex, repeatabl
 
 ---
 
+> **Notice:** This project is in an early development phase and may not yet be fully stable or feature complete. As it evolves, you may encounter significant changes to the API, behavior, and overall functionality.
+
 ## Overview
 
 DART addresses the challenges of distributed systems testing by structuring workflows into **nodes**, **setup steps**, **tests**, and **teardown steps**. It supports various node types—from local processes and SSH remotes to Docker/LXD containers and virtual machines—while automating the configuration and testing processes. Its declarative YAML configuration allows you to embed test definitions directly within your project, so when you clone a repository, you can instantly run the tests to verify that your local environment is configured correctly.
