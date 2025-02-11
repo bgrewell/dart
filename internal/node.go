@@ -44,6 +44,12 @@ func CreateNodes(configs []*config.NodeConfig, wrapper *docker.Wrapper) (nodes m
 				return nil, err
 			}
 			nodes[cfg.Name] = node
+		case "lxd":
+			node, err := NewLxdNode(cfg.Name, &cfg.Options)
+			if err != nil {
+				return nil, err
+			}
+			nodes[cfg.Name] = node
 		default:
 			return nil, ErrUnknownNodeType
 		}

@@ -1,0 +1,28 @@
+---
+suite: LXD Test Suite
+nodes:
+  - name: lxd-test
+    type: lxd
+    options:
+      image: ubuntu:24.04
+      type: container
+      exec_options:
+        shell: /bin/bash
+setup:
+  - name: step 1
+    node: lxd-test
+    step:
+      type: simulated
+      options:
+          time: 2
+          message: installing fake package 1
+tests:
+  - name: echo test
+    node: lxd-test
+    type: execute
+    options:
+      command: bash -c 'sleep 2 && echo "Hello World"'
+
+      evaluate:
+        match: "Hello World"
+        exit_code: 0

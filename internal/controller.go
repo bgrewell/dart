@@ -232,6 +232,9 @@ func (tc *TestController) Run() error {
 	tc.formatter.PrintResults(passed, failed, ran)
 	cleanupComplete = true
 
+	if failed > 0 {
+		return fmt.Errorf("%d tests failed", failed)
+	}
 	return nil
 }
 

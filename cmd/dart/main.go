@@ -11,6 +11,7 @@ import (
 	"github.com/bgrewell/usage"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
+	"os"
 )
 
 type CmdlineFlags struct {
@@ -137,7 +138,7 @@ func RegisterHooks(params RunParams) {
 			// TODO: Cleanup the mess here
 			err := params.Ctrl.Run()
 			if err != nil {
-				params.Shutdowner.Shutdown(fx.ExitCode(1))
+				return params.Shutdowner.Shutdown(fx.ExitCode(1))
 			}
 			return params.Shutdowner.Shutdown()
 		},
@@ -205,10 +206,14 @@ func main() {
 	if err := app.Start(ctx); err != nil {
 		log.Fatalf("Failed to start: %v", err)
 	}
-	<-app.Done()
+
+	shutdownSig := <-app.Wait()
 
 	if err := app.Stop(ctx); err != nil {
 		log.Errorf("Failed to stop: %v", err)
-		return
 	}
+
+	// Propagate the exit code so that if any tests failed we return a non-zero exit code
+	// This is useful for CI/CD pipelines or other tools that expect a non-zero exit code on failure
+	os.Exit(shutdownSig.ExitCode)
 }
