@@ -114,7 +114,7 @@ func (t *ExecutionTest) Run(updater formatters.TestCompleter) (results map[strin
 
 	if testErr != nil {
 		updater.Error()
-		return nil, err
+		return nil, testErr
 	}
 
 	passed := []bool{}

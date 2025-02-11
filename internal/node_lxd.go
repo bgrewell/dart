@@ -167,55 +167,55 @@ func (d *LxdNode) Execute(command string, options ...execution.ExecutionOption) 
 		Stderr: &werr,
 	}
 
-	// Split the command into a slice naively just split on spaces
-	cmdparts, err := Fields(command)
-	if err != nil {
-		return nil, helpers.WrapError(fmt.Sprintf("error splitting command: %w", err))
-	}
-
-	// TODO: I need to figure out how to handle piped command like I do in the command executor
-	// TODO: Check d.options.ExecOptions for a shell and if there is one make sure we execute commands inside of it
+	//// Split the command into a slice naively just split on spaces
+	//cmdparts, err := Fields(command)
+	//if err != nil {
+	//	return nil, helpers.WrapError(fmt.Sprintf("error splitting command: %w", err))
+	//}
+	//
+	//// TODO: I need to figure out how to handle piped command like I do in the command executor
+	//// TODO: Check d.options.ExecOptions for a shell and if there is one make sure we execute commands inside of it
 
 	// Find the full path to the binary
 	execLookPath := api.InstanceExecPost{
-		Command:     []string{"/bin/sh", "-c", fmt.Sprintf("command -v %s", cmdparts[0])},
+		Command:     []string{"/bin/bash", "-c", command},
 		WaitForWS:   true,
 		Interactive: false,
 	}
 
 	op, err := d.client.ExecInstance(d.name, execLookPath, &execArgs)
 	if err != nil {
-		return nil, helpers.WrapError(fmt.Sprintf("error executing command: %w", err))
+		return nil, helpers.WrapError(fmt.Sprintf("error executing command: %s", err.Error()))
 	}
 
 	if err = op.Wait(); err != nil {
-		return nil, helpers.WrapError(fmt.Sprintf("error executing command: %w", err))
+		return nil, helpers.WrapError(fmt.Sprintf("error executing command: %s", err.Error()))
 	}
 
-	execPath := strings.TrimSpace(wout.String())
-	wout.Reset()
-	werr.Reset()
-
-	execArgs = lxd.InstanceExecArgs{
-		Stdout: &wout,
-		Stderr: &werr,
-	}
-
-	cmd := append([]string{execPath}, cmdparts[1:]...)
-	execPost := api.InstanceExecPost{
-		Command:     cmd,
-		WaitForWS:   true,
-		Interactive: false,
-	}
-
-	op, err = d.client.ExecInstance(d.name, execPost, &execArgs)
-	if err != nil {
-		return nil, helpers.WrapError(fmt.Sprintf("error executing command: %w", err))
-	}
-
-	if err = op.Wait(); err != nil {
-		return nil, helpers.WrapError(fmt.Sprintf("error executing command: %w", err))
-	}
+	//execPath := strings.TrimSpace(wout.String())
+	//wout.Reset()
+	//werr.Reset()
+	//
+	//execArgs = lxd.InstanceExecArgs{
+	//	Stdout: &wout,
+	//	Stderr: &werr,
+	//}
+	//
+	//cmd := append([]string{execPath}, cmdparts[1:]...)
+	//execPost := api.InstanceExecPost{
+	//	Command:     cmd,
+	//	WaitForWS:   true,
+	//	Interactive: false,
+	//}
+	//
+	//op, err = d.client.ExecInstance(d.name, execPost, &execArgs)
+	//if err != nil {
+	//	return nil, helpers.WrapError(fmt.Sprintf("error executing command: %w", err))
+	//}
+	//
+	//if err = op.Wait(); err != nil {
+	//	return nil, helpers.WrapError(fmt.Sprintf("error executing command: %w", err))
+	//}
 
 	metadata := op.Get().Metadata
 	exitCode, ok := metadata["return"].(float64)

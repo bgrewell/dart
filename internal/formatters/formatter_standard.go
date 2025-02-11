@@ -209,6 +209,7 @@ func (s StandardTaskCompleter) Fail() {
 
 func (s StandardTaskCompleter) Error() {
 	//s.spinner.StopMessage(fmt.Sprintf("%s%s", s.Message, "error"))
+	s.spinner.StopFailCharacter("error")
 	s.spinner.StopFail()
 }
 
@@ -252,6 +253,7 @@ func (s StandardTestCompleter) Fail() {
 
 func (s StandardTestCompleter) Error() {
 	//s.spinner.StopMessage(fmt.Sprintf("%s %s%s", s.TestId, s.TestName, "error"))
+	s.spinner.StopFailCharacter("error")
 	s.spinner.StopFail()
 }
 

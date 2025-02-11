@@ -60,8 +60,10 @@ func (tc *TestController) Run() error {
 	// Setup completed nodes
 	var setupCompletedNodes []string
 
+	// Create a defer function to clean up after a failure/error
 	cleanupComplete := false
 	defer func() {
+		// This only runs if the normal cleanup didn't run due to an error
 		if !cleanupComplete {
 			tc.formatter.PrintHeader("Cleaning up after error")
 			for _, name := range setupCompletedNodes {
@@ -74,16 +76,15 @@ func (tc *TestController) Run() error {
 				}
 				c.Complete()
 			}
-			t := tc.formatter.StartTask("tearing down docker environment", "running")
-			_ = tc.DockerWrapper.Teardown()
-			t.Complete()
+			if tc.DockerWrapper.Configured() {
+				t := tc.formatter.StartTask("tearing down docker environment", "running")
+				_ = tc.DockerWrapper.Teardown()
+				t.Complete()
+			}
 		}
 	}()
 
-	// TODO: Need to rework so that nodes who have completed setup are always cleaned up even if there is an error. This
-	//   could be done via a defer function that will always run when the function exits
-
-	// Get the max length of the setup/teardown and the tests
+	// Get the max length of the setup/teardown and the tests for formatting
 	longestSetup := 0
 	for name, _ := range tc.Nodes {
 		if len(fmt.Sprintf(nodeSetupMsg, name)) > longestSetup {
@@ -111,12 +112,14 @@ func (tc *TestController) Run() error {
 	// Run the setup steps
 	tc.formatter.PrintHeader("Running test setup")
 
+	// Check if the docker wrapper is configured and if it is then run the docker setup steps
 	if tc.DockerWrapper.Configured() {
 		// Run the docker set up steps
 		t := tc.formatter.StartTask("setting up docker environment", "running")
 		err := tc.DockerWrapper.Setup()
 		if err != nil {
 			t.Error()
+			// TODO: We need to handle the errors better including pausing/stopping if the flags are set
 			tc.formatter.PrintError(err)
 			return err
 		}
@@ -156,6 +159,8 @@ func (tc *TestController) Run() error {
 		f := tc.formatter.StartTest(strconv.Itoa(id), test.Name())
 		results, err := test.Run(f)
 		if err != nil {
+			// TODO: Revisit naming, should have a clear and consistent difference between a failed test and
+			//  a test that had an error running it.
 			tc.formatter.PrintFail(test.Name(), err.Error())
 			return err
 		}

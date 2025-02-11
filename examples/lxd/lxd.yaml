@@ -22,7 +22,6 @@ tests:
     type: execute
     options:
       command: bash -c 'sleep 2 && echo "Hello World"'
-
       evaluate:
         match: "Hello World"
         exit_code: 0
