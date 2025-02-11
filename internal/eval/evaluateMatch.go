@@ -26,7 +26,7 @@ func (m *EvaluateMatch) Verify(execResult *execution.ExecutionResult) (result *E
 
 	actual := string(actualBytes)
 	if m.Trim {
-		actual = strings.TrimRight(actual, "\n ")
+		actual = strings.TrimRight(actual, "\n\r ")
 	}
 
 	var details interface{} = actual

@@ -20,23 +20,26 @@ func (s *AptStep) Title() string {
 
 func (s *AptStep) Run(updater formatters.TaskCompleter) error {
 
+	// Test to see if the user can run sudo commands without a password
+
 	// Check to see if /var/lib/apt/periodic/update-success-stamp exists and if so what the timestamp is. If it is older
 	// than 24 hours or doesn't exist, run apt-get update.
 	if s.AptUpdateNeeded() {
-		result, err := s.node.Execute("sudo apt-get update")
+		result, err := s.node.Execute("sudo -n apt-get update")
 		if err != nil {
 			updater.Error()
 			return err
 		}
 		if result.ExitCode != 0 {
 			updater.Error()
-			return fmt.Errorf("apt-get update failed with exit code %d: %s", result.ExitCode, result.Stderr)
+			errorDetails, _ := io.ReadAll(result.Stderr)
+			return fmt.Errorf("apt-get update failed with exit code %d: %s (hint: try running `sudo true` to cache credentials before running this)", result.ExitCode, errorDetails)
 		}
 	}
 
 	// Build a command to install the list of packages
 	packages := strings.Join(s.packages, " ")
-	command := fmt.Sprintf("sudo apt-get install -y %s", packages)
+	command := fmt.Sprintf("sudo -n apt-get install -y %s", packages)
 
 	result, err := s.node.Execute(command)
 	if err != nil {
@@ -45,7 +48,8 @@ func (s *AptStep) Run(updater formatters.TaskCompleter) error {
 	}
 	if result.ExitCode != 0 {
 		updater.Error()
-		return fmt.Errorf("command failed with exit code %d: %s", result.ExitCode, result.Stderr)
+		errorDetails, _ := io.ReadAll(result.Stderr)
+		return fmt.Errorf("command failed with exit code %d: %s", result.ExitCode, errorDetails)
 	}
 	updater.Complete()
 	return nil
