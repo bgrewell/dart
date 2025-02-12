@@ -66,7 +66,7 @@ Installation methods vary depending on your environment. Generally, you can:
 
 ### Command Line Reference
 
-```vbnet
+```bash
 Usage: dart [OPTIONS] [ARGUMENTS]
 
 Version: dev
@@ -101,7 +101,7 @@ These exit codes allow DART to integrate with automated DevOps workflows, ensuri
 
 Below is a simplified example of how DART logs its operations during a test run. The actual output includes color coding and more detailed formatting for clarity:
 
-```sql
+```bash
 [+] Running test setup
   running setup on localhost ......... done 
   running setup on locker-test ....... done 
