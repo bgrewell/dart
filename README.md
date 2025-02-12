@@ -116,21 +116,20 @@ Below is a simplified example of how DART logs its operations during a test run.
 
 [+] Running tests
   00001: verify locker is installed .................. passed
-  00002: test ........................................ passed
-  00003: ssh to locker-test as bob ................... passed
-  00004: ssh to locker-test as jim ................... passed
-  00005: lock system as jim .......................... passed
-  00006: ssh to locker-test as disallowed user bob ... passed
-  00007: ssh to locker-test as allowed user tom ...... passed
-  00008: unlock system as jim ........................ passed
-  00009: verify bob can again access the system ...... passed
+  00002: ssh to locker-test as bob ................... passed
+  00003: ssh to locker-test as jim ................... passed
+  00004: lock system as jim .......................... passed
+  00005: ssh to locker-test as disallowed user bob ... passed
+  00006: ssh to locker-test as allowed user tom ...... passed
+  00007: unlock system as jim ........................ passed
+  00008: verify bob can again access the system ...... passed
 
 [+] Running test teardown
   running teardown on localhost ...... done 
   running teardown on locker-test .... done 
 
 [+] Results
-  Pass: 00009
+  Pass: 00008
   Fail: 00000
 ```
 
