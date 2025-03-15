@@ -72,6 +72,13 @@ type ImageConfig struct {
 	Dockerfile string `json:"dockerfile" yaml:"dockerfile"`
 }
 
+// SudoConfig is the configuration for sudo abilities on a node
+type SudoConfig struct {
+	Password    string `json:"password" yaml:"password"`
+	EnvVar      string `json:"env_var" yaml:"env_var"`
+	VaultSecret string `json:"vault_secret" yaml:"vault_secret"`
+}
+
 func LoadConfiguration(cfgPath string) (config *Configuration, err error) {
 	data, err := os.ReadFile(cfgPath)
 	if err != nil {

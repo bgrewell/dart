@@ -28,7 +28,3 @@ func (s *ExecuteStep) Run(updater formatters.TaskCompleter) error {
 	updater.Complete()
 	return nil
 }
-
-func (s *ExecuteStep) TitleLen() int {
-	return len(s.title)
-}

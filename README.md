@@ -1,5 +1,7 @@
 # DART - Dynamic Assessment & Regression Toolkit
 
+> **Notice:** This project is in an early development phase and may not yet be fully stable or feature complete. As it evolves, you may encounter significant changes to the API, behavior, and overall functionality.
+
 DART is a testing framework built to simplify the creation of complex, repeatable test scenarios across a variety of environments. Whether you're validating a single service or coordinating distributed systems, DART empowers you to automate environment setup, execution, and cleanup with minimal effort. Moreover, it integrates effortlessly into existing projects, enabling developers to include test definitions directly within their repositories so that upon cloning, they can immediately verify that all components are functioning as intended.
 
 ---
@@ -8,17 +10,17 @@ DART is a testing framework built to simplify the creation of complex, repeatabl
 
 1. [Overview](#overview)  
 2. [Key Features](#key-features)  
-3. [Installation](#installation)  
-4. [Usage](#usage)  
+3. [Node Types](#node-types)  
+4. [Setup and Teardown Tasks](#setup-and-teardown-tasks)  
+5. [Installation](#installation)  
+6. [Usage](#usage)  
    - [Command Line Reference](#command-line-reference)  
    - [Exit Codes](#exit-codes)  
-5. [Example Test Execution](#example-test-execution)  
-6. [Example Test Definition](#example-test-definition)  
-7. [License](#license)  
+7. [Example Test Execution](#example-test-execution)  
+8. [Example Test Definition](#example-test-definition)  
+9. [License](#license)  
 
 ---
-
-> **Notice:** This project is in an early development phase and may not yet be fully stable or feature complete. As it evolves, you may encounter significant changes to the API, behavior, and overall functionality.
 
 ## Overview
 
@@ -48,6 +50,187 @@ DART addresses the challenges of distributed systems testing by structuring work
 
 - **DevOps Friendly**  
   Returns an exit code that reflects the outcome of the tests, integrating smoothly with CI/CD pipelines.
+
+---
+
+## Node Types
+
+DART supports several types of nodes that can be used as test targets:
+
+- **Local Node (`local`)**  
+  Execute tests on the local machine where DART is running.
+
+- **Docker Node (`docker`)**  
+  Run tests inside Docker containers, with support for custom networks and privileged mode.
+
+- **LXD Node (`lxd`)**  
+  Execute tests in LXD containers, with automatic provisioning and cleanup.
+
+- **SSH Node (`ssh`)**  
+  Run tests on remote machines via SSH, supporting both password and key-based authentication.
+
+Each node type can be configured with specific options in your YAML configuration file. For example:
+
+```yaml
+nodes:
+  - name: localhost
+    type: local
+    options:
+      shell: /bin/bash
+  
+  - name: remote-server
+    type: ssh
+    options:
+      host: example.com
+      port: 22
+      user: testuser
+      key: ~/.ssh/id_rsa
+
+  - name: test-container
+    type: docker
+    options:
+      image: ubuntu:latest
+      networks:
+        - name: test-net
+          subnet: "172.20.0.0/16"
+          ip: "172.20.0.2"
+```
+
+## Setup and Teardown Tasks
+
+Setup and teardown tasks in DART are specialized operations designed to prepare and clean up test environments. Unlike tests, which validate functionality and return pass/fail results, these tasks focus on environment management and are considered successful if they complete without errors.
+
+### Purpose and Execution Flow
+
+1. **Setup Tasks**
+   - Run before any tests begin
+   - Prepare the test environment (e.g., installing dependencies, configuring services)
+   - Must complete successfully for tests to begin
+   - Run in sequence to ensure proper initialization
+
+2. **Teardown Tasks**
+   - Run after all tests complete (or after a critical failure)
+   - Clean up resources and restore system state
+   - Execute even if tests fail (ensuring proper cleanup)
+   - Run in sequence to ensure proper cleanup order
+
+### Key Differences from Tests
+
+- **Success Criteria**: Tasks succeed/fail based on completion, while tests evaluate specific conditions
+- **Evaluation**: Tasks don't have evaluation criteria like `match` or `contains`
+- **Error Handling**: Task failures stop the entire suite, while test failures can be configured to continue
+- **Scope**: Tasks affect the environment, while tests validate functionality
+- **Timing**: Tasks run before/after all tests, while tests run in the middle phase
+
+### Available Task Types
+
+#### Execute Task (`execute`)
+Run shell commands on the target node. Ideal for custom setup operations.
+
+```yaml
+- name: configure database
+  node: db-server
+  step:
+    type: execute
+    options:
+      command: |
+        mysql -u root -e "CREATE DATABASE testdb;"
+        mysql -u root -e "GRANT ALL ON testdb.* TO 'testuser'@'%';"
+```
+
+#### APT Package Management (`apt`)
+Manage system packages on Debian-based systems. Handles updates and dependencies automatically.
+
+```yaml
+- name: install system dependencies
+  node: test-container
+  step:
+    type: apt
+    options:
+      packages:
+        - nginx
+        - postgresql
+        - redis-server
+```
+
+#### Simulated Task (`simulated`)
+Add controlled delays in the setup/teardown process. Useful for:
+- Waiting for services to initialize
+- Simulating network delays
+- Testing timing-dependent scenarios
+
+```yaml
+- name: wait for service initialization
+  node: app-server
+  step:
+    type: simulated
+    options:
+      time: 5  # Wait for 5 seconds before proceeding
+```
+
+### Best Practices
+
+1. **Environment Isolation**
+   - Use setup tasks to create isolated test environments
+   - Ensure teardown tasks clean up ALL created resources
+   - Avoid leaving behind test artifacts
+
+2. **Idempotency**
+   - Design tasks to be repeatable
+   - Handle cases where resources may already exist
+   - Ensure clean state regardless of previous runs
+
+3. **Error Handling**
+   - Include error checking in setup tasks
+   - Implement proper cleanup in teardown tasks
+   - Log relevant information for debugging
+
+4. **Resource Management**
+   ```yaml
+   setup:
+     - name: create test directory
+       node: test-server
+       step:
+         type: execute
+         options:
+           command: "mkdir -p /tmp/test-data"
+   
+   teardown:
+     - name: cleanup test directory
+       node: test-server
+       step:
+         type: execute
+         options:
+           command: "rm -rf /tmp/test-data"
+   ```
+
+### Planned Future Task Types
+
+DART is actively developing additional task types to enhance environment management:
+
+- **SNAP Package Management**
+  - Install/remove snap packages
+  - Configure snap services
+
+- **Git Operations**
+  - Clone repositories
+  - Checkout specific branches/tags
+  - Apply patches
+
+- **File System Operations**
+  - Create/modify configuration files
+  - Set up directory structures
+  - Manage permissions
+
+- **Network Configuration**
+  - Configure network interfaces
+  - Set up routing rules
+  - Manage firewall settings
+
+- **Service Management**
+  - Start/stop system services
+  - Configure service parameters
+  - Manage service dependencies
 
 ---
 
@@ -296,7 +479,7 @@ tests:
 
 ## License
 
-This project is distributed under an open-source or commercial license, as specified in the repository’s [LICENSE](LICENSE) file.
+This project is distributed under an open-source or commercial license, as specified in the repository's [LICENSE](LICENSE) file.
 
 ---
 

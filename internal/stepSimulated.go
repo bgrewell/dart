@@ -19,7 +19,3 @@ func (s *SimulatedStep) Run(updater formatters.TaskCompleter) error {
 	updater.Complete()
 	return nil
 }
-
-func (s *SimulatedStep) TitleLen() int {
-	return len(s.title)
-}

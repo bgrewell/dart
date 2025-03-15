@@ -96,8 +96,8 @@ func (tc *TestController) Run() error {
 		}
 	}
 	for _, step := range append(tc.Setup, tc.Teardown...) {
-		if step.TitleLen() > longestSetup {
-			longestSetup = step.TitleLen()
+		if len(step.Title()) > longestSetup {
+			longestSetup = len(step.Title())
 		}
 	}
 	tc.formatter.SetTaskColumnWidth(longestSetup)

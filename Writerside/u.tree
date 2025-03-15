@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE instance-profile
+        SYSTEM "https://resources.jetbrains.com/writerside/1.0/product-profile.dtd">
+
+<instance-profile id="u"
+                 name="user-guide"
+                 start-page="starter-topic.md">
+
+    <toc-element topic="Overview.md"/>
+    <toc-element toc-title="Getting Started">
+        <toc-element topic="Installation.md"/>
+        <toc-element topic="Quick-Start.md"/>
+        <toc-element topic="Basic-Usage.md"/>
+    </toc-element>
+    <toc-element toc-title="Core Concepts">
+        <toc-element topic="Configuration.md"/>
+        <toc-element topic="Nodes.md"/>
+        <toc-element topic="Setup-Teardown.md"/>
+        <toc-element topic="Tests.md"/>
+    </toc-element>
+    <toc-element toc-title="Writing Tests">
+        <toc-element topic="Test-Structure.md"/>
+        <toc-element topic="Task-Types.md"/>
+        <toc-element topic="Assertions.md"/>
+        <toc-element topic="Advanced-Tests.md"/>
+    </toc-element>
+    <toc-element toc-title="Advanced Usage">
+        <toc-element topic="CI-CD.md"/>
+        <toc-element topic="Extending-Dart.md"/>
+        <toc-element topic="Debugging.md"/>
+    </toc-element>
+    <toc-element toc-title="Examples">
+        <toc-element topic="Example-1.md"/>
+    </toc-element>
+    <toc-element toc-title="FAQ">
+        <toc-element topic="Troubleshooting.md"/>
+    </toc-element>
+    <toc-element topic="starter-topic.md"/>
+</instance-profile>

@@ -125,11 +125,6 @@ func (s *SshNode) Execute(command string, options ...execution.ExecutionOption) 
 		}
 	}
 
-	//// Read the output
-	//var outBuf, errBuf bytes.Buffer
-	//io.Copy(&outBuf, stdout)
-	//io.Copy(&errBuf, stderr)
-
 	return &execution.ExecutionResult{
 		ExecutionId: helpers.GetRandomId(),
 		ExitCode:    exitCode,

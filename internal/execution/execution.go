@@ -3,6 +3,7 @@ package execution
 import (
 	"github.com/bgrewell/go-execute/v2"
 	"io"
+	"os"
 )
 
 // ExecutionOption is a wrapper that allows for the passing of options to the Execute method
@@ -40,6 +41,14 @@ func OptionsToExecutionOptions(options map[string]interface{}) []ExecutionOption
 			opts = append(opts, WithEnvironment(v.([]string)))
 		case "shell":
 			opts = append(opts, WithShell(v.(string)))
+		case "sudo":
+			sudo := v.(map[string]interface{})
+			if value, ok := sudo["env_var"]; ok {
+				pass := os.Getenv(value.(string))
+				opts = append(opts, WithSudo(pass))
+			} else if value, ok = sudo["password"]; ok {
+				opts = append(opts, WithSudo(value.(string)))
+			}
 		}
 	}
 	return opts
@@ -57,6 +66,14 @@ func WithShell(shell string) ExecutionOption {
 	return ExecutionOption{
 		apply: func(exec execute.Executor) {
 			exec.SetShell(shell)
+		},
+	}
+}
+
+func WithSudo(pass string) ExecutionOption {
+	return ExecutionOption{
+		apply: func(exec execute.Executor) {
+			exec.SetSudoCredentials(pass)
 		},
 	}
 }

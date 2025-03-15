@@ -55,10 +55,6 @@ func (s *AptStep) Run(updater formatters.TaskCompleter) error {
 	return nil
 }
 
-func (s *AptStep) TitleLen() int {
-	return len(s.title)
-}
-
 // AptUpdateNeeded checks if apt update is needed on the node
 func (s *AptStep) AptUpdateNeeded() bool {
 	const filePath = "/var/lib/apt/periodic/update-success-stamp"

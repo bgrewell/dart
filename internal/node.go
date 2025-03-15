@@ -18,41 +18,41 @@ type Node interface {
 	Close() error
 }
 
-func CreateNodes(configs []*config.NodeConfig, wrapper *docker.Wrapper) (nodes map[string]Node, err error) {
-	nodes = make(map[string]Node)
+func CreateNodes(configs []*config.NodeConfig, wrapper *docker.Wrapper) (map[string]Node, error) {
+	nodes := make(map[string]Node)
 	localNodeExists := false
+
 	for _, cfg := range configs {
-		if _, ok := nodes[cfg.Name]; ok {
+		if _, exists := nodes[cfg.Name]; exists {
 			return nil, ErrNodeAlreadyExists
 		}
+
+		var node Node
+		var err error
+
 		switch cfg.Type {
 		case "local":
 			if localNodeExists {
 				return nil, ErrLocalNodeAlreadyExists
 			}
-
-			nodes[cfg.Name] = NewLocalNode(&cfg.Options)
+			node = NewLocalNode(&cfg.Options)
+			localNodeExists = true
 		case "docker":
-			node, err := NewDockerNode(wrapper, cfg.Name, &cfg.Options)
-			if err != nil {
-				return nil, err
-			}
-			nodes[cfg.Name] = node
+			node, err = NewDockerNode(wrapper, cfg.Name, &cfg.Options)
 		case "ssh":
-			node, err := NewSshNode(&cfg.Options)
-			if err != nil {
-				return nil, err
-			}
-			nodes[cfg.Name] = node
+			node, err = NewSshNode(&cfg.Options)
 		case "lxd":
-			node, err := NewLxdNode(cfg.Name, &cfg.Options)
-			if err != nil {
-				return nil, err
-			}
-			nodes[cfg.Name] = node
+			node, err = NewLxdNode(cfg.Name, &cfg.Options)
 		default:
 			return nil, ErrUnknownNodeType
 		}
+
+		if err != nil {
+			return nil, err
+		}
+
+		nodes[cfg.Name] = node
 	}
-	return
+
+	return nodes, nil
 }

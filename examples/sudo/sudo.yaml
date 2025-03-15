@@ -1,0 +1,19 @@
+---
+suite: Basic Test Suite
+nodes:
+  - name: local
+    type: local
+    options:
+      shell: /bin/bash
+      sudo:
+        password: "abcdefg123"
+        env_var: SUDO_PASSWORD
+setup: []
+tests:
+  - name: Run 'sudo whoami' command
+    node: local
+    type: execute
+    options:
+      command: sleep 4 && sudo whoami
+      evaluate:
+        match: "root"
