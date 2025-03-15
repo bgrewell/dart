@@ -1,15 +1,16 @@
-package internal
+package nodetypes
 
 import (
 	"encoding/json"
 	"fmt"
 	"github.com/bgrewell/dart/internal/execution"
 	"github.com/bgrewell/dart/internal/helpers"
+	"github.com/bgrewell/dart/pkg/ifaces"
 	"golang.org/x/crypto/ssh"
 	"os"
 )
 
-var _ Node = &SshNode{}
+var _ ifaces.Node = &SshNode{}
 
 type SshNodeOpts struct {
 	Host    string `yaml:"host,omitempty" json:"host"`
@@ -19,7 +20,7 @@ type SshNodeOpts struct {
 	KeyFile string `yaml:"key,omitempty" json:"key"`
 }
 
-func NewSshNode(opts NodeOptions) (node Node, err error) {
+func NewSshNode(opts ifaces.NodeOptions) (node ifaces.Node, err error) {
 
 	jsonData, err := json.Marshal(opts)
 	if err != nil {

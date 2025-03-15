@@ -1,4 +1,4 @@
-package internal
+package steptypes
 
 import (
 	"github.com/bgrewell/dart/internal/formatters"

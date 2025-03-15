@@ -1,8 +1,9 @@
-package internal
+package steptypes
 
 import (
 	"fmt"
 	"github.com/bgrewell/dart/internal/formatters"
+	"github.com/bgrewell/dart/pkg/ifaces"
 	"io"
 	"strings"
 	"time"
@@ -10,7 +11,7 @@ import (
 
 type AptStep struct {
 	title    string
-	node     Node
+	node     ifaces.Node
 	packages []string
 }
 

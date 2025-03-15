@@ -8,6 +8,10 @@ import (
 	"github.com/bgrewell/dart/internal/docker"
 	"github.com/bgrewell/dart/internal/formatters"
 	"github.com/bgrewell/dart/internal/logger"
+	"github.com/bgrewell/dart/pkg/ifaces"
+	"github.com/bgrewell/dart/pkg/nodetypes"
+	"github.com/bgrewell/dart/pkg/steptypes"
+	"github.com/bgrewell/dart/pkg/testtypes"
 	"github.com/bgrewell/usage"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
@@ -26,8 +30,8 @@ type CmdlineFlags struct {
 type ControllerParams struct {
 	fx.In
 	Cfg   *config.Configuration
-	Nodes map[string]internal.Node
-	Tests []internal.Test
+	Nodes map[string]ifaces.Node
+	Tests []ifaces.Test
 	//Setup     []pkg.Step `group:"setup"`
 	//Teardown  []pkg.Step `group:"teardown"`
 	Wrapper   *docker.Wrapper
@@ -57,36 +61,36 @@ func Formatter() (formatters.Formatter, error) {
 	return formatters.NewStandardFormatter(), nil
 }
 
-func Nodes(cfg *config.Configuration, wrapper *docker.Wrapper) (map[string]internal.Node, error) {
+func Nodes(cfg *config.Configuration, wrapper *docker.Wrapper) (map[string]ifaces.Node, error) {
 	// Create nodes for testing
-	nodes, err := internal.CreateNodes(cfg.Nodes, wrapper)
+	nodes, err := nodetypes.CreateNodes(cfg.Nodes, wrapper)
 	if err != nil {
 		return nil, err
 	}
 	return nodes, nil
 }
 
-func Tests(cfg *config.Configuration, nodes map[string]internal.Node) (tests []internal.Test, err error) {
+func Tests(cfg *config.Configuration, nodes map[string]ifaces.Node) (tests []ifaces.Test, err error) {
 	// Create the tests
-	tests, err = internal.CreateTests(cfg.Tests, nodes)
+	tests, err = testtypes.CreateTests(cfg.Tests, nodes)
 	if err != nil {
 		return nil, err
 	}
 	return tests, nil
 }
 
-func Setup(cfg *config.Configuration, nodes map[string]internal.Node) (setup []internal.Step, err error) {
+func Setup(cfg *config.Configuration, nodes map[string]ifaces.Node) (setup []ifaces.Step, err error) {
 	// Create the steps
-	setup, err = internal.CreateSteps(cfg.Setup, nodes)
+	setup, err = steptypes.CreateSteps(cfg.Setup, nodes)
 	if err != nil {
 		return nil, err
 	}
 	return setup, nil
 }
 
-func Teardown(cfg *config.Configuration, nodes map[string]internal.Node) (teardown []internal.Step, err error) {
+func Teardown(cfg *config.Configuration, nodes map[string]ifaces.Node) (teardown []ifaces.Step, err error) {
 	// Create the steps
-	teardown, err = internal.CreateSteps(cfg.Teardown, nodes)
+	teardown, err = steptypes.CreateSteps(cfg.Teardown, nodes)
 	if err != nil {
 		return nil, err
 	}

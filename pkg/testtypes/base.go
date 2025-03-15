@@ -1,21 +1,37 @@
-package internal
+package testtypes
 
 import (
 	"github.com/bgrewell/dart/internal/config"
 	"github.com/bgrewell/dart/internal/eval"
-	"github.com/bgrewell/dart/internal/formatters"
 	"github.com/bgrewell/dart/internal/helpers"
+	"github.com/bgrewell/dart/pkg/ifaces"
 	"sort"
 )
 
-type Test interface {
-	Name() string
-	Run(updater formatters.TestCompleter) (results map[string]*eval.EvaluateResult, err error)
+var (
+	TypeExecute       = "execute"
+	TypeExists        = "exists"
+	TypeFileContent   = "file_content"
+	TypeFileHash      = "file_hash"
+	TypeHTTPRequest   = "http_request"
+	TypePing          = "ping"
+	TypePortCheck     = "port_check"
+	TypeResource      = "resource"
+	TypeServiceStatus = "service_status"
+)
+
+type BaseTest struct {
+	name        string
+	node        ifaces.Node
+	testType    string
+	setup       []string
+	teardown    []string
+	evaluations *map[string]eval.Evaluate
 }
 
 // CreateTests creates a slice of Test objects from a slice of TestConfig objects
-func CreateTests(configs []*config.TestConfig, nodes map[string]Node) (tests []Test, err error) {
-	tests = make([]Test, 0)
+func CreateTests(configs []*config.TestConfig, nodes map[string]ifaces.Node) (tests []ifaces.Test, err error) {
+	tests = make([]ifaces.Test, 0)
 
 	// Sort tests by order
 	sort.Slice(configs, func(i, j int) bool {
@@ -28,7 +44,7 @@ func CreateTests(configs []*config.TestConfig, nodes map[string]Node) (tests []T
 		// Find the node
 		node, ok := nodes[cfg.Node]
 		if !ok {
-			return nil, ErrNodeNotFound
+			return nil, helpers.ErrNodeNotFound
 		}
 
 		// Process the type and pass the options to the test type constructor
@@ -41,7 +57,7 @@ func CreateTests(configs []*config.TestConfig, nodes map[string]Node) (tests []T
 			teardown: cfg.Teardown,
 		}
 
-		var test Test
+		var test ifaces.Test
 		switch cfg.Type {
 		case TypeExecute:
 			test, err = NewExecuteTest(base, &cfg.Options)
@@ -62,7 +78,7 @@ func CreateTests(configs []*config.TestConfig, nodes map[string]Node) (tests []T
 		case TypeServiceStatus:
 			return nil, helpers.WrapError("Test type not implemented")
 		default:
-			return nil, ErrUnknownTestType
+			return nil, helpers.ErrUnknownTestType
 		}
 
 		if err != nil {

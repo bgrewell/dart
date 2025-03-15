@@ -1,4 +1,4 @@
-package types
+package ifaces
 
 import (
 	"github.com/bgrewell/dart/internal/eval"

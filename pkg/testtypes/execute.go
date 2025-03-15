@@ -1,10 +1,12 @@
-package internal
+package testtypes
 
 import (
 	"encoding/json"
 	"fmt"
 	"github.com/bgrewell/dart/internal/eval"
 	"github.com/bgrewell/dart/internal/formatters"
+	"github.com/bgrewell/dart/internal/helpers"
+	"github.com/bgrewell/dart/pkg/ifaces"
 )
 
 type ExecuteTestConfig struct {
@@ -12,7 +14,7 @@ type ExecuteTestConfig struct {
 	Evaluate map[string]interface{} `yaml:"evaluate"`
 }
 
-func NewExecuteTest(base BaseTest, opts *map[string]interface{}) (test Test, err error) {
+func NewExecuteTest(base BaseTest, opts *map[string]interface{}) (test ifaces.Test, err error) {
 
 	jsonData, err := json.Marshal(opts)
 	if err != nil {
@@ -55,7 +57,7 @@ func NewExecuteTest(base BaseTest, opts *map[string]interface{}) (test Test, err
 			}
 			evaluations[k] = chk
 		default:
-			return nil, ErrUnknownCheckType
+			return nil, helpers.ErrUnknownCheckType
 		}
 	}
 

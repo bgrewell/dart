@@ -1,16 +1,17 @@
-package internal
+package nodetypes
 
 import (
 	"github.com/bgrewell/dart/internal/execution"
 	"github.com/bgrewell/dart/internal/helpers"
+	"github.com/bgrewell/dart/pkg/ifaces"
 	"github.com/bgrewell/go-execute/v2"
 	"os/exec"
 	"syscall"
 )
 
-var _ Node = &LocalNode{}
+var _ ifaces.Node = &LocalNode{}
 
-func NewLocalNode(opts NodeOptions) Node {
+func NewLocalNode(opts ifaces.NodeOptions) ifaces.Node {
 
 	var options []execution.ExecutionOption
 	if opts != nil {

@@ -1,13 +1,14 @@
-package internal
+package nodetypes
 
 import (
 	"encoding/json"
 	"github.com/bgrewell/dart/internal/docker"
 	"github.com/bgrewell/dart/internal/execution"
 	"github.com/bgrewell/dart/internal/helpers"
+	"github.com/bgrewell/dart/pkg/ifaces"
 )
 
-var _ Node = &DockerNode{}
+var _ ifaces.Node = &DockerNode{}
 
 type DockerNetworkOpts struct {
 	Name   string `yaml:"name,omitempty" json:"name"`
@@ -21,7 +22,7 @@ type DockerNodeOpts struct {
 	Networks    []DockerNetworkOpts    `yaml:"networks,omitempty" json:"networks"`
 }
 
-func NewDockerNode(wrapper *docker.Wrapper, name string, opts NodeOptions) (node Node, err error) {
+func NewDockerNode(wrapper *docker.Wrapper, name string, opts ifaces.NodeOptions) (node ifaces.Node, err error) {
 
 	jsonData, err := json.Marshal(opts)
 	if err != nil {

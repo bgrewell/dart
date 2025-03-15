@@ -5,16 +5,17 @@ import (
 	"github.com/bgrewell/dart/internal/docker"
 	"github.com/bgrewell/dart/internal/eval"
 	"github.com/bgrewell/dart/internal/formatters"
+	"github.com/bgrewell/dart/pkg/ifaces"
 	"strconv"
 )
 
 func NewTestController(
 	suite string,
 	wrapper *docker.Wrapper,
-	nodes map[string]Node,
-	tests []Test,
-	setup []Step,
-	teardown []Step,
+	nodes map[string]ifaces.Node,
+	tests []ifaces.Test,
+	setup []ifaces.Step,
+	teardown []ifaces.Step,
 	verbose bool,
 	stopOnFail bool,
 	pauseOnFail bool,
@@ -39,10 +40,10 @@ func NewTestController(
 
 type TestController struct {
 	Suite         string
-	Nodes         map[string]Node
-	Setup         []Step
-	Tests         []Test
-	Teardown      []Step
+	Nodes         map[string]ifaces.Node
+	Setup         []ifaces.Step
+	Tests         []ifaces.Test
+	Teardown      []ifaces.Step
 	DockerWrapper *docker.Wrapper
 	formatter     formatters.Formatter
 	verbose       bool

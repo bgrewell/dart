@@ -1,4 +1,4 @@
-package internal
+package nodetypes
 
 import (
 	"bytes"
@@ -8,13 +8,14 @@ import (
 	"github.com/bgrewell/dart/internal/execution"
 	"github.com/bgrewell/dart/internal/helpers"
 	"github.com/bgrewell/dart/internal/lxc"
+	"github.com/bgrewell/dart/pkg/ifaces"
 	lxd "github.com/canonical/lxd/client"
 	"github.com/canonical/lxd/shared/api"
 	"strings"
 	"unicode"
 )
 
-var _ Node = &LxdNode{}
+var _ ifaces.Node = &LxdNode{}
 
 type LxdNetworkOpts struct {
 	Name   string `yaml:"name,omitempty" json:"name"`
@@ -30,7 +31,7 @@ type LxdNodeOpts struct {
 	Networks    []LxdNetworkOpts       `yaml:"networks,omitempty" json:"networks"`
 }
 
-func NewLxdNode(name string, opts NodeOptions) (node Node, err error) {
+func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err error) {
 
 	jsonData, err := json.Marshal(opts)
 	if err != nil {
