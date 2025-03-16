@@ -2,9 +2,25 @@ package steptypes
 
 import (
 	"github.com/bgrewell/dart/internal/config"
+	"github.com/bgrewell/dart/internal/formatters"
 	"github.com/bgrewell/dart/internal/helpers"
 	"github.com/bgrewell/dart/pkg/ifaces"
 )
+
+// BaseStep provides a common structure for all step types.
+type BaseStep struct {
+	title string
+}
+
+// Title returns the title of the step.
+func (s *BaseStep) Title() string {
+	return s.title
+}
+
+// Run is defined by specific step implementations.
+func (s *BaseStep) Run(updater formatters.TaskCompleter) error {
+	return nil // Should be overridden
+}
 
 // CreateSteps constructs a slice of executable Steps based on provided configuration.
 //
@@ -49,14 +65,14 @@ func CreateSteps(configs []*config.StepConfig, nodes map[string]ifaces.Node) ([]
 		switch c.Step.Type {
 		case "simulated":
 			steps = append(steps, &SimulatedStep{
-				title:     c.Name,
+				BaseStep:  BaseStep{title: c.Name},
 				sleepTime: c.Step.Options["time"].(int),
 			})
 		case "execute":
 			steps = append(steps, &ExecuteStep{
-				title:   c.Name,
-				node:    node,
-				command: c.Step.Options["command"].(string),
+				BaseStep: BaseStep{title: c.Name},
+				node:     node,
+				command:  c.Step.Options["command"].(string),
 			})
 		case "apt":
 			rawPackages, ok := c.Step.Options["packages"].([]interface{})
@@ -73,7 +89,7 @@ func CreateSteps(configs []*config.StepConfig, nodes map[string]ifaces.Node) ([]
 			}
 
 			steps = append(steps, &AptStep{
-				title:    c.Name,
+				BaseStep: BaseStep{title: c.Name},
 				node:     node,
 				packages: packages,
 			})

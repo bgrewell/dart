@@ -6,16 +6,16 @@ import (
 	"github.com/bgrewell/dart/pkg/ifaces"
 )
 
+var _ ifaces.Step = &ExecuteStep{}
+
+// ExecuteStep runs shell commands on a node.
 type ExecuteStep struct {
-	title   string
+	BaseStep
 	node    ifaces.Node
 	command string
 }
 
-func (s *ExecuteStep) Title() string {
-	return s.title
-}
-
+// Run executes the command and evaluates success.
 func (s *ExecuteStep) Run(updater formatters.TaskCompleter) error {
 	result, err := s.node.Execute(s.command)
 	if err != nil {

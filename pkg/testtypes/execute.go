@@ -9,6 +9,8 @@ import (
 	"github.com/bgrewell/dart/pkg/ifaces"
 )
 
+var _ ifaces.Test = &ExecutionTest{}
+
 type ExecuteTestConfig struct {
 	Command  string                 `yaml:"command"`
 	Evaluate map[string]interface{} `yaml:"evaluate"`
