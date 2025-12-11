@@ -63,6 +63,9 @@ DART supports several types of nodes that can be used as test targets:
 - **Docker Node (`docker`)**  
   Run tests inside Docker containers, with support for custom networks and privileged mode.
 
+- **Docker Compose Node (`docker-compose`)**  
+  Manage and test services defined in Docker Compose files. Multiple nodes can target different services in the same compose stack.
+
 - **LXD Node (`lxd`)**  
   Execute tests in LXD containers, with automatic provisioning and cleanup.
 
@@ -94,6 +97,21 @@ nodes:
         - name: test-net
           subnet: "172.20.0.0/16"
           ip: "172.20.0.2"
+  
+  # Docker Compose nodes - target specific services
+  - name: web-service
+    type: docker-compose
+    options:
+      compose_file: docker-compose.yml
+      project_name: my-stack
+      service: web
+  
+  - name: db-service
+    type: docker-compose
+    options:
+      compose_file: docker-compose.yml
+      project_name: my-stack
+      service: db
 ```
 
 ## Setup and Teardown Tasks

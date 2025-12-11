@@ -116,7 +116,7 @@ func RemoveContainer(ctx context.Context, cli client.APIClient, containerID stri
 }
 
 // RunCommandInContainer runs a command in a specified Docker container
-func RunCommandInContainer(cli *client.Client, containerID string, command string) (exitCode int, stdout, stderr io.Reader, err error) {
+func RunCommandInContainer(cli client.APIClient, containerID string, command string) (exitCode int, stdout, stderr io.Reader, err error) {
 	ctx := context.Background()
 
 	// Create an exec instance
