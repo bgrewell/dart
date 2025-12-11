@@ -31,6 +31,8 @@ func CreateNodes(configs []*config.NodeConfig, wrapper *docker.Wrapper) (map[str
 			localNodeExists = true
 		case "docker":
 			node, err = NewDockerNode(wrapper, cfg.Name, &cfg.Options)
+		case "docker-compose":
+			node, err = NewDockerComposeNode(wrapper, cfg.Name, &cfg.Options)
 		case "ssh":
 			node, err = NewSshNode(&cfg.Options)
 		case "lxd":

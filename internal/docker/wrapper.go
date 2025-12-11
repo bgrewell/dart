@@ -27,6 +27,7 @@ func NewWrapper(cfg *config.Configuration) (wrapper *Wrapper, err error) {
 		cfg:                cfg.Docker,
 		networkNamesToId:   make(map[string]string),
 		containerNamesToId: make(map[string]string),
+		composeRegistry:    NewComposeStackRegistry(),
 	}, nil
 }
 
@@ -35,11 +36,22 @@ type Wrapper struct {
 	cfg                *config.DockerConfig
 	networkNamesToId   map[string]string
 	containerNamesToId map[string]string
+	composeRegistry    *ComposeStackRegistry
 }
 
 // Configured returns true if the wrapper has been configured
 func (w *Wrapper) Configured() bool {
 	return w.cfg != nil
+}
+
+// GetClient returns the Docker client
+func (w *Wrapper) GetClient() *client.Client {
+	return w.cli
+}
+
+// GetComposeRegistry returns the compose stack registry
+func (w *Wrapper) GetComposeRegistry() *ComposeStackRegistry {
+	return w.composeRegistry
 }
 
 // Setup configures the Docker wrapper by creating networks and building images

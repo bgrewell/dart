@@ -91,3 +91,6 @@ fabric.properties
 
 # output dir
 bin/
+
+# Binary built in root directory
+dart

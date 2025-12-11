@@ -1,0 +1,75 @@
+---
+suite: Docker Compose Example
+
+nodes:
+  - name: localhost
+    type: local
+    options:
+      shell: /bin/bash
+  
+  # Node targeting the web service in the compose stack
+  - name: web-node
+    type: docker-compose
+    options:
+      compose_file: docker-compose.yml
+      project_name: dart-test
+      service: web  # This node targets the web service
+  
+  # Node targeting the db service in the same compose stack
+  - name: db-node
+    type: docker-compose
+    options:
+      compose_file: docker-compose.yml
+      project_name: dart-test  # Same project name shares the stack
+      service: db  # This node targets the db service
+
+setup:
+  - name: wait for services to be ready
+    node: localhost
+    step:
+      type: simulated
+      options:
+        time: 5
+
+tests:
+  - name: verify web service is running nginx
+    node: web-node
+    type: execute
+    options:
+      command: "ps aux | grep nginx"
+      evaluate:
+        exit_code: 0
+
+  - name: check hostname on web service
+    node: web-node
+    type: execute
+    options:
+      command: "hostname"
+      evaluate:
+        exit_code: 0
+
+  - name: check hostname on db service
+    node: db-node
+    type: execute
+    options:
+      command: "hostname"
+      evaluate:
+        exit_code: 0
+
+  - name: verify postgres is running on db service
+    node: db-node
+    type: execute
+    options:
+      command: "ps aux | grep postgres"
+      evaluate:
+        exit_code: 0
+
+  - name: check web service responds
+    node: localhost
+    type: execute
+    options:
+      command: "curl -s http://localhost:8080"
+      evaluate:
+        exit_code: 0
+        contains: "Welcome"
+
