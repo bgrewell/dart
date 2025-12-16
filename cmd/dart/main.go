@@ -8,6 +8,7 @@ import (
 	"github.com/bgrewell/dart/internal/docker"
 	"github.com/bgrewell/dart/internal/formatters"
 	"github.com/bgrewell/dart/internal/logger"
+	"github.com/bgrewell/dart/internal/lxd"
 	"github.com/bgrewell/dart/pkg/ifaces"
 	"github.com/bgrewell/dart/pkg/nodetypes"
 	"github.com/bgrewell/dart/pkg/steptypes"
@@ -29,14 +30,15 @@ type CmdlineFlags struct {
 
 type ControllerParams struct {
 	fx.In
-	Cfg   *config.Configuration
-	Nodes map[string]ifaces.Node
-	Tests []ifaces.Test
+	Cfg          *config.Configuration
+	Nodes        map[string]ifaces.Node
+	Tests        []ifaces.Test
 	//Setup     []pkg.Step `group:"setup"`
 	//Teardown  []pkg.Step `group:"teardown"`
-	Wrapper   *docker.Wrapper
-	Formatter formatters.Formatter
-	Flags     *CmdlineFlags
+	Wrapper      *docker.Wrapper
+	LxdWrapper   *lxd.Wrapper
+	Formatter    formatters.Formatter
+	Flags        *CmdlineFlags
 }
 
 type RunParams struct {
@@ -61,9 +63,9 @@ func Formatter() (formatters.Formatter, error) {
 	return formatters.NewStandardFormatter(), nil
 }
 
-func Nodes(cfg *config.Configuration, wrapper *docker.Wrapper) (map[string]ifaces.Node, error) {
+func Nodes(cfg *config.Configuration, wrapper *docker.Wrapper, lxdWrapper *lxd.Wrapper) (map[string]ifaces.Node, error) {
 	// Create nodes for testing
-	nodes, err := nodetypes.CreateNodes(cfg.Nodes, wrapper)
+	nodes, err := nodetypes.CreateNodesWithWrappers(cfg.Nodes, wrapper, lxdWrapper)
 	if err != nil {
 		return nil, err
 	}
@@ -106,6 +108,15 @@ func DockerWrapper(cfg *config.Configuration) (*docker.Wrapper, error) {
 	return dw, nil
 }
 
+func LxdWrapper(cfg *config.Configuration) (*lxd.Wrapper, error) {
+	// Create the LXD wrapper
+	lw, err := lxd.NewWrapper(cfg.Lxd)
+	if err != nil {
+		return nil, err
+	}
+	return lw, nil
+}
+
 func Controller(params ControllerParams) (ctrl *internal.TestController, err error) {
 	// TODO: Setup and Teardown are called here because of an issue passing them in the params (not being called in the proper order)
 	setup, err := Setup(params.Cfg, params.Nodes)
@@ -122,6 +133,7 @@ func Controller(params ControllerParams) (ctrl *internal.TestController, err err
 	return internal.NewTestController(
 		params.Cfg.Suite,
 		params.Wrapper,
+		params.LxdWrapper,
 		params.Nodes,
 		params.Tests,
 		setup,
@@ -200,6 +212,7 @@ func main() {
 				fx.ResultTags(`group:"teardown"`),
 			),
 			DockerWrapper,
+			LxdWrapper,
 			Configuration,
 			Formatter,
 			Controller,

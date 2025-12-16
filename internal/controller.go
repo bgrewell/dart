@@ -5,6 +5,7 @@ import (
 	"github.com/bgrewell/dart/internal/docker"
 	"github.com/bgrewell/dart/internal/eval"
 	"github.com/bgrewell/dart/internal/formatters"
+	"github.com/bgrewell/dart/internal/lxd"
 	"github.com/bgrewell/dart/pkg/ifaces"
 	"strconv"
 )
@@ -12,6 +13,7 @@ import (
 func NewTestController(
 	suite string,
 	wrapper *docker.Wrapper,
+	lxdWrapper *lxd.Wrapper,
 	nodes map[string]ifaces.Node,
 	tests []ifaces.Test,
 	setup []ifaces.Step,
@@ -29,6 +31,7 @@ func NewTestController(
 		Setup:         setup,
 		Teardown:      teardown,
 		DockerWrapper: wrapper,
+		LxdWrapper:    lxdWrapper,
 		formatter:     formatter,
 		verbose:       verbose,
 		stopOnFail:    stopOnFail,
@@ -45,6 +48,7 @@ type TestController struct {
 	Tests         []ifaces.Test
 	Teardown      []ifaces.Step
 	DockerWrapper *docker.Wrapper
+	LxdWrapper    *lxd.Wrapper
 	formatter     formatters.Formatter
 	verbose       bool
 	stopOnFail    bool
@@ -81,6 +85,11 @@ func (tc *TestController) Run() error {
 			if tc.DockerWrapper.Configured() {
 				t := tc.formatter.StartTask("tearing down docker environment", "running")
 				_ = tc.DockerWrapper.Teardown()
+				t.Complete()
+			}
+			if tc.LxdWrapper != nil && tc.LxdWrapper.Configured() {
+				t := tc.formatter.StartTask("tearing down lxd environment", "running")
+				_ = tc.LxdWrapper.Teardown()
 				t.Complete()
 			}
 		}
@@ -128,6 +137,19 @@ func (tc *TestController) Run() error {
 		// Run the docker set up steps
 		t := tc.formatter.StartTask("setting up docker environment", "running")
 		err := tc.DockerWrapper.Setup()
+		if err != nil {
+			t.Error()
+			tc.formatter.PrintError(err)
+			return err
+		}
+		t.Complete()
+	}
+
+	// Check if the LXD wrapper is configured and if it is then run the LXD setup steps
+	if tc.LxdWrapper != nil && tc.LxdWrapper.Configured() {
+		// Run the LXD set up steps
+		t := tc.formatter.StartTask("setting up lxd environment", "running")
+		err := tc.LxdWrapper.Setup()
 		if err != nil {
 			t.Error()
 			tc.formatter.PrintError(err)
@@ -230,6 +252,18 @@ func (tc *TestController) Run() error {
 		// Run the docker teardown steps
 		t := tc.formatter.StartTask("tearing down docker environment", "running")
 		err := tc.DockerWrapper.Teardown()
+		if err != nil {
+			t.Error()
+			tc.formatter.PrintError(err)
+			return err
+		}
+		t.Complete()
+	}
+
+	if tc.LxdWrapper != nil && tc.LxdWrapper.Configured() {
+		// Run the LXD teardown steps
+		t := tc.formatter.StartTask("tearing down lxd environment", "running")
+		err := tc.LxdWrapper.Teardown()
 		if err != nil {
 			t.Error()
 			tc.formatter.PrintError(err)
