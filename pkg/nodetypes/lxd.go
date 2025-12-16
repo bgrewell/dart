@@ -146,10 +146,11 @@ func (d *LxdNode) Setup() error {
 	instanceType := api.InstanceType(d.options.InstanceType)
 
 	// Build network devices from the options.Networks configuration
+	// Use eth0, eth1, etc. to override profile NICs (default profile typically has eth0)
 	devices := make(map[string]map[string]string)
 	for i, netOpts := range d.options.Networks {
-		// Use a unique device name to avoid conflicts with profile devices
-		deviceName := fmt.Sprintf("net%d", i)
+		// Use eth0, eth1, etc. naming to override default profile NIC devices
+		deviceName := fmt.Sprintf("eth%d", i)
 		deviceConfig := map[string]string{
 			"type":    "nic",
 			"network": netOpts.Name,
