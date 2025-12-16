@@ -2,7 +2,6 @@ package internal
 
 import (
 	"fmt"
-	"github.com/bgrewell/dart/internal/docker"
 	"github.com/bgrewell/dart/internal/eval"
 	"github.com/bgrewell/dart/internal/formatters"
 	"github.com/bgrewell/dart/pkg/ifaces"
@@ -11,7 +10,7 @@ import (
 
 func NewTestController(
 	suite string,
-	wrapper *docker.Wrapper,
+	platforms []ifaces.PlatformManager,
 	nodes map[string]ifaces.Node,
 	tests []ifaces.Test,
 	setup []ifaces.Step,
@@ -23,34 +22,34 @@ func NewTestController(
 	teardownOnly bool,
 	formatter formatters.Formatter) *TestController {
 	return &TestController{
-		Suite:         suite,
-		Nodes:         nodes,
-		Tests:         tests,
-		Setup:         setup,
-		Teardown:      teardown,
-		DockerWrapper: wrapper,
-		formatter:     formatter,
-		verbose:       verbose,
-		stopOnFail:    stopOnFail,
-		pauseOnFail:   pauseOnFail,
-		setupOnly:     setupOnly,
-		teardownOnly:  teardownOnly,
+		Suite:        suite,
+		Nodes:        nodes,
+		Tests:        tests,
+		Setup:        setup,
+		Teardown:     teardown,
+		Platforms:    platforms,
+		formatter:    formatter,
+		verbose:      verbose,
+		stopOnFail:   stopOnFail,
+		pauseOnFail:  pauseOnFail,
+		setupOnly:    setupOnly,
+		teardownOnly: teardownOnly,
 	}
 }
 
 type TestController struct {
-	Suite         string
-	Nodes         map[string]ifaces.Node
-	Setup         []ifaces.Step
-	Tests         []ifaces.Test
-	Teardown      []ifaces.Step
-	DockerWrapper *docker.Wrapper
-	formatter     formatters.Formatter
-	verbose       bool
-	stopOnFail    bool
-	pauseOnFail   bool
-	setupOnly     bool
-	teardownOnly  bool
+	Suite        string
+	Nodes        map[string]ifaces.Node
+	Setup        []ifaces.Step
+	Tests        []ifaces.Test
+	Teardown     []ifaces.Step
+	Platforms    []ifaces.PlatformManager
+	formatter    formatters.Formatter
+	verbose      bool
+	stopOnFail   bool
+	pauseOnFail  bool
+	setupOnly    bool
+	teardownOnly bool
 }
 
 func (tc *TestController) Run() error {
@@ -60,6 +59,9 @@ func (tc *TestController) Run() error {
 
 	// Setup completed nodes
 	var setupCompletedNodes []string
+
+	// Track which platforms have been set up for cleanup on error
+	var setupCompletedPlatforms []ifaces.PlatformManager
 
 	// Create a defer function to clean up after a failure/error
 	cleanupComplete := false
@@ -78,9 +80,11 @@ func (tc *TestController) Run() error {
 				}
 				c.Complete()
 			}
-			if tc.DockerWrapper.Configured() {
-				t := tc.formatter.StartTask("tearing down docker environment", "running")
-				_ = tc.DockerWrapper.Teardown()
+			// Teardown platforms in reverse order
+			for i := len(setupCompletedPlatforms) - 1; i >= 0; i-- {
+				platform := setupCompletedPlatforms[i]
+				t := tc.formatter.StartTask(fmt.Sprintf("tearing down %s environment", platform.Name()), "running")
+				_ = platform.Teardown()
 				t.Complete()
 			}
 		}
@@ -117,23 +121,31 @@ func (tc *TestController) Run() error {
 		for name, _ := range tc.Nodes {
 			setupCompletedNodes = append(setupCompletedNodes, name)
 		}
+		// Track all configured platforms for teardown
+		for _, platform := range tc.Platforms {
+			if platform.Configured() {
+				setupCompletedPlatforms = append(setupCompletedPlatforms, platform)
+			}
+		}
 		return nil // The defered function will handle the teardown
 	}
 
 	// Run the setup steps
 	tc.formatter.PrintHeader("Running test setup")
 
-	// Check if the docker wrapper is configured and if it is then run the docker setup steps
-	if tc.DockerWrapper.Configured() {
-		// Run the docker set up steps
-		t := tc.formatter.StartTask("setting up docker environment", "running")
-		err := tc.DockerWrapper.Setup()
-		if err != nil {
-			t.Error()
-			tc.formatter.PrintError(err)
-			return err
+	// Setup all configured platforms (e.g., Docker, LXD) before setting up nodes
+	for _, platform := range tc.Platforms {
+		if platform.Configured() {
+			t := tc.formatter.StartTask(fmt.Sprintf("setting up %s environment", platform.Name()), "running")
+			err := platform.Setup()
+			if err != nil {
+				t.Error()
+				tc.formatter.PrintError(err)
+				return err
+			}
+			setupCompletedPlatforms = append(setupCompletedPlatforms, platform)
+			t.Complete()
 		}
-		t.Complete()
 	}
 
 	for name, node := range tc.Nodes {
@@ -226,16 +238,19 @@ func (tc *TestController) Run() error {
 		c.Complete()
 	}
 
-	if tc.DockerWrapper.Configured() {
-		// Run the docker teardown steps
-		t := tc.formatter.StartTask("tearing down docker environment", "running")
-		err := tc.DockerWrapper.Teardown()
-		if err != nil {
-			t.Error()
-			tc.formatter.PrintError(err)
-			return err
+	// Teardown all configured platforms in reverse order
+	for i := len(tc.Platforms) - 1; i >= 0; i-- {
+		platform := tc.Platforms[i]
+		if platform.Configured() {
+			t := tc.formatter.StartTask(fmt.Sprintf("tearing down %s environment", platform.Name()), "running")
+			err := platform.Teardown()
+			if err != nil {
+				t.Error()
+				tc.formatter.PrintError(err)
+				return err
+			}
+			t.Complete()
 		}
-		t.Complete()
 	}
 	tc.formatter.PrintEmpty()
 

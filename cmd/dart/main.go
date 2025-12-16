@@ -8,6 +8,7 @@ import (
 	"github.com/bgrewell/dart/internal/docker"
 	"github.com/bgrewell/dart/internal/formatters"
 	"github.com/bgrewell/dart/internal/logger"
+	"github.com/bgrewell/dart/internal/lxd"
 	"github.com/bgrewell/dart/pkg/ifaces"
 	"github.com/bgrewell/dart/pkg/nodetypes"
 	"github.com/bgrewell/dart/pkg/steptypes"
@@ -29,14 +30,13 @@ type CmdlineFlags struct {
 
 type ControllerParams struct {
 	fx.In
-	Cfg   *config.Configuration
-	Nodes map[string]ifaces.Node
-	Tests []ifaces.Test
-	//Setup     []pkg.Step `group:"setup"`
-	//Teardown  []pkg.Step `group:"teardown"`
-	Wrapper   *docker.Wrapper
-	Formatter formatters.Formatter
-	Flags     *CmdlineFlags
+	Cfg           *config.Configuration
+	Nodes         map[string]ifaces.Node
+	Tests         []ifaces.Test
+	DockerWrapper *docker.Wrapper
+	LxdWrapper    *lxd.Wrapper `optional:"true"`
+	Formatter     formatters.Formatter
+	Flags         *CmdlineFlags
 }
 
 type RunParams struct {
@@ -48,8 +48,6 @@ type RunParams struct {
 
 func Configuration(cmdFlags *CmdlineFlags) (*config.Configuration, error) {
 	// Read in the test configuration file
-	//cfg, err := config.LoadConfiguration("examples/basic/basic.yaml")
-	//cfg, err := config.LoadConfiguration("examples/docker/docker.yaml")
 	cfg, err := config.LoadConfiguration(*cmdFlags.ConfigFile)
 	if err != nil {
 		return nil, err
@@ -61,9 +59,9 @@ func Formatter() (formatters.Formatter, error) {
 	return formatters.NewStandardFormatter(), nil
 }
 
-func Nodes(cfg *config.Configuration, wrapper *docker.Wrapper) (map[string]ifaces.Node, error) {
-	// Create nodes for testing
-	nodes, err := nodetypes.CreateNodes(cfg.Nodes, wrapper)
+func Nodes(cfg *config.Configuration, dockerWrapper *docker.Wrapper, lxdWrapper *lxd.Wrapper) (map[string]ifaces.Node, error) {
+	// Create nodes for testing using both Docker and LXD wrappers
+	nodes, err := nodetypes.CreateNodesWithWrappers(cfg.Nodes, dockerWrapper, lxdWrapper)
 	if err != nil {
 		return nil, err
 	}
@@ -106,6 +104,21 @@ func DockerWrapper(cfg *config.Configuration) (*docker.Wrapper, error) {
 	return dw, nil
 }
 
+func LxdWrapper(cfg *config.Configuration) (*lxd.Wrapper, error) {
+	// Only create LXD wrapper if LXD is configured
+	if cfg.Lxd == nil {
+		return nil, nil
+	}
+	// Create the LXD wrapper
+	lw, err := lxd.NewWrapper(cfg.Lxd)
+	if err != nil {
+		// LXD might not be available on the system, which is fine
+		// Just return nil and let nodes handle it individually
+		return nil, nil
+	}
+	return lw, nil
+}
+
 func Controller(params ControllerParams) (ctrl *internal.TestController, err error) {
 	// TODO: Setup and Teardown are called here because of an issue passing them in the params (not being called in the proper order)
 	setup, err := Setup(params.Cfg, params.Nodes)
@@ -118,10 +131,19 @@ func Controller(params ControllerParams) (ctrl *internal.TestController, err err
 		return nil, err
 	}
 
+	// Build the list of platform managers
+	var platforms []ifaces.PlatformManager
+	if params.DockerWrapper != nil {
+		platforms = append(platforms, params.DockerWrapper)
+	}
+	if params.LxdWrapper != nil {
+		platforms = append(platforms, params.LxdWrapper)
+	}
+
 	// Create the test controller
 	return internal.NewTestController(
 		params.Cfg.Suite,
-		params.Wrapper,
+		platforms,
 		params.Nodes,
 		params.Tests,
 		setup,
@@ -131,8 +153,6 @@ func Controller(params ControllerParams) (ctrl *internal.TestController, err err
 		*params.Flags.PauseOnError,
 		*params.Flags.SetupOnly,
 		*params.Flags.TeardownOnly,
-		//params.Setup,
-		//params.Teardown,
 		params.Formatter), nil
 }
 
@@ -200,6 +220,7 @@ func main() {
 				fx.ResultTags(`group:"teardown"`),
 			),
 			DockerWrapper,
+			LxdWrapper,
 			Configuration,
 			Formatter,
 			Controller,

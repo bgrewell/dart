@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/bgrewell/dart/internal/config"
 	"github.com/bgrewell/dart/internal/helpers"
+	"github.com/bgrewell/dart/pkg/ifaces"
 	"github.com/bgrewell/go-execute/v2"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
@@ -12,6 +13,9 @@ import (
 	"io"
 	"path/filepath"
 )
+
+// Ensure Wrapper implements the PlatformManager interface
+var _ ifaces.PlatformManager = &Wrapper{}
 
 func NewWrapper(cfg *config.Configuration) (wrapper *Wrapper, err error) {
 
@@ -42,6 +46,11 @@ type Wrapper struct {
 // Configured returns true if the wrapper has been configured
 func (w *Wrapper) Configured() bool {
 	return w.cfg != nil
+}
+
+// Name returns the name of this platform manager
+func (w *Wrapper) Name() string {
+	return "docker"
 }
 
 // GetClient returns the Docker client
