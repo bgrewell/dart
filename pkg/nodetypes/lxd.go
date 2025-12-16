@@ -157,12 +157,13 @@ func (d *LxdNode) Setup() error {
 		// Add static IP address if specified, detecting IPv4 vs IPv6
 		if netOpts.Ip != "" {
 			ip := net.ParseIP(netOpts.Ip)
-			if ip != nil {
-				if ip.To4() != nil {
-					deviceConfig["ipv4.address"] = netOpts.Ip
-				} else {
-					deviceConfig["ipv6.address"] = netOpts.Ip
-				}
+			if ip == nil {
+				return helpers.WrapError(fmt.Sprintf("invalid IP address for network %s: %s", netOpts.Name, netOpts.Ip))
+			}
+			if ip.To4() != nil {
+				deviceConfig["ipv4.address"] = netOpts.Ip
+			} else {
+				deviceConfig["ipv6.address"] = netOpts.Ip
 			}
 		}
 		devices[deviceName] = deviceConfig
