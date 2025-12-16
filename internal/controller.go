@@ -92,7 +92,7 @@ func (tc *TestController) Run() error {
 
 	// Get the max length of the setup/teardown and the tests for formatting
 	longestSetup := 0
-	for name, _ := range tc.Nodes {
+	for name := range tc.Nodes {
 		if len(fmt.Sprintf(nodeSetupMsg, name)) > longestSetup {
 			longestSetup = len(fmt.Sprintf(nodeSetupMsg, name))
 		}
@@ -118,7 +118,7 @@ func (tc *TestController) Run() error {
 	// If teardown only is set, skip the setup and tests
 	if tc.teardownOnly {
 		cleanupMsg = "Running teardown only"
-		for name, _ := range tc.Nodes {
+		for name := range tc.Nodes {
 			setupCompletedNodes = append(setupCompletedNodes, name)
 		}
 		// Track all configured platforms for teardown
