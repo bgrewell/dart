@@ -235,11 +235,11 @@ func (d *LxdNode) Execute(command string, options ...execution.ExecutionOption) 
 
 	op, err := d.client.ExecInstance(d.name, execPost, &execArgs)
 	if err != nil {
-		return nil, helpers.WrapError(fmt.Sprintf("error executing command: %s", err.Error()))
+		return nil, helpers.WrapError(fmt.Sprintf("error executing command: %v", err))
 	}
 
 	if err = op.Wait(); err != nil {
-		return nil, helpers.WrapError(fmt.Sprintf("error executing command: %s", err.Error()))
+		return nil, helpers.WrapError(fmt.Sprintf("error executing command: %v", err))
 	}
 
 	metadata := op.Get().Metadata
