@@ -125,7 +125,12 @@ func LxdWrapper(cfg *config.Configuration) (*lxd.Wrapper, error) {
 }
 
 // EnvironmentWrapper determines which wrapper to use based on configuration
-// Priority: LXD > Docker (if both are configured, LXD takes precedence)
+// Priority: LXD > Docker
+//
+// When both Docker and LXD are configured, LXD takes precedence because it supports
+// both containers and VMs, providing more flexibility for testing scenarios.
+// Docker-only configurations remain fully supported and will work as before.
+// If neither is configured, a NoOpWrapper is returned for graceful handling.
 func EnvironmentWrapper(dockerWrapper *docker.Wrapper, lxdWrapper *lxd.Wrapper) (ifaces.EnvironmentWrapper, error) {
 	// Prefer LXD if configured
 	if lxdWrapper != nil {
@@ -136,15 +141,8 @@ func EnvironmentWrapper(dockerWrapper *docker.Wrapper, lxdWrapper *lxd.Wrapper) 
 		return dockerWrapper, nil
 	}
 	// Return a no-op wrapper if neither is configured
-	return &NoOpWrapper{}, nil
+	return &ifaces.NoOpWrapper{}, nil
 }
-
-// NoOpWrapper is a wrapper that does nothing (for when no environment is configured)
-type NoOpWrapper struct{}
-
-func (n *NoOpWrapper) Configured() bool { return false }
-func (n *NoOpWrapper) Setup() error     { return nil }
-func (n *NoOpWrapper) Teardown() error  { return nil }
 
 func Controller(params ControllerParams) (ctrl *internal.TestController, err error) {
 	// TODO: Setup and Teardown are called here because of an issue passing them in the params (not being called in the proper order)

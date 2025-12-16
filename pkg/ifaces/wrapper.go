@@ -14,3 +14,11 @@ type EnvironmentWrapper interface {
 	// Teardown cleans up resources created during setup
 	Teardown() error
 }
+
+// NoOpWrapper is a wrapper that does nothing (for when no environment is configured)
+type NoOpWrapper struct{}
+
+func (n *NoOpWrapper) Configured() bool { return false }
+func (n *NoOpWrapper) Setup() error     { return nil }
+func (n *NoOpWrapper) Teardown() error  { return nil }
+
