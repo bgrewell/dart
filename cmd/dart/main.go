@@ -33,7 +33,7 @@ type ControllerParams struct {
 	Cfg           *config.Configuration
 	Nodes         map[string]ifaces.Node
 	Tests         []ifaces.Test
-	Wrapper       ifaces.ContainerWrapper
+	Wrapper       ifaces.EnvironmentWrapper
 	DockerWrapper *docker.Wrapper `optional:"true"`
 	LxdWrapper    *lxd.Wrapper    `optional:"true"`
 	Formatter     formatters.Formatter
@@ -124,9 +124,9 @@ func LxdWrapper(cfg *config.Configuration) (*lxd.Wrapper, error) {
 	return lw, nil
 }
 
-// ContainerWrapper determines which wrapper to use based on configuration
+// EnvironmentWrapper determines which wrapper to use based on configuration
 // Priority: LXD > Docker (if both are configured, LXD takes precedence)
-func ContainerWrapper(dockerWrapper *docker.Wrapper, lxdWrapper *lxd.Wrapper) (ifaces.ContainerWrapper, error) {
+func EnvironmentWrapper(dockerWrapper *docker.Wrapper, lxdWrapper *lxd.Wrapper) (ifaces.EnvironmentWrapper, error) {
 	// Prefer LXD if configured
 	if lxdWrapper != nil {
 		return lxdWrapper, nil
@@ -139,7 +139,7 @@ func ContainerWrapper(dockerWrapper *docker.Wrapper, lxdWrapper *lxd.Wrapper) (i
 	return &NoOpWrapper{}, nil
 }
 
-// NoOpWrapper is a wrapper that does nothing (for when no container system is configured)
+// NoOpWrapper is a wrapper that does nothing (for when no environment is configured)
 type NoOpWrapper struct{}
 
 func (n *NoOpWrapper) Configured() bool { return false }
@@ -232,7 +232,7 @@ func main() {
 			Configuration,
 			DockerWrapper,
 			LxdWrapper,
-			ContainerWrapper,
+			EnvironmentWrapper,
 			Nodes,
 			Tests,
 			fx.Annotate(

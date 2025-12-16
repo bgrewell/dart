@@ -10,7 +10,7 @@ import (
 
 func NewTestController(
 	suite string,
-	wrapper ifaces.ContainerWrapper,
+	wrapper ifaces.EnvironmentWrapper,
 	nodes map[string]ifaces.Node,
 	tests []ifaces.Test,
 	setup []ifaces.Step,
@@ -22,34 +22,34 @@ func NewTestController(
 	teardownOnly bool,
 	formatter formatters.Formatter) *TestController {
 	return &TestController{
-		Suite:            suite,
-		Nodes:            nodes,
-		Tests:            tests,
-		Setup:            setup,
-		Teardown:         teardown,
-		ContainerWrapper: wrapper,
-		formatter:        formatter,
-		verbose:          verbose,
-		stopOnFail:       stopOnFail,
-		pauseOnFail:      pauseOnFail,
-		setupOnly:        setupOnly,
-		teardownOnly:     teardownOnly,
+		Suite:              suite,
+		Nodes:              nodes,
+		Tests:              tests,
+		Setup:              setup,
+		Teardown:           teardown,
+		EnvironmentWrapper: wrapper,
+		formatter:          formatter,
+		verbose:            verbose,
+		stopOnFail:         stopOnFail,
+		pauseOnFail:        pauseOnFail,
+		setupOnly:          setupOnly,
+		teardownOnly:       teardownOnly,
 	}
 }
 
 type TestController struct {
-	Suite            string
-	Nodes            map[string]ifaces.Node
-	Setup            []ifaces.Step
-	Tests            []ifaces.Test
-	Teardown         []ifaces.Step
-	ContainerWrapper ifaces.ContainerWrapper
-	formatter        formatters.Formatter
-	verbose          bool
-	stopOnFail       bool
-	pauseOnFail      bool
-	setupOnly        bool
-	teardownOnly     bool
+	Suite              string
+	Nodes              map[string]ifaces.Node
+	Setup              []ifaces.Step
+	Tests              []ifaces.Test
+	Teardown           []ifaces.Step
+	EnvironmentWrapper ifaces.EnvironmentWrapper
+	formatter          formatters.Formatter
+	verbose            bool
+	stopOnFail         bool
+	pauseOnFail        bool
+	setupOnly          bool
+	teardownOnly       bool
 }
 
 func (tc *TestController) Run() error {
@@ -77,9 +77,9 @@ func (tc *TestController) Run() error {
 				}
 				c.Complete()
 			}
-			if tc.ContainerWrapper.Configured() {
-				t := tc.formatter.StartTask("tearing down container environment", "running")
-				_ = tc.ContainerWrapper.Teardown()
+			if tc.EnvironmentWrapper.Configured() {
+				t := tc.formatter.StartTask("tearing down environment", "running")
+				_ = tc.EnvironmentWrapper.Teardown()
 				t.Complete()
 			}
 		}
@@ -122,11 +122,11 @@ func (tc *TestController) Run() error {
 	// Run the setup steps
 	tc.formatter.PrintHeader("Running test setup")
 
-	// Check if the container wrapper is configured and if it is then run the setup steps
-	if tc.ContainerWrapper.Configured() {
-		// Run the container setup steps
-		t := tc.formatter.StartTask("setting up container environment", "running")
-		err := tc.ContainerWrapper.Setup()
+	// Check if the environment wrapper is configured and if it is then run the setup steps
+	if tc.EnvironmentWrapper.Configured() {
+		// Run the environment setup steps
+		t := tc.formatter.StartTask("setting up environment", "running")
+		err := tc.EnvironmentWrapper.Setup()
 		if err != nil {
 			t.Error()
 			tc.formatter.PrintError(err)
@@ -225,10 +225,10 @@ func (tc *TestController) Run() error {
 		c.Complete()
 	}
 
-	if tc.ContainerWrapper.Configured() {
-		// Run the container teardown steps
-		t := tc.formatter.StartTask("tearing down container environment", "running")
-		err := tc.ContainerWrapper.Teardown()
+	if tc.EnvironmentWrapper.Configured() {
+		// Run the environment teardown steps
+		t := tc.formatter.StartTask("tearing down environment", "running")
+		err := tc.EnvironmentWrapper.Teardown()
 		if err != nil {
 			t.Error()
 			tc.formatter.PrintError(err)
