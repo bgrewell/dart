@@ -5,6 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"strings"
+	"unicode"
+
 	"github.com/bgrewell/dart/internal/execution"
 	"github.com/bgrewell/dart/internal/helpers"
 	"github.com/bgrewell/dart/internal/lxc"
@@ -12,8 +16,6 @@ import (
 	"github.com/bgrewell/dart/pkg/ifaces"
 	lxdclient "github.com/canonical/lxd/client"
 	"github.com/canonical/lxd/shared/api"
-	"strings"
-	"unicode"
 )
 
 var _ ifaces.Node = &LxdNode{}
@@ -146,14 +148,22 @@ func (d *LxdNode) Setup() error {
 	// Build network devices from the options.Networks configuration
 	devices := make(map[string]map[string]string)
 	for i, netOpts := range d.options.Networks {
-		deviceName := fmt.Sprintf("eth%d", i)
+		// Use a unique device name to avoid conflicts with profile devices
+		deviceName := fmt.Sprintf("net%d", i)
 		deviceConfig := map[string]string{
 			"type":    "nic",
 			"network": netOpts.Name,
 		}
-		// Add static IP address if specified
+		// Add static IP address if specified, detecting IPv4 vs IPv6
 		if netOpts.Ip != "" {
-			deviceConfig["ipv4.address"] = netOpts.Ip
+			ip := net.ParseIP(netOpts.Ip)
+			if ip != nil {
+				if ip.To4() != nil {
+					deviceConfig["ipv4.address"] = netOpts.Ip
+				} else {
+					deviceConfig["ipv6.address"] = netOpts.Ip
+				}
+			}
 		}
 		devices[deviceName] = deviceConfig
 	}

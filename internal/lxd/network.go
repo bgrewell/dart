@@ -3,6 +3,7 @@ package lxd
 import (
 	"context"
 	"fmt"
+	"net"
 
 	lxd "github.com/canonical/lxd/client"
 	"github.com/canonical/lxd/shared/api"
@@ -121,9 +122,17 @@ func AttachNetworkToInstanceWithIP(ctx context.Context, server lxd.InstanceServe
 		"network": networkName,
 	}
 
-	// If a static IP address is specified, add it to the device configuration
+	// If a static IP address is specified, detect type and add it to the device configuration
 	if ipAddress != "" {
-		deviceConfig["ipv4.address"] = ipAddress
+		ip := net.ParseIP(ipAddress)
+		if ip == nil {
+			return fmt.Errorf("invalid IP address: %s", ipAddress)
+		}
+		if ip.To4() != nil {
+			deviceConfig["ipv4.address"] = ipAddress
+		} else {
+			deviceConfig["ipv6.address"] = ipAddress
+		}
 	}
 
 	instance.Devices[deviceName] = deviceConfig
