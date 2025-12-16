@@ -4,13 +4,20 @@ import (
 	"github.com/bgrewell/dart/internal/config"
 	"github.com/bgrewell/dart/internal/docker"
 	"github.com/bgrewell/dart/internal/helpers"
+	"github.com/bgrewell/dart/internal/lxd"
 	"github.com/bgrewell/dart/pkg/ifaces"
 )
 
 type BaseNode struct {
 }
 
+// CreateNodes creates nodes using only the Docker wrapper (backward compatible)
 func CreateNodes(configs []*config.NodeConfig, wrapper *docker.Wrapper) (map[string]ifaces.Node, error) {
+	return CreateNodesWithWrappers(configs, wrapper, nil)
+}
+
+// CreateNodesWithWrappers creates nodes using both Docker and LXD wrappers
+func CreateNodesWithWrappers(configs []*config.NodeConfig, dockerWrapper *docker.Wrapper, lxdWrapper *lxd.Wrapper) (map[string]ifaces.Node, error) {
 	nodes := make(map[string]ifaces.Node)
 	localNodeExists := false
 
@@ -30,13 +37,29 @@ func CreateNodes(configs []*config.NodeConfig, wrapper *docker.Wrapper) (map[str
 			node = NewLocalNode(&cfg.Options)
 			localNodeExists = true
 		case "docker":
-			node, err = NewDockerNode(wrapper, cfg.Name, &cfg.Options)
+			node, err = NewDockerNode(dockerWrapper, cfg.Name, &cfg.Options)
 		case "docker-compose":
-			node, err = NewDockerComposeNode(wrapper, cfg.Name, &cfg.Options)
+			node, err = NewDockerComposeNode(dockerWrapper, cfg.Name, &cfg.Options)
 		case "ssh":
 			node, err = NewSshNode(&cfg.Options)
 		case "lxd":
-			node, err = NewLxdNode(cfg.Name, &cfg.Options)
+			if lxdWrapper != nil {
+				node, err = NewLxdNodeWithWrapper(lxdWrapper, cfg.Name, &cfg.Options)
+			} else {
+				node, err = NewLxdNode(cfg.Name, &cfg.Options)
+			}
+		case "lxd-vm":
+			// Alias for LXD virtual machine type
+			opts := cfg.Options
+			if opts == nil {
+				opts = make(map[string]interface{})
+			}
+			opts["instance_type"] = "virtual-machine"
+			if lxdWrapper != nil {
+				node, err = NewLxdNodeWithWrapper(lxdWrapper, cfg.Name, &opts)
+			} else {
+				node, err = NewLxdNode(cfg.Name, &opts)
+			}
 		default:
 			return nil, helpers.ErrUnknownNodeType
 		}

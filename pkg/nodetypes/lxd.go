@@ -8,8 +8,9 @@ import (
 	"github.com/bgrewell/dart/internal/execution"
 	"github.com/bgrewell/dart/internal/helpers"
 	"github.com/bgrewell/dart/internal/lxc"
+	"github.com/bgrewell/dart/internal/lxd"
 	"github.com/bgrewell/dart/pkg/ifaces"
-	lxd "github.com/canonical/lxd/client"
+	lxdclient "github.com/canonical/lxd/client"
 	"github.com/canonical/lxd/shared/api"
 	"strings"
 	"unicode"
@@ -24,13 +25,16 @@ type LxdNetworkOpts struct {
 }
 
 type LxdNodeOpts struct {
-	Image       string                 `yaml:"image,omitempty" json:"image"`
-	Server      string                 `yaml:"server,omitempty" json:"server"`
-	Protocol    string                 `yaml:"protocol,omitempty" json:"protocol"`
-	ExecOptions map[string]interface{} `yaml:"exec_opts,omitempty" json:"exec_opts"`
-	Networks    []LxdNetworkOpts       `yaml:"networks,omitempty" json:"networks"`
+	Image        string                 `yaml:"image,omitempty" json:"image"`
+	Server       string                 `yaml:"server,omitempty" json:"server"`
+	Protocol     string                 `yaml:"protocol,omitempty" json:"protocol"`
+	InstanceType string                 `yaml:"instance_type,omitempty" json:"instance_type"` // "container" or "virtual-machine"
+	Profiles     []string               `yaml:"profiles,omitempty" json:"profiles"`
+	ExecOptions  map[string]interface{} `yaml:"exec_opts,omitempty" json:"exec_opts"`
+	Networks     []LxdNetworkOpts       `yaml:"networks,omitempty" json:"networks"`
 }
 
+// NewLxdNode creates a new LXD node without using the wrapper
 func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err error) {
 
 	jsonData, err := json.Marshal(opts)
@@ -51,6 +55,9 @@ func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err err
 	if nodeopts.Protocol == "" {
 		nodeopts.Protocol = "lxd"
 	}
+	if nodeopts.InstanceType == "" {
+		nodeopts.InstanceType = "container"
+	}
 
 	// If image contains a name:alias, split it and configure the server and protocol
 	if strings.Contains(nodeopts.Image, ":") {
@@ -63,7 +70,7 @@ func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err err
 		nodeopts.Protocol = protocol
 	}
 
-	client, err := lxd.ConnectLXDUnix("", nil)
+	client, err := lxdclient.ConnectLXDUnix("", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -76,9 +83,54 @@ func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err err
 
 }
 
+// NewLxdNodeWithWrapper creates a new LXD node using the provided wrapper
+func NewLxdNodeWithWrapper(wrapper *lxd.Wrapper, name string, opts ifaces.NodeOptions) (node ifaces.Node, err error) {
+
+	jsonData, err := json.Marshal(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	var nodeopts LxdNodeOpts
+	err = json.Unmarshal(jsonData, &nodeopts)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set defaults
+	if nodeopts.Server == "" {
+		nodeopts.Server = "local"
+	}
+	if nodeopts.Protocol == "" {
+		nodeopts.Protocol = "lxd"
+	}
+	if nodeopts.InstanceType == "" {
+		nodeopts.InstanceType = "container"
+	}
+
+	// If image contains a name:alias, split it and configure the server and protocol
+	if strings.Contains(nodeopts.Image, ":") {
+		server, protocol, err := lxc.GetUrlAndProtocol(strings.Split(nodeopts.Image, ":")[0])
+		if err != nil {
+			return nil, err
+		}
+		nodeopts.Image = strings.Split(nodeopts.Image, ":")[1]
+		nodeopts.Server = server
+		nodeopts.Protocol = protocol
+	}
+
+	return &LxdNode{
+		name:    name,
+		options: nodeopts,
+		wrapper: wrapper,
+		client:  wrapper.GetServer(),
+	}, nil
+}
+
 type LxdNode struct {
 	name      string
-	client    lxd.InstanceServer
+	client    lxdclient.InstanceServer
+	wrapper   *lxd.Wrapper
 	options   LxdNodeOpts
 	addresses []string
 }
@@ -88,7 +140,10 @@ func (d *LxdNode) Setup() error {
 		return helpers.WrapError("lxd client not initialized")
 	}
 
-	// Create a request for the container
+	// Determine the instance type
+	instanceType := api.InstanceType(d.options.InstanceType)
+
+	// Create a request for the instance
 	req := api.InstancesPost{
 		Name: d.name,
 		Source: api.InstanceSource{
@@ -97,21 +152,24 @@ func (d *LxdNode) Setup() error {
 			Server:   d.options.Server,
 			Protocol: d.options.Protocol,
 		},
-		Type: "container",
+		Type: instanceType,
+		InstancePut: api.InstancePut{
+			Profiles: d.options.Profiles,
+		},
 	}
 
 	op, err := d.client.CreateInstance(req)
 	if err != nil {
-		return helpers.WrapError(fmt.Sprintf("error creating container: %w", err))
+		return helpers.WrapError(fmt.Sprintf("error creating instance: %v", err))
 	}
 
 	// Wait for the operation to complete
 	err = op.Wait()
 	if err != nil {
-		return helpers.WrapError(fmt.Sprintf("error creating container: %w", err))
+		return helpers.WrapError(fmt.Sprintf("error creating instance: %v", err))
 	}
 
-	// Start the container
+	// Start the instance
 	reqState := api.InstanceStatePut{
 		Action:  "start",
 		Timeout: -1,
@@ -119,7 +177,7 @@ func (d *LxdNode) Setup() error {
 
 	op, err = d.client.UpdateInstanceState(d.name, reqState, "")
 	if err != nil {
-		return helpers.WrapError(fmt.Sprintf("error starting container: %w", err))
+		return helpers.WrapError(fmt.Sprintf("error starting instance: %v", err))
 	}
 
 	return op.Wait()
@@ -138,19 +196,19 @@ func (d *LxdNode) Teardown() error {
 	}
 	op, err := d.client.UpdateInstanceState(d.name, req, "")
 	if err != nil {
-		return helpers.WrapError(fmt.Sprintf("error stopping container: %w", err))
+		return helpers.WrapError(fmt.Sprintf("error stopping instance: %v", err))
 	}
 	if err = op.Wait(); err != nil {
-		return helpers.WrapError(fmt.Sprintf("error stopping container: %w", err))
+		return helpers.WrapError(fmt.Sprintf("error stopping instance: %v", err))
 	}
 
 	// Create a delete request
 	op, err = d.client.DeleteInstance(d.name)
 	if err != nil {
-		return helpers.WrapError(fmt.Sprintf("error deleting container: %w", err))
+		return helpers.WrapError(fmt.Sprintf("error deleting instance: %v", err))
 	}
 	if err = op.Wait(); err != nil {
-		return helpers.WrapError(fmt.Sprintf("error deleting container: %w", err))
+		return helpers.WrapError(fmt.Sprintf("error deleting instance: %v", err))
 	}
 
 	return nil
@@ -163,28 +221,19 @@ func (d *LxdNode) Execute(command string, options ...execution.ExecutionOption) 
 	}
 
 	var wout, werr bytes.Buffer
-	execArgs := lxd.InstanceExecArgs{
+	execArgs := lxdclient.InstanceExecArgs{
 		Stdout: &wout,
 		Stderr: &werr,
 	}
 
-	//// Split the command into a slice naively just split on spaces
-	//cmdparts, err := Fields(command)
-	//if err != nil {
-	//	return nil, helpers.WrapError(fmt.Sprintf("error splitting command: %w", err))
-	//}
-	//
-	//// TODO: I need to figure out how to handle piped command like I do in the command executor
-	//// TODO: Check d.options.ExecOptions for a shell and if there is one make sure we execute commands inside of it
-
-	// Find the full path to the binary
-	execLookPath := api.InstanceExecPost{
+	// Execute the command using bash
+	execPost := api.InstanceExecPost{
 		Command:     []string{"/bin/bash", "-c", command},
 		WaitForWS:   true,
 		Interactive: false,
 	}
 
-	op, err := d.client.ExecInstance(d.name, execLookPath, &execArgs)
+	op, err := d.client.ExecInstance(d.name, execPost, &execArgs)
 	if err != nil {
 		return nil, helpers.WrapError(fmt.Sprintf("error executing command: %s", err.Error()))
 	}
@@ -192,31 +241,6 @@ func (d *LxdNode) Execute(command string, options ...execution.ExecutionOption) 
 	if err = op.Wait(); err != nil {
 		return nil, helpers.WrapError(fmt.Sprintf("error executing command: %s", err.Error()))
 	}
-
-	//execPath := strings.TrimSpace(wout.String())
-	//wout.Reset()
-	//werr.Reset()
-	//
-	//execArgs = lxd.InstanceExecArgs{
-	//	Stdout: &wout,
-	//	Stderr: &werr,
-	//}
-	//
-	//cmd := append([]string{execPath}, cmdparts[1:]...)
-	//execPost := api.InstanceExecPost{
-	//	Command:     cmd,
-	//	WaitForWS:   true,
-	//	Interactive: false,
-	//}
-	//
-	//op, err = d.client.ExecInstance(d.name, execPost, &execArgs)
-	//if err != nil {
-	//	return nil, helpers.WrapError(fmt.Sprintf("error executing command: %w", err))
-	//}
-	//
-	//if err = op.Wait(); err != nil {
-	//	return nil, helpers.WrapError(fmt.Sprintf("error executing command: %w", err))
-	//}
 
 	metadata := op.Get().Metadata
 	exitCode, ok := metadata["return"].(float64)
@@ -233,8 +257,8 @@ func (d *LxdNode) Execute(command string, options ...execution.ExecutionOption) 
 }
 
 func (d *LxdNode) Close() error {
-	//TODO implement me
-	return helpers.WrapError("not implemented")
+	// No cleanup needed for the LXD client
+	return nil
 }
 
 func Fields(s string) ([]string, error) {
