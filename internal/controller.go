@@ -206,16 +206,6 @@ func (tc *TestController) Run() error {
 
 	// Run the teardown steps
 	tc.formatter.PrintHeader("Running test teardown")
-	for name, node := range tc.Nodes {
-		c := tc.formatter.StartTask(fmt.Sprintf(nodeTeardownMsg, name), "running")
-		err := node.Teardown()
-		if err != nil {
-			c.Error()
-			return err
-		}
-		c.Complete()
-	}
-
 	if len(tc.Teardown) > 0 {
 		for _, step := range tc.Teardown {
 			f := tc.formatter.StartTask(step.Title(), "running")
@@ -224,6 +214,16 @@ func (tc *TestController) Run() error {
 				return err
 			}
 		}
+	}
+
+	for name, node := range tc.Nodes {
+		c := tc.formatter.StartTask(fmt.Sprintf(nodeTeardownMsg, name), "running")
+		err := node.Teardown()
+		if err != nil {
+			c.Error()
+			return err
+		}
+		c.Complete()
 	}
 
 	if tc.DockerWrapper.Configured() {
