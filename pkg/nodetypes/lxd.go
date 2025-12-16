@@ -5,6 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"strings"
+	"unicode"
+
 	"github.com/bgrewell/dart/internal/execution"
 	"github.com/bgrewell/dart/internal/helpers"
 	"github.com/bgrewell/dart/internal/lxc"
@@ -12,8 +16,6 @@ import (
 	"github.com/bgrewell/dart/pkg/ifaces"
 	lxdclient "github.com/canonical/lxd/client"
 	"github.com/canonical/lxd/shared/api"
-	"strings"
-	"unicode"
 )
 
 var _ ifaces.Node = &LxdNode{}
@@ -143,6 +145,31 @@ func (d *LxdNode) Setup() error {
 	// Determine the instance type
 	instanceType := api.InstanceType(d.options.InstanceType)
 
+	// Build network devices from the options.Networks configuration
+	// Use eth0, eth1, etc. to override profile NICs (default profile typically has eth0)
+	devices := make(map[string]map[string]string)
+	for i, netOpts := range d.options.Networks {
+		// Use eth0, eth1, etc. naming to override default profile NIC devices
+		deviceName := fmt.Sprintf("eth%d", i)
+		deviceConfig := map[string]string{
+			"type":    "nic",
+			"network": netOpts.Name,
+		}
+		// Add static IP address if specified, detecting IPv4 vs IPv6
+		if netOpts.Ip != "" {
+			ip := net.ParseIP(netOpts.Ip)
+			if ip == nil {
+				return helpers.WrapError(fmt.Sprintf("invalid IP address for network %s: %s", netOpts.Name, netOpts.Ip))
+			}
+			if ip.To4() != nil {
+				deviceConfig["ipv4.address"] = netOpts.Ip
+			} else {
+				deviceConfig["ipv6.address"] = netOpts.Ip
+			}
+		}
+		devices[deviceName] = deviceConfig
+	}
+
 	// Create a request for the instance
 	req := api.InstancesPost{
 		Name: d.name,
@@ -155,6 +182,7 @@ func (d *LxdNode) Setup() error {
 		Type: instanceType,
 		InstancePut: api.InstancePut{
 			Profiles: d.options.Profiles,
+			Devices:  devices,
 		},
 	}
 

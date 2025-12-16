@@ -255,11 +255,16 @@ func (w *Wrapper) RemoveNetwork(name string) error {
 
 // ConnectInstanceToNetwork connects an instance to a network
 func (w *Wrapper) ConnectInstanceToNetwork(instanceName, networkName, deviceName string) error {
+	return w.ConnectInstanceToNetworkWithIP(instanceName, networkName, deviceName, "")
+}
+
+// ConnectInstanceToNetworkWithIP connects an instance to a network with an optional static IP address
+func (w *Wrapper) ConnectInstanceToNetworkWithIP(instanceName, networkName, deviceName, ipAddress string) error {
 	ctx := context.Background()
 	if deviceName == "" {
 		deviceName = "eth-" + networkName
 	}
-	return AttachNetworkToInstance(ctx, w.server, instanceName, networkName, deviceName)
+	return AttachNetworkToInstanceWithIP(ctx, w.server, instanceName, networkName, deviceName, ipAddress)
 }
 
 // DisconnectInstanceFromNetwork disconnects an instance from a network
