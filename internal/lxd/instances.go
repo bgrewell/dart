@@ -1,9 +1,11 @@
 package lxd
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	lxd "github.com/canonical/lxd/client"
 	"github.com/canonical/lxd/shared/api"
@@ -184,6 +186,98 @@ func GetInstanceState(ctx context.Context, server lxd.InstanceServer, name strin
 		return nil, "", fmt.Errorf("failed to get instance %s state: %w", name, err)
 	}
 	return state, etag, nil
+}
+
+// ReadinessConfig holds configuration for waiting on instance readiness
+type ReadinessConfig struct {
+	// Timeout is the maximum time to wait for the instance to become ready
+	Timeout time.Duration
+	// PollInterval is how often to check the instance state
+	PollInterval time.Duration
+}
+
+// DefaultReadinessConfig returns sensible defaults for readiness checking
+func DefaultReadinessConfig() *ReadinessConfig {
+	return &ReadinessConfig{
+		Timeout:      5 * time.Minute,
+		PollInterval: 2 * time.Second,
+	}
+}
+
+// WaitForInstanceReady waits for an instance to be fully ready to accept commands.
+// This checks that:
+// 1. The instance state is "Running"
+// 2. The instance has at least one network address (indicating networking is up)
+// 3. A simple command can be executed successfully (indicating the OS is ready)
+func WaitForInstanceReady(ctx context.Context, server lxd.InstanceServer, name string, config *ReadinessConfig) error {
+	if config == nil {
+		config = DefaultReadinessConfig()
+	}
+
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(ctx, config.Timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(config.PollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timeout waiting for instance %s to become ready: %w", name, ctx.Err())
+		case <-ticker.C:
+			ready, err := isInstanceReady(ctx, server, name)
+			if err != nil {
+				// Log but continue - the instance may still be initializing
+				continue
+			}
+			if ready {
+				return nil
+			}
+		}
+	}
+}
+
+// isInstanceReady checks if an instance is fully ready to accept commands
+func isInstanceReady(ctx context.Context, server lxd.InstanceServer, name string) (bool, error) {
+	// Check instance state
+	state, _, err := server.GetInstanceState(name)
+	if err != nil {
+		return false, fmt.Errorf("failed to get instance state: %w", err)
+	}
+
+	// Instance must be running
+	if state.Status != "Running" {
+		return false, nil
+	}
+
+	// Check if networking is available (at least one non-loopback address)
+	hasNetworkAddress := false
+	for _, network := range state.Network {
+		for _, addr := range network.Addresses {
+			// Skip loopback and link-local addresses
+			if addr.Scope == "global" || addr.Scope == "local" {
+				hasNetworkAddress = true
+				break
+			}
+		}
+		if hasNetworkAddress {
+			break
+		}
+	}
+
+	if !hasNetworkAddress {
+		return false, nil
+	}
+
+	// Try to execute a simple command to verify the instance is responsive
+	var stdout, stderr bytes.Buffer
+	exitCode, err := ExecInInstance(server, name, []string{"true"}, &stdout, &stderr)
+	if err != nil {
+		return false, nil // Instance not ready yet
+	}
+
+	return exitCode == 0, nil
 }
 
 // ExecInInstance runs a command in an instance and returns the exit code and output

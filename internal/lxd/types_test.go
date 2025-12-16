@@ -2,6 +2,7 @@ package lxd
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -182,4 +183,21 @@ func TestConnectionOptions(t *testing.T) {
 	assert.Equal(t, "/path/to/client.crt", opts.ClientCert)
 	assert.Equal(t, "/path/to/client.key", opts.ClientKey)
 	assert.Equal(t, "/path/to/server.crt", opts.ServerCert)
+}
+
+func TestReadinessConfig(t *testing.T) {
+	config := &ReadinessConfig{
+		Timeout:      10 * time.Minute,
+		PollInterval: 5 * time.Second,
+	}
+
+	assert.Equal(t, 10*time.Minute, config.Timeout)
+	assert.Equal(t, 5*time.Second, config.PollInterval)
+}
+
+func TestDefaultReadinessConfig(t *testing.T) {
+	config := DefaultReadinessConfig()
+
+	assert.Equal(t, 5*time.Minute, config.Timeout)
+	assert.Equal(t, 2*time.Second, config.PollInterval)
 }
