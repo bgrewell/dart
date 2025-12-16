@@ -251,12 +251,12 @@ func isInstanceReady(ctx context.Context, server lxd.InstanceServer, name string
 		return false, nil
 	}
 
-	// Check if networking is available (at least one non-loopback address)
+	// Check if networking is available (at least one globally routable address)
 	hasNetworkAddress := false
 	for _, network := range state.Network {
 		for _, addr := range network.Addresses {
-			// Skip loopback and link-local addresses
-			if addr.Scope == "global" || addr.Scope == "local" {
+			// Look for globally routable addresses (not loopback or link-local)
+			if addr.Scope == "global" {
 				hasNetworkAddress = true
 				break
 			}
