@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -160,4 +162,75 @@ func ContainerLogs(ctx context.Context, cli client.APIClient, containerID string
 		ShowStderr: true,
 		Follow:     true,
 	})
+}
+
+// ContainerReadinessConfig holds configuration for waiting on container readiness
+type ContainerReadinessConfig struct {
+	// Timeout is the maximum time to wait for the container to become ready
+	Timeout time.Duration
+	// PollInterval is how often to check the container state
+	PollInterval time.Duration
+}
+
+// DefaultContainerReadinessConfig returns sensible defaults for readiness checking
+func DefaultContainerReadinessConfig() *ContainerReadinessConfig {
+	return &ContainerReadinessConfig{
+		Timeout:      2 * time.Minute,
+		PollInterval: 1 * time.Second,
+	}
+}
+
+// WaitForContainerReady waits for a container to be fully ready to accept commands.
+// This checks that:
+// 1. The container state is "running"
+// 2. A simple command can be executed successfully (indicating the container is responsive)
+func WaitForContainerReady(ctx context.Context, cli client.APIClient, containerID string, config *ContainerReadinessConfig) error {
+	if config == nil {
+		config = DefaultContainerReadinessConfig()
+	}
+
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(ctx, config.Timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(config.PollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timeout waiting for container %s to become ready: %w", containerID, ctx.Err())
+		case <-ticker.C:
+			ready, err := isContainerReady(ctx, cli, containerID)
+			if err != nil {
+				// Log but continue - the container may still be initializing
+				continue
+			}
+			if ready {
+				return nil
+			}
+		}
+	}
+}
+
+// isContainerReady checks if a container is fully ready to accept commands
+func isContainerReady(ctx context.Context, cli client.APIClient, containerID string) (bool, error) {
+	// Check container state
+	inspect, err := cli.ContainerInspect(ctx, containerID)
+	if err != nil {
+		return false, fmt.Errorf("failed to inspect container: %w", err)
+	}
+
+	// Container must be running
+	if inspect.State == nil || !inspect.State.Running {
+		return false, nil
+	}
+
+	// Try to execute a simple command to verify the container is responsive
+	exitCode, _, _, err := RunCommandInContainer(cli, containerID, "true")
+	if err != nil {
+		return false, nil // Container not ready yet
+	}
+
+	return exitCode == 0, nil
 }

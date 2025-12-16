@@ -2,11 +2,13 @@ package docker
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 // MockClient simulates Docker client operations for testing
@@ -84,4 +86,21 @@ func TestListContainersNoFilter(t *testing.T) {
 	containers, err := ListContainers(ctx, mockClient, true, nil)
 	assert.Nil(t, err)
 	assert.Equal(t, 2, len(containers))
+}
+
+func TestContainerReadinessConfig(t *testing.T) {
+	config := &ContainerReadinessConfig{
+		Timeout:      5 * time.Minute,
+		PollInterval: 3 * time.Second,
+	}
+
+	assert.Equal(t, 5*time.Minute, config.Timeout)
+	assert.Equal(t, 3*time.Second, config.PollInterval)
+}
+
+func TestDefaultContainerReadinessConfig(t *testing.T) {
+	config := DefaultContainerReadinessConfig()
+
+	assert.Equal(t, 2*time.Minute, config.Timeout)
+	assert.Equal(t, 1*time.Second, config.PollInterval)
 }

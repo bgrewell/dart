@@ -2,6 +2,7 @@ package nodetypes
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -208,7 +209,17 @@ func (d *LxdNode) Setup() error {
 		return helpers.WrapError(fmt.Sprintf("error starting instance: %v", err))
 	}
 
-	return op.Wait()
+	if err := op.Wait(); err != nil {
+		return helpers.WrapError(fmt.Sprintf("error starting instance: %v", err))
+	}
+
+	// Wait for the instance to be fully ready (OS booted, networking available)
+	ctx := context.Background()
+	if err := lxd.WaitForInstanceReady(ctx, d.client, d.name, nil); err != nil {
+		return helpers.WrapError(fmt.Sprintf("error waiting for instance to be ready: %v", err))
+	}
+
+	return nil
 }
 
 func (d *LxdNode) Teardown() error {

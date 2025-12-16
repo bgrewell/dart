@@ -159,6 +159,14 @@ func (w *Wrapper) StartContainer(name string) error {
 	return nil
 }
 
+func (w *Wrapper) WaitForContainerReady(name string) error {
+	ctx := context.Background()
+	if err := WaitForContainerReady(ctx, w.cli, w.containerNamesToId[name], nil); err != nil {
+		return fmt.Errorf("container %s not ready: %v", name, err)
+	}
+	return nil
+}
+
 func (w *Wrapper) StopContainer(name string) error {
 	ctx := context.Background()
 	if err := StopContainer(ctx, w.cli, w.containerNamesToId[name]); err != nil {

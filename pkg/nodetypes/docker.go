@@ -56,6 +56,10 @@ func (d *DockerNode) Setup() error {
 	if err := d.wrapper.StartContainer(d.name); err != nil {
 		return err
 	}
+	// Wait for the container to be fully ready (running and responsive)
+	if err := d.wrapper.WaitForContainerReady(d.name); err != nil {
+		return err
+	}
 	return nil
 }
 
