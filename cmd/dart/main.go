@@ -33,7 +33,7 @@ type ControllerParams struct {
 	Cfg           *config.Configuration
 	Nodes         map[string]ifaces.Node
 	Tests         []ifaces.Test
-	DockerWrapper *docker.Wrapper
+	DockerWrapper *docker.Wrapper `optional:"true"`
 	LxdWrapper    *lxd.Wrapper `optional:"true"`
 	Formatter     formatters.Formatter
 	Flags         *CmdlineFlags
