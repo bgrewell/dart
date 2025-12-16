@@ -1,0 +1,82 @@
+---
+# LXD Virtual Machine Test Suite Example
+# This example demonstrates how to use LXD virtual machines as test nodes.
+#
+# Prerequisites:
+#   - LXD must be installed and running on the host
+#   - Hardware virtualization must be supported (check: lxc info | grep -i vm)
+#   - The user must have access to the LXD socket (usually via 'lxd' group)
+#
+# Note: VMs take longer to start than containers but provide full isolation
+# and can run different kernels.
+
+suite: LXD Virtual Machine Test Suite
+
+# Define the VM nodes
+nodes:
+  # LXD Virtual Machine node using the lxd-vm type shorthand
+  - name: lxd-vm-node
+    type: lxd-vm
+    options:
+      # VM images typically use cloud images
+      # Format: remote:alias
+      image: ubuntu:24.04
+      
+      # Profiles to apply (optional)
+      # profiles:
+      #   - default
+      
+      # Execution options
+      exec_opts:
+        shell: /bin/bash
+
+  # Alternative: Use the lxd type with instance_type option
+  - name: lxd-vm-alt
+    type: lxd
+    options:
+      image: ubuntu:22.04
+      # Explicitly set instance type to virtual-machine
+      instance_type: virtual-machine
+      exec_opts:
+        shell: /bin/bash
+
+# Setup steps - VMs may need more time to boot
+setup:
+  - name: Wait for VM to be ready
+    node: lxd-vm-node
+    step:
+      type: simulated
+      options:
+        time: 5
+        message: Waiting for VM to initialize
+
+# Tests
+tests:
+  # Basic command execution in VM
+  - name: Echo Test in VM
+    node: lxd-vm-node
+    type: execute
+    options:
+      command: echo "Hello from LXD VM"
+      evaluate:
+        match: "Hello from LXD VM"
+        exit_code: 0
+
+  # Check VM has its own kernel
+  - name: Check Kernel Version
+    node: lxd-vm-node
+    type: execute
+    options:
+      command: uname -a
+      evaluate:
+        exit_code: 0
+
+  # Test in alternative VM
+  - name: Check Ubuntu Version
+    node: lxd-vm-alt
+    type: execute
+    options:
+      command: cat /etc/os-release | grep VERSION_ID
+      evaluate:
+        match: "22.04"
+        exit_code: 0

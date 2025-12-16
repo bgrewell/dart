@@ -15,6 +15,7 @@ import (
 type Configuration struct {
 	Suite    string        `json:"suite" yaml:"suite"`
 	Docker   *DockerConfig `json:"docker" yaml:"docker"`
+	Lxd      *LxdConfig    `json:"lxd" yaml:"lxd"`
 	Setup    []*StepConfig `json:"setup" yaml:"setup"`
 	Teardown []*StepConfig `json:"teardown" yaml:"teardown"`
 	Nodes    []*NodeConfig `json:"nodes" yaml:"nodes"`
@@ -25,6 +26,13 @@ type Configuration struct {
 type DockerConfig struct {
 	Networks []*NetworkConfig `json:"networks" yaml:"networks"`
 	Images   []*ImageConfig   `json:"images" yaml:"images"`
+}
+
+// LxdConfig is the configuration for LXD
+type LxdConfig struct {
+	Networks []*LxdNetworkConfig `json:"networks" yaml:"networks"`
+	Profiles []*LxdProfileConfig `json:"profiles" yaml:"profiles"`
+	Images   []*LxdImageConfig   `json:"images" yaml:"images"`
 }
 
 // StepConfig is the configuration for a single setup/teardown step
@@ -77,6 +85,38 @@ type SudoConfig struct {
 	Password    string `json:"password" yaml:"password"`
 	EnvVar      string `json:"env_var" yaml:"env_var"`
 	VaultSecret string `json:"vault_secret" yaml:"vault_secret"`
+}
+
+// LxdNetworkConfig is the configuration for an LXD network
+type LxdNetworkConfig struct {
+	Name    string `json:"name" yaml:"name"`
+	Type    string `json:"type" yaml:"type"` // "bridge", "ovn", etc.
+	Subnet  string `json:"subnet" yaml:"subnet"`
+	Gateway string `json:"gateway" yaml:"gateway"`
+}
+
+// LxdProfileConfig is the configuration for an LXD profile
+type LxdProfileConfig struct {
+	Name        string                       `json:"name" yaml:"name"`
+	Description string                       `json:"description" yaml:"description"`
+	Config      map[string]string            `json:"config" yaml:"config"`
+	Devices     map[string]*LxdDeviceConfig  `json:"devices" yaml:"devices"`
+}
+
+// LxdDeviceConfig is the configuration for an LXD device
+type LxdDeviceConfig struct {
+	Type string            `json:"type" yaml:"type"` // "disk", "nic", "unix-char", etc.
+	Path string            `json:"path,omitempty" yaml:"path,omitempty"`
+	Pool string            `json:"pool,omitempty" yaml:"pool,omitempty"`
+	Name string            `json:"name,omitempty" yaml:"name,omitempty"`
+	Opts map[string]string `json:"opts,omitempty" yaml:"opts,omitempty"`
+}
+
+// LxdImageConfig is the configuration for an LXD image
+type LxdImageConfig struct {
+	Alias    string `json:"alias" yaml:"alias"`
+	Server   string `json:"server" yaml:"server"`
+	Protocol string `json:"protocol" yaml:"protocol"` // "lxd" or "simplestreams"
 }
 
 func LoadConfiguration(cfgPath string) (config *Configuration, err error) {

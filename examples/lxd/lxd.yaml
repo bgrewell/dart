@@ -1,27 +1,132 @@
 ---
+# LXD/LXC Container Test Suite Example
+# This example demonstrates how to use LXD containers as test nodes.
+# 
+# Prerequisites:
+#   - LXD must be installed and running on the host
+#   - The user must have access to the LXD socket (usually via 'lxd' group)
+#   - Run 'lxd init' if you haven't already to configure LXD
+
 suite: LXD Test Suite
+
+# Optional: Define LXD resources that will be managed by the test suite
+# Networks and profiles defined here will be created during setup and
+# removed during teardown
+lxd:
+  # Define networks for the test suite (optional)
+  networks:
+    - name: test-network
+      type: bridge
+      subnet: 10.100.0.0/24
+      gateway: 10.100.0.1
+  
+  # Define custom profiles (optional)
+  profiles:
+    - name: test-profile
+      description: Profile for test containers
+      config:
+        limits.cpu: "2"
+        limits.memory: "2GB"
+
+# Define the nodes that will be used in the test suite
 nodes:
-  - name: lxd-test
+  # Basic LXD container node
+  - name: lxd-container
+    type: lxd
+    options:
+      # Image format: remote:alias (e.g., ubuntu:24.04, images:debian/12)
+      # Common remotes: ubuntu, images
+      image: ubuntu:24.04
+      
+      # Instance type: "container" (default) or "virtual-machine"
+      instance_type: container
+      
+      # Profiles to apply (optional)
+      # profiles:
+      #   - default
+      #   - test-profile
+      
+      # Execution options
+      exec_opts:
+        shell: /bin/bash
+      
+      # Network configuration (optional)
+      # networks:
+      #   - name: test-network
+      #     ip: 10.100.0.10
+
+  # Second container for multi-node tests
+  - name: lxd-client
     type: lxd
     options:
       image: ubuntu:24.04
-      type: container
-      exec_options:
+      instance_type: container
+      exec_opts:
         shell: /bin/bash
+
+# Setup steps executed before tests
 setup:
-  - name: step 1
-    node: lxd-test
+  - name: Update package lists
+    node: lxd-container
+    step:
+      type: execute
+      options:
+        command: apt-get update -qq
+        timeout: 120
+
+  - name: Install test dependencies
+    node: lxd-container
     step:
       type: simulated
       options:
-          time: 2
-          message: installing fake package 1
+        time: 2
+        message: Installing test dependencies
+
+# Tests to execute
 tests:
-  - name: echo test
-    node: lxd-test
+  # Basic command execution test
+  - name: Echo Test
+    node: lxd-container
     type: execute
     options:
-      command: bash -c 'sleep 2 && echo "Hello World"'
+      command: echo "Hello from LXD container"
       evaluate:
-        match: "Hello World"
+        match: "Hello from LXD container"
         exit_code: 0
+
+  # Test OS information
+  - name: Check OS Release
+    node: lxd-container
+    type: execute
+    options:
+      command: cat /etc/os-release | grep -i ubuntu
+      evaluate:
+        exit_code: 0
+
+  # Test network connectivity between containers
+  - name: Check Network Stack
+    node: lxd-client
+    type: execute
+    options:
+      command: ip addr show
+      evaluate:
+        exit_code: 0
+
+  # Test file operations
+  - name: File Write Test
+    node: lxd-container
+    type: execute
+    options:
+      command: echo "test content" > /tmp/test.txt && cat /tmp/test.txt
+      evaluate:
+        match: "test content"
+        exit_code: 0
+
+# Teardown steps (optional) - containers are automatically stopped and deleted
+teardown:
+  - name: Cleanup temp files
+    node: lxd-container
+    step:
+      type: execute
+      options:
+        command: rm -f /tmp/test.txt
