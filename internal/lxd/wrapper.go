@@ -7,8 +7,12 @@ import (
 	"io"
 
 	"github.com/bgrewell/dart/internal/config"
+	"github.com/bgrewell/dart/pkg/ifaces"
 	lxd "github.com/canonical/lxd/client"
 )
+
+// Ensure Wrapper implements the PlatformManager interface
+var _ ifaces.PlatformManager = &Wrapper{}
 
 // ConnectionOptions defines options for connecting to an LXD server
 type ConnectionOptions struct {
@@ -102,6 +106,11 @@ func (w *Wrapper) Connect(opts *ConnectionOptions) error {
 // Configured returns true if the wrapper has been configured
 func (w *Wrapper) Configured() bool {
 	return w.cfg != nil
+}
+
+// Name returns the name of this platform manager
+func (w *Wrapper) Name() string {
+	return "lxd"
 }
 
 // GetServer returns the underlying LXD instance server
