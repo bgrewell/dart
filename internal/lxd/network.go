@@ -102,6 +102,11 @@ func GetNetworkState(ctx context.Context, server lxd.InstanceServer, name string
 
 // AttachNetworkToInstance attaches a network device to an instance
 func AttachNetworkToInstance(ctx context.Context, server lxd.InstanceServer, instanceName, networkName, deviceName string) error {
+	return AttachNetworkToInstanceWithIP(ctx, server, instanceName, networkName, deviceName, "")
+}
+
+// AttachNetworkToInstanceWithIP attaches a network device to an instance with an optional static IP address
+func AttachNetworkToInstanceWithIP(ctx context.Context, server lxd.InstanceServer, instanceName, networkName, deviceName, ipAddress string) error {
 	instance, etag, err := server.GetInstance(instanceName)
 	if err != nil {
 		return fmt.Errorf("failed to get instance %s: %w", instanceName, err)
@@ -111,10 +116,17 @@ func AttachNetworkToInstance(ctx context.Context, server lxd.InstanceServer, ins
 		instance.Devices = make(map[string]map[string]string)
 	}
 
-	instance.Devices[deviceName] = map[string]string{
+	deviceConfig := map[string]string{
 		"type":    "nic",
 		"network": networkName,
 	}
+
+	// If a static IP address is specified, add it to the device configuration
+	if ipAddress != "" {
+		deviceConfig["ipv4.address"] = ipAddress
+	}
+
+	instance.Devices[deviceName] = deviceConfig
 
 	op, err := server.UpdateInstance(instanceName, instance.Writable(), etag)
 	if err != nil {

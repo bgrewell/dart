@@ -143,6 +143,21 @@ func (d *LxdNode) Setup() error {
 	// Determine the instance type
 	instanceType := api.InstanceType(d.options.InstanceType)
 
+	// Build network devices from the options.Networks configuration
+	devices := make(map[string]map[string]string)
+	for i, netOpts := range d.options.Networks {
+		deviceName := fmt.Sprintf("eth%d", i)
+		deviceConfig := map[string]string{
+			"type":    "nic",
+			"network": netOpts.Name,
+		}
+		// Add static IP address if specified
+		if netOpts.Ip != "" {
+			deviceConfig["ipv4.address"] = netOpts.Ip
+		}
+		devices[deviceName] = deviceConfig
+	}
+
 	// Create a request for the instance
 	req := api.InstancesPost{
 		Name: d.name,
@@ -155,6 +170,7 @@ func (d *LxdNode) Setup() error {
 		Type: instanceType,
 		InstancePut: api.InstancePut{
 			Profiles: d.options.Profiles,
+			Devices:  devices,
 		},
 	}
 
