@@ -1,0 +1,170 @@
+---
+# Remote LXD Server Test Suite Example
+# This example demonstrates how to connect to a remote LXD server using certificate-based authentication
+# or modern trust token authentication.
+# 
+# Prerequisites:
+#   - A remote LXD server accessible over HTTPS (default port 8443)
+#   - Either: Trust token OR Client certificates configured for authentication
+#   - The remote LXD server must have network listener enabled
+#
+# Setting up remote LXD server:
+#   On the remote server, run:
+#     lxc config set core.https_address "[::]:8443"
+#
+# Authentication Options:
+#
+# Option 1: Trust Token (Recommended - Modern & Simple)
+#   On the remote server:
+#     lxc config trust add dart-client
+#   This will output a token like: eyJjbGllbnRfbmFtZSI6ImRhcnQtY2xpZW50...
+#   Copy this token and use it in the trust_token field below.
+#
+# Option 2: Certificate-Based (Traditional)
+#   Add the remote server and generate certificates:
+#     lxc remote add myremote https://remote-server-ip:8443
+#   This generates client certificates in:
+#     ~/.config/lxc/client.crt
+#     ~/.config/lxc/client.key
+
+suite: Remote LXD Test Suite
+
+# Define the nodes that will be used in the test suite
+nodes:
+  # Remote LXD container using trust token (modern, recommended)
+  - name: remote-container-token
+    type: lxd
+    options:
+      # Remote LXD server address (HTTPS)
+      remote_addr: https://10.0.0.1:8443
+      
+      # Trust token from 'lxc config trust add <client-name>'
+      # This is the modern, recommended authentication method
+      trust_token: eyJjbGllbnRfbmFtZSI6ImRhcnQtY2xpZW50IiwiZmluZ2VycHJpbnQiOiI1N2JiMGZmNDM0MGI1YmIyODUxN2UwNjIwMjMxMDFhZGY3ODhjMzc4NDZkYzhiNjE5ZWIyYzNjYjRlZjI5NDM2IiwiYWRkcmVzc2VzIjpbIjEwLjk4LjMwLjIyOTo4NDQzIl0sInNlY3JldCI6IjRhY2M4YzI3ZDg1MWU2NGU0ODQ3MWRjNjIyMGJhYmY2YzNmYjczYzUzNDY5NGQ3ZTM0ODcyYmIxNDUyODNlYmUiLCJleHBpcmVzX2F0IjoiMjAyNC0wMS0wMVQwMDowMDowMFoifQ==
+      
+      # Image to use
+      image: ubuntu:24.04
+      
+      # Instance type: "container" (default) or "virtual-machine"
+      instance_type: container
+      
+      # Execution options
+      exec_opts:
+        shell: /bin/bash
+
+  # Remote LXD container using certificate authentication (traditional)
+  - name: remote-container-cert
+    type: lxd
+    options:
+      # Remote LXD server address (HTTPS)
+      remote_addr: https://10.0.0.1:8443
+      
+      # Client certificate and key for authentication
+      # These should be the paths to your LXD client certificates
+      client_cert: ~/.config/lxc/client.crt
+      client_key: ~/.config/lxc/client.key
+      
+      # Optional: Server certificate for custom CA verification
+      # server_cert: /path/to/server.crt
+      
+      # Optional: Skip TLS verification (NOT recommended for production)
+      # skip_verify: false
+      
+      # Image to use from the remote server's image store
+      # Or specify a remote image server
+      image: ubuntu:24.04
+      
+      # Instance type: "container" (default) or "virtual-machine"
+      instance_type: container
+      
+      # Execution options
+      exec_opts:
+        shell: /bin/bash
+
+  # Local LXD container for comparison (no remote configuration needed)
+  - name: local-container
+    type: lxd
+    options:
+      image: ubuntu:24.04
+      instance_type: container
+      exec_opts:
+        shell: /bin/bash
+
+# Setup steps executed before tests
+setup:
+  - name: Update remote container (token auth)
+    node: remote-container-token
+    step:
+      type: execute
+      options:
+        command: apt-get update -qq
+        timeout: 120
+
+  - name: Update remote container (cert auth)
+    node: remote-container-cert
+    step:
+      type: execute
+      options:
+        command: apt-get update -qq
+        timeout: 120
+
+  - name: Update local container
+    node: local-container
+    step:
+      type: execute
+      options:
+        command: apt-get update -qq
+        timeout: 120
+
+# Tests to execute
+tests:
+  # Test remote container with token auth
+  - name: Test Remote Container (Token Auth)
+    node: remote-container-token
+    type: execute
+    options:
+      command: echo "Hello from remote LXD server (token auth)"
+      evaluate:
+        match: "Hello from remote LXD server (token auth)"
+        exit_code: 0
+
+  # Test remote container with cert auth
+  - name: Test Remote Container (Cert Auth)
+    node: remote-container-cert
+    type: execute
+    options:
+      command: echo "Hello from remote LXD server (cert auth)"
+      evaluate:
+        match: "Hello from remote LXD server (cert auth)"
+        exit_code: 0
+
+  # Test local container
+  - name: Test Local Container
+    node: local-container
+    type: execute
+    options:
+      command: echo "Hello from local LXD server"
+      evaluate:
+        match: "Hello from local LXD server"
+        exit_code: 0
+
+  # Verify remote container OS (token)
+  - name: Verify Remote Container OS (Token)
+    node: remote-container-token
+    type: execute
+    options:
+      command: cat /etc/os-release | grep -i ubuntu
+      evaluate:
+        exit_code: 0
+
+  # Test network connectivity from remote container
+  - name: Test Remote Container Network
+    node: remote-container-token
+    type: execute
+    options:
+      command: ping -c 1 8.8.8.8
+      evaluate:
+        exit_code: 0
+
+# Teardown steps - containers are automatically stopped and deleted
+teardown: []
