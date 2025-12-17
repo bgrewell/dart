@@ -1,0 +1,120 @@
+---
+# Remote Docker Host Test Suite Example
+# This example demonstrates how to connect to a remote Docker host using environment variables.
+# 
+# Prerequisites:
+#   - A remote Docker host accessible over TCP (with TLS) or SSH
+#   - Docker daemon configured to accept remote connections
+#   - TLS certificates if using TCP with TLS (recommended)
+#
+# Setting up remote Docker host:
+#   Option 1: TCP with TLS (Recommended for production)
+#     On the remote Docker host, configure the daemon to listen on a TCP port with TLS:
+#       Edit /etc/docker/daemon.json:
+#       {
+#         "hosts": ["unix:///var/run/docker.sock", "tcp://0.0.0.0:2376"],
+#         "tls": true,
+#         "tlscacert": "/etc/docker/certs/ca.pem",
+#         "tlscert": "/etc/docker/certs/server-cert.pem",
+#         "tlskey": "/etc/docker/certs/server-key.pem",
+#         "tlsverify": true
+#       }
+#       Restart Docker: systemctl restart docker
+#
+#   Option 2: SSH tunnel (Simple and secure)
+#     No Docker daemon configuration needed, just SSH access
+#
+# Running DART with remote Docker:
+#   Using TCP with TLS:
+#     export DOCKER_HOST=tcp://remote-host:2376
+#     export DOCKER_TLS_VERIFY=1
+#     export DOCKER_CERT_PATH=/path/to/certs
+#     dart -c remote-docker.yaml
+#
+#   Using SSH:
+#     export DOCKER_HOST=ssh://user@remote-host
+#     dart -c remote-docker.yaml
+
+suite: Remote Docker Test Suite
+
+# Define the nodes that will be used in the test suite
+nodes:
+  # Remote Docker container
+  # Connection is configured via environment variables before running DART:
+  # - DOCKER_HOST: URL to the Docker server (e.g., tcp://10.0.0.1:2376 or ssh://user@host)
+  # - DOCKER_TLS_VERIFY: Enable TLS verification (set to "1")
+  # - DOCKER_CERT_PATH: Path to directory containing ca.pem, cert.pem, key.pem
+  - name: remote-container
+    type: docker
+    options:
+      image: ubuntu:latest
+      exec_opts:
+        shell: /bin/bash
+
+  # Another remote container for multi-node tests
+  - name: remote-client
+    type: docker
+    options:
+      image: ubuntu:latest
+      exec_opts:
+        shell: /bin/bash
+
+# Setup steps executed before tests
+setup:
+  - name: Update remote container packages
+    node: remote-container
+    step:
+      type: execute
+      options:
+        command: apt-get update -qq
+        timeout: 120
+
+  - name: Install tools on remote container
+    node: remote-container
+    step:
+      type: execute
+      options:
+        command: apt-get install -y -qq iputils-ping net-tools
+        timeout: 120
+
+# Tests to execute
+tests:
+  # Test remote container
+  - name: Test Remote Container Echo
+    node: remote-container
+    type: execute
+    options:
+      command: echo "Hello from remote Docker host"
+      evaluate:
+        match: "Hello from remote Docker host"
+        exit_code: 0
+
+  # Verify remote container OS
+  - name: Verify Remote Container OS
+    node: remote-container
+    type: execute
+    options:
+      command: cat /etc/os-release | grep -i ubuntu
+      evaluate:
+        exit_code: 0
+
+  # Test network connectivity from remote container
+  - name: Test Remote Container Network
+    node: remote-container
+    type: execute
+    options:
+      command: ping -c 1 8.8.8.8
+      evaluate:
+        exit_code: 0
+
+  # Test hostname resolution
+  - name: Test Remote Container DNS
+    node: remote-container
+    type: execute
+    options:
+      command: nslookup google.com
+      evaluate:
+        exit_code: 0
+
+# Teardown steps - containers are automatically stopped and removed
+teardown: []

@@ -61,13 +61,13 @@ DART supports several types of nodes that can be used as test targets:
   Execute tests on the local machine where DART is running.
 
 - **Docker Node (`docker`)**  
-  Run tests inside Docker containers, with support for custom networks and privileged mode.
+  Run tests inside Docker containers, with support for custom networks and privileged mode. Supports both local and remote Docker hosts.
 
 - **Docker Compose Node (`docker-compose`)**  
   Manage and test services defined in Docker Compose files. Multiple nodes can target different services in the same compose stack.
 
 - **LXD Node (`lxd`)**  
-  Execute tests in LXD containers, with automatic provisioning and cleanup.
+  Execute tests in LXD containers or virtual machines, with automatic provisioning and cleanup. Supports both local Unix socket connections and remote HTTPS connections with certificate-based authentication.
 
 - **SSH Node (`ssh`)**  
   Run tests on remote machines via SSH, supporting both password and key-based authentication.
@@ -112,7 +112,75 @@ nodes:
       compose_file: docker-compose.yml
       project_name: my-stack
       service: db
+  
+  # Remote LXD node with certificate authentication
+  - name: remote-lxd
+    type: lxd
+    options:
+      remote_addr: https://10.0.0.1:8443
+      client_cert: ~/.config/lxc/client.crt
+      client_key: ~/.config/lxc/client.key
+      image: ubuntu:24.04
+      instance_type: container
 ```
+
+### Remote Docker Support
+
+Docker nodes can connect to remote Docker hosts using standard Docker environment variables:
+
+- **DOCKER_HOST**: URL to the Docker server (e.g., `tcp://remote-host:2376` or `ssh://user@host`)
+- **DOCKER_TLS_VERIFY**: Enable TLS verification (set to `1`)
+- **DOCKER_CERT_PATH**: Path to directory containing TLS certificates (`ca.pem`, `cert.pem`, `key.pem`)
+
+Example:
+```bash
+export DOCKER_HOST=tcp://10.0.0.1:2376
+export DOCKER_TLS_VERIFY=1
+export DOCKER_CERT_PATH=/path/to/certs
+dart -c config.yaml
+```
+
+For SSH-based connections (no Docker daemon configuration needed):
+```bash
+export DOCKER_HOST=ssh://user@remote-host
+dart -c config.yaml
+```
+
+See `examples/docker/docker-remote.yaml` for a complete example.
+
+### Remote LXD Support
+
+LXD nodes support remote connections using certificate-based authentication. Configure the remote LXD server to enable network access:
+
+```bash
+# On the remote LXD server
+lxc config set core.https_address "[::]:8443"
+```
+
+Generate client certificates:
+```bash
+# Add remote server and generate certificates
+lxc remote add myremote https://remote-server-ip:8443
+```
+
+Use the generated certificates in your DART configuration:
+
+```yaml
+nodes:
+  - name: remote-container
+    type: lxd
+    options:
+      remote_addr: https://10.0.0.1:8443
+      client_cert: ~/.config/lxc/client.crt
+      client_key: ~/.config/lxc/client.key
+      # Optional: server_cert for custom CA
+      # Optional: skip_verify: true (not recommended for production)
+      image: ubuntu:24.04
+      instance_type: container
+```
+
+See `examples/lxd/lxd-remote.yaml` for a complete example.
+
 
 ## Setup and Teardown Tasks
 

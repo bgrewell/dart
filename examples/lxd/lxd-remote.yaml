@@ -1,0 +1,123 @@
+---
+# Remote LXD Server Test Suite Example
+# This example demonstrates how to connect to a remote LXD server using certificate-based authentication.
+# 
+# Prerequisites:
+#   - A remote LXD server accessible over HTTPS (default port 8443)
+#   - Client certificates configured for authentication
+#   - The remote LXD server must have network listener enabled
+#
+# Setting up remote LXD server:
+#   On the remote server, run:
+#     lxc config set core.https_address "[::]:8443"
+#     lxc config set core.trust_password "your-temporary-password"
+#   
+#   Generate and add client certificate:
+#     lxc remote add myremote https://remote-server-ip:8443
+#     # Enter the trust password when prompted
+#     # This will generate client certificates in ~/.config/lxc/client.crt and ~/.config/lxc/client.key
+#
+# For production, use certificate-based authentication instead of trust password
+
+suite: Remote LXD Test Suite
+
+# Define the nodes that will be used in the test suite
+nodes:
+  # Remote LXD container using certificate authentication
+  - name: remote-container
+    type: lxd
+    options:
+      # Remote LXD server address (HTTPS)
+      remote_addr: https://10.0.0.1:8443
+      
+      # Client certificate and key for authentication
+      # These should be the paths to your LXD client certificates
+      client_cert: ~/.config/lxc/client.crt
+      client_key: ~/.config/lxc/client.key
+      
+      # Optional: Server certificate for custom CA verification
+      # server_cert: /path/to/server.crt
+      
+      # Optional: Skip TLS verification (NOT recommended for production)
+      # skip_verify: false
+      
+      # Image to use from the remote server's image store
+      # Or specify a remote image server
+      image: ubuntu:24.04
+      
+      # Instance type: "container" (default) or "virtual-machine"
+      instance_type: container
+      
+      # Execution options
+      exec_opts:
+        shell: /bin/bash
+
+  # Local LXD container for comparison (no remote configuration needed)
+  - name: local-container
+    type: lxd
+    options:
+      image: ubuntu:24.04
+      instance_type: container
+      exec_opts:
+        shell: /bin/bash
+
+# Setup steps executed before tests
+setup:
+  - name: Update remote container
+    node: remote-container
+    step:
+      type: execute
+      options:
+        command: apt-get update -qq
+        timeout: 120
+
+  - name: Update local container
+    node: local-container
+    step:
+      type: execute
+      options:
+        command: apt-get update -qq
+        timeout: 120
+
+# Tests to execute
+tests:
+  # Test remote container
+  - name: Test Remote Container
+    node: remote-container
+    type: execute
+    options:
+      command: echo "Hello from remote LXD server"
+      evaluate:
+        match: "Hello from remote LXD server"
+        exit_code: 0
+
+  # Test local container
+  - name: Test Local Container
+    node: local-container
+    type: execute
+    options:
+      command: echo "Hello from local LXD server"
+      evaluate:
+        match: "Hello from local LXD server"
+        exit_code: 0
+
+  # Verify remote container OS
+  - name: Verify Remote Container OS
+    node: remote-container
+    type: execute
+    options:
+      command: cat /etc/os-release | grep -i ubuntu
+      evaluate:
+        exit_code: 0
+
+  # Test network connectivity from remote container
+  - name: Test Remote Container Network
+    node: remote-container
+    type: execute
+    options:
+      command: ping -c 1 8.8.8.8
+      evaluate:
+        exit_code: 0
+
+# Teardown steps - containers are automatically stopped and deleted
+teardown: []

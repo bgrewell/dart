@@ -58,6 +58,56 @@ nodes:
         shell: /bin/bash
 ```
 
+### lxd-remote.yaml - Remote LXD Server Example
+
+Demonstrates connecting to remote LXD servers using certificate-based authentication:
+- Remote server configuration
+- TLS certificate authentication
+- Security best practices
+- Mixed local/remote deployments
+
+```yaml
+nodes:
+  - name: remote-container
+    type: lxd
+    options:
+      # Remote server address (HTTPS)
+      remote_addr: https://10.0.0.1:8443
+      
+      # Client certificates for authentication
+      client_cert: ~/.config/lxc/client.crt
+      client_key: ~/.config/lxc/client.key
+      
+      # Optional: server certificate for custom CA
+      # server_cert: /path/to/server.crt
+      
+      # Optional: skip TLS verification (NOT recommended)
+      # skip_verify: false
+      
+      image: ubuntu:24.04
+      instance_type: container
+```
+
+**Setting up remote LXD access:**
+
+1. On the remote LXD server, enable network access:
+   ```bash
+   lxc config set core.https_address "[::]:8443"
+   ```
+
+2. Add the remote server and generate certificates:
+   ```bash
+   lxc remote add myremote https://remote-server-ip:8443
+   # Follow prompts to authenticate (may require trust password)
+   ```
+
+3. Use the generated certificates located at:
+   - Client cert: `~/.config/lxc/client.crt`
+   - Client key: `~/.config/lxc/client.key`
+
+4. For production environments, use proper certificate management and avoid `skip_verify: true`.
+
+
 ## Configuration Options
 
 ### Node Options
@@ -71,6 +121,11 @@ nodes:
 | `profiles` | List of profiles to apply | `["default"]` |
 | `exec_opts` | Execution options (e.g., `shell: /bin/bash`) | - |
 | `networks` | Network configurations | - |
+| `remote_addr` | Remote LXD server HTTPS address (e.g., `https://10.0.0.1:8443`) | - |
+| `client_cert` | Path to client certificate file for remote authentication | - |
+| `client_key` | Path to client key file for remote authentication | - |
+| `server_cert` | Path to server certificate file (for custom CA verification) | - |
+| `skip_verify` | Skip TLS verification (not recommended for production) | `false` |
 
 ### LXD Configuration Section
 

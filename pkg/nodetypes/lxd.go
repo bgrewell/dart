@@ -35,6 +35,12 @@ type LxdNodeOpts struct {
 	Profiles     []string               `yaml:"profiles,omitempty" json:"profiles"`
 	ExecOptions  map[string]interface{} `yaml:"exec_opts,omitempty" json:"exec_opts"`
 	Networks     []LxdNetworkOpts       `yaml:"networks,omitempty" json:"networks"`
+	// Remote connection options (for connecting to remote LXD servers)
+	RemoteAddr   string `yaml:"remote_addr,omitempty" json:"remote_addr"`       // HTTPS address for remote LXD server (e.g., "https://10.0.0.1:8443")
+	ClientCert   string `yaml:"client_cert,omitempty" json:"client_cert"`       // Path to client certificate file
+	ClientKey    string `yaml:"client_key,omitempty" json:"client_key"`         // Path to client key file
+	ServerCert   string `yaml:"server_cert,omitempty" json:"server_cert"`       // Path to server certificate file (optional, for custom CA)
+	SkipVerify   bool   `yaml:"skip_verify,omitempty" json:"skip_verify"`       // Skip TLS verification (not recommended for production)
 }
 
 // NewLxdNode creates a new LXD node without using the wrapper
@@ -73,9 +79,35 @@ func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err err
 		nodeopts.Protocol = protocol
 	}
 
-	client, err := lxdclient.ConnectLXDUnix("", nil)
-	if err != nil {
-		return nil, err
+	// Connect to LXD server (local or remote)
+	var client lxdclient.InstanceServer
+	if nodeopts.RemoteAddr != "" {
+		// Connect to remote LXD server using HTTPS
+		args := &lxdclient.ConnectionArgs{
+			InsecureSkipVerify: nodeopts.SkipVerify,
+		}
+		
+		// Set client certificate and key if provided
+		if nodeopts.ClientCert != "" && nodeopts.ClientKey != "" {
+			args.TLSClientCert = nodeopts.ClientCert
+			args.TLSClientKey = nodeopts.ClientKey
+		}
+		
+		// Set server certificate if provided (for custom CA)
+		if nodeopts.ServerCert != "" {
+			args.TLSServerCert = nodeopts.ServerCert
+		}
+		
+		client, err = lxdclient.ConnectLXD(nodeopts.RemoteAddr, args)
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect to remote LXD server at %s: %w", nodeopts.RemoteAddr, err)
+		}
+	} else {
+		// Connect to local LXD server using Unix socket
+		client, err = lxdclient.ConnectLXDUnix("", nil)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &LxdNode{
