@@ -37,6 +37,7 @@ func NewStandardFormatter() *StandardFormatter {
 type StandardFormatter struct {
 	taskColumnWidth int
 	testColumnWidth int
+	nodeNameWidth   int
 	indent          int
 	detailIndent    int
 }
@@ -127,6 +128,10 @@ func (sf *StandardFormatter) SetTestColumnWidth(width int) {
 	sf.testColumnWidth = width
 }
 
+func (sf *StandardFormatter) SetNodeNameWidth(width int) {
+	sf.nodeNameWidth = width
+}
+
 func (sf *StandardFormatter) StartTask(task, nodeName, status string) TaskCompleter {
 
 	spinner, _ := yacspin.New(yacspin.Config{
@@ -150,7 +155,12 @@ func (sf *StandardFormatter) StartTask(task, nodeName, status string) TaskComple
 	indent := strings.Repeat(" ", sf.indent)
 	nodeBox := ""
 	if nodeName != "" {
-		nodeBox = nodeNameColor.Sprintf("[%s]", nodeName) + " "
+		// Pad the node name to the fixed width, accounting for the brackets
+		paddedNodeName := fmt.Sprintf("%-*s", sf.nodeNameWidth, nodeName)
+		nodeBox = nodeNameColor.Sprintf("[%s]", paddedNodeName) + " "
+	} else if sf.nodeNameWidth > 0 {
+		// If no node name but we have a width set, add spacing to maintain alignment
+		nodeBox = strings.Repeat(" ", sf.nodeNameWidth+3) // +3 for "[ ]" and trailing space
 	}
 	message := fmt.Sprintf("%s%s%s", indent, nodeBox, c.Message)
 	messages := []func(string){c.spinner.Message, c.spinner.StopMessage, c.spinner.StopFailMessage}
@@ -186,7 +196,12 @@ func (sf *StandardFormatter) StartTest(id, name, nodeName string) TestCompleter 
 	indent := strings.Repeat(" ", sf.indent)
 	nodeBox := ""
 	if nodeName != "" {
-		nodeBox = nodeNameColor.Sprintf("[%s]", nodeName) + " "
+		// Pad the node name to the fixed width, accounting for the brackets
+		paddedNodeName := fmt.Sprintf("%-*s", sf.nodeNameWidth, nodeName)
+		nodeBox = nodeNameColor.Sprintf("[%s]", paddedNodeName) + " "
+	} else if sf.nodeNameWidth > 0 {
+		// If no node name but we have a width set, add spacing to maintain alignment
+		nodeBox = strings.Repeat(" ", sf.nodeNameWidth+3) // +3 for "[ ]" and trailing space
 	}
 	message := fmt.Sprintf("%s%s%s: %s%s", indent, numberPaddingColor.Sprintf(pad), numberColor.Sprintf(c.TestId), nodeBox, c.TestName)
 	messages := []func(string){c.spinner.Message, c.spinner.StopMessage, c.spinner.StopFailMessage}

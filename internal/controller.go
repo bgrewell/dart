@@ -115,6 +115,15 @@ func (tc *TestController) Run() error {
 	}
 	tc.formatter.SetTestColumnWidth(longestTest)
 
+	// Calculate the longest node name for alignment
+	longestNodeName := 0
+	for name := range tc.Nodes {
+		if len(name) > longestNodeName {
+			longestNodeName = len(name)
+		}
+	}
+	tc.formatter.SetNodeNameWidth(longestNodeName)
+
 	// If teardown only is set, skip the setup and tests
 	if tc.teardownOnly {
 		cleanupMsg = "Running teardown only"
