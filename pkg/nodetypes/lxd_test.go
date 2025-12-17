@@ -47,7 +47,7 @@ func TestLxdNodeRemoteValidation(t *testing.T) {
 				"image":       "ubuntu:24.04",
 			},
 			shouldError: true,
-			errorMsg:    "remote LXD connection requires client_cert and client_key",
+			errorMsg:    "remote LXD connection requires either trust_token OR",
 		},
 		{
 			name: "remote connection with only client_cert",
@@ -57,7 +57,7 @@ func TestLxdNodeRemoteValidation(t *testing.T) {
 				"image":       "ubuntu:24.04",
 			},
 			shouldError: true,
-			errorMsg:    "remote LXD connection requires client_cert and client_key",
+			errorMsg:    "remote LXD connection requires either trust_token OR",
 		},
 		{
 			name: "remote connection with only client_key",
@@ -67,7 +67,27 @@ func TestLxdNodeRemoteValidation(t *testing.T) {
 				"image":       "ubuntu:24.04",
 			},
 			shouldError: true,
-			errorMsg:    "remote LXD connection requires client_cert and client_key",
+			errorMsg:    "remote LXD connection requires",
+		},
+		{
+			name: "remote connection with trust token",
+			opts: map[string]interface{}{
+				"remote_addr": "https://10.0.0.1:8443",
+				"trust_token": "eyJjbGllbnRfbmFtZSI6InRlc3QifQ==",
+				"image":       "ubuntu:24.04",
+			},
+			shouldError: false, // Will fail on actual connection, but validation should pass
+		},
+		{
+			name: "remote connection with both trust token and certificates",
+			opts: map[string]interface{}{
+				"remote_addr": "https://10.0.0.1:8443",
+				"trust_token": "eyJjbGllbnRfbmFtZSI6InRlc3QifQ==",
+				"client_cert": "/path/to/cert.crt",
+				"client_key":  "/path/to/key.key",
+				"image":       "ubuntu:24.04",
+			},
+			shouldError: false, // Trust token takes precedence
 		},
 	}
 

@@ -3,11 +3,19 @@ package nodetypes
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
+	"math/big"
 	"net"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/bgrewell/dart/internal/execution"
@@ -40,6 +48,7 @@ type LxdNodeOpts struct {
 	ClientCert   string `yaml:"client_cert,omitempty" json:"client_cert"`       // Path to client certificate file
 	ClientKey    string `yaml:"client_key,omitempty" json:"client_key"`         // Path to client key file
 	ServerCert   string `yaml:"server_cert,omitempty" json:"server_cert"`       // Path to server certificate file (optional, for custom CA)
+	TrustToken   string `yaml:"trust_token,omitempty" json:"trust_token"`       // One-time trust token from 'lxc config trust add' (modern authentication)
 	SkipVerify   bool   `yaml:"skip_verify,omitempty" json:"skip_verify"`       // Skip TLS verification (not recommended for production)
 }
 
@@ -83,32 +92,68 @@ func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err err
 	var client lxdclient.InstanceServer
 	if nodeopts.RemoteAddr != "" {
 		// Remote LXD server connection
-		// Validate that if remote connection is configured, proper authentication is provided
-		if nodeopts.ClientCert == "" || nodeopts.ClientKey == "" {
-			if !nodeopts.SkipVerify {
-				return nil, fmt.Errorf("remote LXD connection requires client_cert and client_key, or set skip_verify: true (not recommended for production)")
+		
+		// Check authentication method priority: trust_token > certificates > skip_verify
+		if nodeopts.TrustToken != "" {
+			// Use trust token authentication (modern approach)
+			// Generate temporary certificates for the initial connection
+			certPEM, keyPEM, err := generateSelfSignedCert()
+			if err != nil {
+				return nil, fmt.Errorf("failed to generate temporary certificate for token auth: %w", err)
 			}
-		}
-		
-		// Connect to remote LXD server using HTTPS
-		args := &lxdclient.ConnectionArgs{
-			InsecureSkipVerify: nodeopts.SkipVerify,
-		}
-		
-		// Set client certificate and key if provided
-		if nodeopts.ClientCert != "" && nodeopts.ClientKey != "" {
-			args.TLSClientCert = nodeopts.ClientCert
-			args.TLSClientKey = nodeopts.ClientKey
-		}
-		
-		// Set server certificate if provided (for custom CA)
-		if nodeopts.ServerCert != "" {
-			args.TLSServerCert = nodeopts.ServerCert
-		}
-		
-		client, err = lxdclient.ConnectLXD(nodeopts.RemoteAddr, args)
-		if err != nil {
-			return nil, fmt.Errorf("failed to connect to remote LXD server at %s: %w", nodeopts.RemoteAddr, err)
+			
+			// Connect with generated certificates (not yet trusted)
+			args := &lxdclient.ConnectionArgs{
+				TLSClientCert:      certPEM,
+				TLSClientKey:       keyPEM,
+				InsecureSkipVerify: true, // We need to skip verification for initial connection
+			}
+			
+			if nodeopts.ServerCert != "" {
+				args.TLSServerCert = nodeopts.ServerCert
+			}
+			
+			client, err = lxdclient.ConnectLXD(nodeopts.RemoteAddr, args)
+			if err != nil {
+				return nil, fmt.Errorf("failed to connect to remote LXD server at %s for token auth: %w", nodeopts.RemoteAddr, err)
+			}
+			
+			// Authenticate using the trust token
+			clientName := fmt.Sprintf("dart-%s", name)
+			err = authenticateWithToken(client, nodeopts.TrustToken, clientName)
+			if err != nil {
+				return nil, fmt.Errorf("failed to authenticate with trust token: %w", err)
+			}
+			
+		} else {
+			// Use certificate-based authentication
+			// Validate that if remote connection is configured, proper authentication is provided
+			if nodeopts.ClientCert == "" || nodeopts.ClientKey == "" {
+				if !nodeopts.SkipVerify {
+					return nil, fmt.Errorf("remote LXD connection requires either trust_token OR (client_cert AND client_key), or set skip_verify: true (not recommended for production)")
+				}
+			}
+			
+			// Connect to remote LXD server using HTTPS
+			args := &lxdclient.ConnectionArgs{
+				InsecureSkipVerify: nodeopts.SkipVerify,
+			}
+			
+			// Set client certificate and key if provided
+			if nodeopts.ClientCert != "" && nodeopts.ClientKey != "" {
+				args.TLSClientCert = nodeopts.ClientCert
+				args.TLSClientKey = nodeopts.ClientKey
+			}
+			
+			// Set server certificate if provided (for custom CA)
+			if nodeopts.ServerCert != "" {
+				args.TLSServerCert = nodeopts.ServerCert
+			}
+			
+			client, err = lxdclient.ConnectLXD(nodeopts.RemoteAddr, args)
+			if err != nil {
+				return nil, fmt.Errorf("failed to connect to remote LXD server at %s: %w", nodeopts.RemoteAddr, err)
+			}
 		}
 	} else {
 		// Connect to local LXD server using Unix socket
@@ -340,6 +385,79 @@ func (d *LxdNode) Execute(command string, options ...execution.ExecutionOption) 
 
 func (d *LxdNode) Close() error {
 	// No cleanup needed for the LXD client
+	return nil
+}
+
+// generateSelfSignedCert generates a self-signed certificate for LXD client authentication
+func generateSelfSignedCert() (certPEM, keyPEM string, err error) {
+	// Generate private key
+	privateKey, err := rsa.GenerateKey(rand.Reader, 4096)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to generate private key: %w", err)
+	}
+
+	// Create certificate template
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			CommonName:   "dart-lxd-client",
+			Organization: []string{"DART"},
+		},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(365 * 24 * time.Hour), // 1 year validity
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		BasicConstraintsValid: true,
+	}
+
+	// Create certificate
+	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &privateKey.PublicKey, privateKey)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to create certificate: %w", err)
+	}
+
+	// Encode certificate to PEM
+	certPEMBlock := &pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: certDER,
+	}
+	certPEMBytes := pem.EncodeToMemory(certPEMBlock)
+
+	// Encode private key to PEM
+	keyPEMBlock := &pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
+	}
+	keyPEMBytes := pem.EncodeToMemory(keyPEMBlock)
+
+	return string(certPEMBytes), string(keyPEMBytes), nil
+}
+
+// authenticateWithToken authenticates with LXD server using a trust token
+func authenticateWithToken(server lxdclient.InstanceServer, token, clientName string) error {
+	// Generate a self-signed certificate for authentication
+	certPEM, _, err := generateSelfSignedCert()
+	if err != nil {
+		return fmt.Errorf("failed to generate client certificate: %w", err)
+	}
+
+	// Encode certificate to base64
+	certBase64 := base64.StdEncoding.EncodeToString([]byte(certPEM))
+
+	// Create certificate request with trust token
+	certReq := api.CertificatesPost{
+		Name:        clientName,
+		Type:        "client",
+		Certificate: certBase64,
+		TrustToken:  token,
+	}
+
+	// Send certificate to server with trust token
+	err = server.CreateCertificate(certReq)
+	if err != nil {
+		return fmt.Errorf("failed to authenticate with trust token: %w", err)
+	}
+
 	return nil
 }
 

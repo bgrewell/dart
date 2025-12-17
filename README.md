@@ -150,12 +150,33 @@ See `examples/docker/docker-remote.yaml` for a complete example.
 
 ### Remote LXD Support
 
-LXD nodes support remote connections using certificate-based authentication. Configure the remote LXD server to enable network access:
+LXD nodes support remote connections using modern trust token authentication or traditional certificate-based authentication.
+
+**Trust Token Authentication (Recommended):**
+
+Configure the remote LXD server and generate a trust token:
 
 ```bash
 # On the remote LXD server
 lxc config set core.https_address "[::]:8443"
+lxc config trust add dart-client
+# Copy the generated token
 ```
+
+Use the token in your DART configuration:
+
+```yaml
+nodes:
+  - name: remote-container
+    type: lxd
+    options:
+      remote_addr: https://10.0.0.1:8443
+      trust_token: eyJjbGllbnRfbmFtZSI6ImRhcnQtY2xpZW50...
+      image: ubuntu:24.04
+      instance_type: container
+```
+
+**Certificate-Based Authentication (Traditional):**
 
 Generate client certificates:
 ```bash
