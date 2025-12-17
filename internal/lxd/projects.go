@@ -102,6 +102,14 @@ func DeleteProject(ctx context.Context, server lxd.InstanceServer, name string) 
 // CopyProfileToProject copies a profile from one project to another
 // This is useful for copying the default profile when creating new projects
 func CopyProfileToProject(ctx context.Context, server lxd.InstanceServer, sourceProject, targetProject, profileName string) error {
+	// Use the target project context to check if profile already exists
+	targetServer := server.UseProject(targetProject)
+	_, _, err := targetServer.GetProfile(profileName)
+	if err == nil {
+		// Profile already exists, no need to copy
+		return nil
+	}
+
 	// Use the source project context to get the profile
 	sourceServer := server.UseProject(sourceProject)
 	profile, _, err := sourceServer.GetProfile(profileName)
@@ -109,9 +117,6 @@ func CopyProfileToProject(ctx context.Context, server lxd.InstanceServer, source
 		return fmt.Errorf("failed to get profile %s from project %s: %w", profileName, sourceProject, err)
 	}
 
-	// Use the target project context to create the profile
-	targetServer := server.UseProject(targetProject)
-	
 	// Create the profile in the target project
 	req := api.ProfilesPost{
 		Name: profileName,

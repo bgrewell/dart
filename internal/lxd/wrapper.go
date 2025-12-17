@@ -9,6 +9,7 @@ import (
 	"github.com/bgrewell/dart/internal/config"
 	"github.com/bgrewell/dart/pkg/ifaces"
 	lxd "github.com/canonical/lxd/client"
+	"github.com/canonical/lxd/shared/api"
 )
 
 // Ensure Wrapper implements the PlatformManager interface
@@ -194,6 +195,16 @@ func (w *Wrapper) Teardown() error {
 
 	// Delete the project if it was created
 	if w.cfg.Project != nil && w.projectName != "" {
+		// Ensure all instances in the project are removed before deletion
+		// This is a safety check - instances should already be deleted by node teardown
+		projectServer := w.server.UseProject(w.projectName)
+		instances, err := projectServer.GetInstances(api.InstanceTypeAny)
+		if err == nil && len(instances) > 0 {
+			// Log a warning but attempt to continue - this shouldn't normally happen
+			// as nodes should clean up their own instances
+			fmt.Printf("Warning: Project %s still contains %d instance(s) during teardown\n", w.projectName, len(instances))
+		}
+
 		// Switch back to default project before deleting
 		defaultServer := w.server.UseProject("default")
 		if err := DeleteProject(ctx, defaultServer, w.projectName); err != nil {
