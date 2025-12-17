@@ -153,15 +153,7 @@ func (sf *StandardFormatter) StartTask(task, nodeName, status string) TaskComple
 	}
 
 	indent := strings.Repeat(" ", sf.indent)
-	nodeBox := ""
-	if nodeName != "" {
-		// Pad the node name to the fixed width, accounting for the brackets
-		paddedNodeName := fmt.Sprintf("%-*s", sf.nodeNameWidth, nodeName)
-		nodeBox = nodeNameColor.Sprintf("[%s]", paddedNodeName) + " "
-	} else if sf.nodeNameWidth > 0 {
-		// If no node name but we have a width set, add spacing to maintain alignment
-		nodeBox = strings.Repeat(" ", sf.nodeNameWidth+3) // +3 for "[ ]" and trailing space
-	}
+	nodeBox := sf.formatNodeBox(nodeName)
 	message := fmt.Sprintf("%s%s%s", indent, nodeBox, c.Message)
 	messages := []func(string){c.spinner.Message, c.spinner.StopMessage, c.spinner.StopFailMessage}
 	c.spinner.Start()
@@ -194,15 +186,7 @@ func (sf *StandardFormatter) StartTest(id, name, nodeName string) TestCompleter 
 
 	pad := strings.Repeat("0", 5-len(id))
 	indent := strings.Repeat(" ", sf.indent)
-	nodeBox := ""
-	if nodeName != "" {
-		// Pad the node name to the fixed width, accounting for the brackets
-		paddedNodeName := fmt.Sprintf("%-*s", sf.nodeNameWidth, nodeName)
-		nodeBox = nodeNameColor.Sprintf("[%s]", paddedNodeName) + " "
-	} else if sf.nodeNameWidth > 0 {
-		// If no node name but we have a width set, add spacing to maintain alignment
-		nodeBox = strings.Repeat(" ", sf.nodeNameWidth+3) // +3 for "[ ]" and trailing space
-	}
+	nodeBox := sf.formatNodeBox(nodeName)
 	message := fmt.Sprintf("%s%s%s: %s%s", indent, numberPaddingColor.Sprintf(pad), numberColor.Sprintf(c.TestId), nodeBox, c.TestName)
 	messages := []func(string){c.spinner.Message, c.spinner.StopMessage, c.spinner.StopFailMessage}
 	c.spinner.Start()
@@ -287,4 +271,16 @@ type BaseCompleter struct {
 
 func padRightWithPeriods(s string, n int) string {
 	return fmt.Sprintf("%s %s ", s, strings.Repeat(".", n))
+}
+
+func (sf *StandardFormatter) formatNodeBox(nodeName string) string {
+	if nodeName != "" {
+		// Pad the node name to the fixed width, accounting for the brackets
+		paddedNodeName := fmt.Sprintf("%-*s", sf.nodeNameWidth, nodeName)
+		return nodeNameColor.Sprintf("[%s]", paddedNodeName) + " "
+	} else if sf.nodeNameWidth > 0 {
+		// If no node name but we have a width set, add spacing to maintain alignment
+		return strings.Repeat(" ", sf.nodeNameWidth+3) // +3 for "[ ]" and trailing space
+	}
+	return ""
 }
