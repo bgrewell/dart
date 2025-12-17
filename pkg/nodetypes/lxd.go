@@ -51,7 +51,7 @@ type LxdNodeOpts struct {
 	TrustToken   string `yaml:"trust_token,omitempty" json:"trust_token"`       // One-time trust token from 'lxc config trust add' (modern authentication)
 	SkipVerify   bool   `yaml:"skip_verify,omitempty" json:"skip_verify"`       // Skip TLS verification (not recommended for production)
 	// Project support
-	Project      string `yaml:"project,omitempty" json:"project"`               // LXD project to use (defaults to "default")
+	Project      string `yaml:"project,omitempty" json:"project"`               // LXD project to use (defaults to lxd.DefaultProject)
 }
 
 // NewLxdNode creates a new LXD node without using the wrapper
@@ -79,7 +79,7 @@ func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err err
 		nodeopts.InstanceType = "container"
 	}
 	if nodeopts.Project == "" {
-		nodeopts.Project = "default"
+		nodeopts.Project = lxd.DefaultProject
 	}
 
 	// If image contains a name:alias, split it and configure the server and protocol
@@ -176,7 +176,7 @@ func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err err
 	}
 
 	// Use the specified project (or default)
-	if nodeopts.Project != "default" {
+	if nodeopts.Project != lxd.DefaultProject {
 		client = client.UseProject(nodeopts.Project)
 	}
 
@@ -216,7 +216,7 @@ func NewLxdNodeWithWrapper(wrapper *lxd.Wrapper, name string, opts ifaces.NodeOp
 		nodeopts.InstanceType = "container"
 	}
 	if nodeopts.Project == "" {
-		nodeopts.Project = "default"
+		nodeopts.Project = lxd.DefaultProject
 	}
 
 	// If image contains a name:alias, split it and configure the server and protocol
@@ -232,7 +232,7 @@ func NewLxdNodeWithWrapper(wrapper *lxd.Wrapper, name string, opts ifaces.NodeOp
 
 	// Get the server from wrapper and use the project if specified
 	client := wrapper.GetServer()
-	if nodeopts.Project != "default" {
+	if nodeopts.Project != lxd.DefaultProject {
 		client = client.UseProject(nodeopts.Project)
 	}
 

@@ -141,12 +141,12 @@ func EnsureDefaultProfile(ctx context.Context, server lxd.InstanceServer, projec
 	projectServer := server.UseProject(projectName)
 	
 	// Check if default profile exists
-	_, _, err := projectServer.GetProfile("default")
+	_, _, err := projectServer.GetProfile(DefaultProject)
 	if err == nil {
 		// Profile already exists
 		return nil
 	}
 
 	// Profile doesn't exist, copy it from the default project
-	return CopyProfileToProject(ctx, server, "default", projectName, "default")
+	return CopyProfileToProject(ctx, server, DefaultProject, projectName, DefaultProject)
 }

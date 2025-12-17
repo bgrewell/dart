@@ -12,6 +12,11 @@ import (
 	"github.com/canonical/lxd/shared/api"
 )
 
+const (
+	// DefaultProject is the default LXD project name
+	DefaultProject = "default"
+)
+
 // Ensure Wrapper implements the PlatformManager interface
 var _ ifaces.PlatformManager = &Wrapper{}
 
@@ -194,19 +199,20 @@ func (w *Wrapper) Teardown() error {
 	}
 
 	// Delete the project if it was created
-	if w.cfg.Project != nil && w.projectName != "" {
-		// Ensure all instances in the project are removed before deletion
-		// This is a safety check - instances should already be deleted by node teardown
+	if w.projectName != "" {
+		// Note: Instances should be deleted by node teardown before this point.
+		// If instances remain, project deletion may fail. Callers should ensure
+		// all nodes are properly torn down before calling wrapper.Teardown().
 		projectServer := w.server.UseProject(w.projectName)
 		instances, err := projectServer.GetInstances(api.InstanceTypeAny)
 		if err == nil && len(instances) > 0 {
-			// Log a warning but attempt to continue - this shouldn't normally happen
-			// as nodes should clean up their own instances
-			fmt.Printf("Warning: Project %s still contains %d instance(s) during teardown\n", w.projectName, len(instances))
+			// Return an error indicating the project is not empty
+			// This allows callers to handle the situation appropriately
+			return fmt.Errorf("project %s still contains %d instance(s), cannot delete", w.projectName, len(instances))
 		}
 
 		// Switch back to default project before deleting
-		defaultServer := w.server.UseProject("default")
+		defaultServer := w.server.UseProject(DefaultProject)
 		if err := DeleteProject(ctx, defaultServer, w.projectName); err != nil {
 			return fmt.Errorf("failed to delete project %s: %w", w.projectName, err)
 		}
