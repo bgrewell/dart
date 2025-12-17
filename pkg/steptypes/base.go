@@ -69,10 +69,26 @@ func CreateSteps(configs []*config.StepConfig, nodes map[string]ifaces.Node) ([]
 				sleepTime: c.Step.Options["time"].(int),
 			})
 		case "execute":
+			var commands []string
+			switch cmd := c.Step.Options["command"].(type) {
+			case string:
+				commands = []string{cmd}
+			case []interface{}:
+				commands = make([]string, len(cmd))
+				for i, v := range cmd {
+					s, ok := v.(string)
+					if !ok {
+						return nil, helpers.ErrCommandNotString
+					}
+					commands[i] = s
+				}
+			default:
+				return nil, helpers.ErrInvalidCommandType
+			}
 			steps = append(steps, &ExecuteStep{
 				BaseStep: BaseStep{title: c.Name},
 				node:     node,
-				command:  c.Step.Options["command"].(string),
+				commands: commands,
 			})
 		case "apt":
 			rawPackages, ok := c.Step.Options["packages"].([]interface{})

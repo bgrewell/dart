@@ -26,6 +26,10 @@ var (
 	ErrPackagesNotArray = WrapError("packages field is not an array")
 	// ErrPackageNotString is returned when a package is not a string
 	ErrPackageNotString = WrapError("package is not a string")
+	// ErrCommandNotString is returned when a command in an array is not a string
+	ErrCommandNotString = WrapError("command is not a string")
+	// ErrInvalidCommandType is returned when the command field is neither a string nor an array
+	ErrInvalidCommandType = WrapError("command must be a string or array of strings")
 )
 
 // WrapError adds file and line number information to an error message
