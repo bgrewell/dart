@@ -202,6 +202,63 @@ nodes:
 
 See `examples/lxd/lxd-remote.yaml` for a complete example.
 
+### LXD Project Support
+
+LXD projects provide resource isolation and organization within LXD. DART supports creating and managing LXD projects, automatically copying the default profile, and organizing instances, networks, and profiles within projects.
+
+**Benefits of Using Projects:**
+- **Resource Isolation**: Separate test environments without conflicts
+- **Organization**: Group related resources together
+- **Easy Cleanup**: Delete all resources by removing the project
+- **Multi-tenancy**: Run multiple test suites in parallel
+
+**Configuring a Project:**
+
+```yaml
+lxd:
+  project:
+    name: dart-test-project
+    description: Test project for integration tests
+    config:
+      features.images: "true"
+      features.profiles: "true"
+      features.networks: "true"
+      features.storage.volumes: "true"
+  
+  # Networks are created within the project
+  networks:
+    - name: test-network
+      type: bridge
+      subnet: 10.100.0.0/24
+      gateway: 10.100.0.1
+  
+  # Profiles are created within the project
+  # The default profile is automatically copied
+  profiles:
+    - name: custom-profile
+      description: Custom profile for tests
+      config:
+        limits.cpu: "2"
+        limits.memory: "2GB"
+
+nodes:
+  - name: test-container
+    type: lxd
+    options:
+      # Will use the project defined in lxd.project
+      image: ubuntu:24.04
+      instance_type: container
+      # Or explicitly specify a project
+      # project: dart-test-project
+```
+
+**Important Notes:**
+- The default profile is automatically copied to new projects
+- All resources (instances, networks, profiles) are automatically cleaned up when the project is deleted
+- Projects are created during setup and deleted during teardown
+
+See `examples/lxd/lxd-project.yaml` for a complete example.
+
 
 ## Setup and Teardown Tasks
 

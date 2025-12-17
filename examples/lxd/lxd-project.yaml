@@ -1,0 +1,168 @@
+---
+# LXD Project Test Suite Example
+# This example demonstrates how to use LXD projects to isolate test resources.
+# Projects allow you to organize and isolate instances, networks, profiles, and storage.
+# 
+# Prerequisites:
+#   - LXD must be installed and running on the host
+#   - The user must have access to the LXD socket (usually via 'lxd' group)
+#   - Run 'lxd init' if you haven't already to configure LXD
+#
+# What are LXD Projects?
+#   Projects provide resource isolation in LXD, allowing you to:
+#   - Organize related instances together
+#   - Isolate networks, profiles, and storage volumes
+#   - Prevent resource conflicts between different test suites
+#   - Clean up all resources by simply deleting the project
+
+suite: LXD Project Test Suite
+
+# Define the LXD project and resources
+# The project will be created during setup and deleted during teardown
+lxd:
+  # Project configuration (optional but recommended for test isolation)
+  project:
+    name: dart-test-project
+    description: Test project for DART integration tests
+    config:
+      # Project features - these are set to true by default
+      features.images: "true"
+      features.profiles: "true"
+      features.networks: "true"
+      features.storage.volumes: "true"
+  
+  # Networks will be created within the project
+  networks:
+    - name: test-network
+      type: bridge
+      subnet: 10.100.0.0/24
+      gateway: 10.100.0.1
+  
+  # Custom profiles will be created within the project
+  # The default profile is automatically copied from the default project
+  profiles:
+    - name: test-profile
+      description: Profile for test containers
+      config:
+        limits.cpu: "2"
+        limits.memory: "2GB"
+
+# Define the nodes that will be used in the test suite
+nodes:
+  # Node using the project defined above
+  # The project will be automatically selected from the lxd.project configuration
+  - name: project-container-1
+    type: lxd
+    options:
+      image: ubuntu:24.04
+      instance_type: container
+      # Optional: explicitly specify a different project
+      # project: dart-test-project
+      exec_opts:
+        shell: /bin/bash
+
+  # Another node in the same project
+  - name: project-container-2
+    type: lxd
+    options:
+      image: ubuntu:24.04
+      instance_type: container
+      # Can use custom profiles defined in the project
+      profiles:
+        - default
+        - test-profile
+      exec_opts:
+        shell: /bin/bash
+      # Network configuration using project network
+      networks:
+        - name: test-network
+          ip: 10.100.0.10
+
+  # Node explicitly using a different project
+  - name: default-project-container
+    type: lxd
+    options:
+      image: ubuntu:24.04
+      instance_type: container
+      # Explicitly use the default project
+      project: default
+      exec_opts:
+        shell: /bin/bash
+
+# Setup steps executed before tests
+setup:
+  - name: Update container 1
+    node: project-container-1
+    step:
+      type: execute
+      options:
+        command: apt-get update -qq
+        timeout: 120
+
+  - name: Update container 2
+    node: project-container-2
+    step:
+      type: execute
+      options:
+        command: apt-get update -qq
+        timeout: 120
+
+# Tests to execute
+tests:
+  # Test that containers in the project can communicate
+  - name: Test Project Container 1
+    node: project-container-1
+    type: execute
+    options:
+      command: echo "Hello from project container 1"
+      evaluate:
+        match: "Hello from project container 1"
+        exit_code: 0
+
+  - name: Test Project Container 2
+    node: project-container-2
+    type: execute
+    options:
+      command: echo "Hello from project container 2"
+      evaluate:
+        match: "Hello from project container 2"
+        exit_code: 0
+
+  # Verify the container is using the custom profile
+  - name: Verify Profile Limits
+    node: project-container-2
+    type: execute
+    options:
+      command: nproc
+      evaluate:
+        exit_code: 0
+
+  # Test network connectivity between containers in the project
+  - name: Test Network Connectivity
+    node: project-container-1
+    type: execute
+    options:
+      command: ip addr show
+      evaluate:
+        exit_code: 0
+
+  # Test default project container works independently
+  - name: Test Default Project Container
+    node: default-project-container
+    type: execute
+    options:
+      command: echo "Hello from default project"
+      evaluate:
+        match: "Hello from default project"
+        exit_code: 0
+
+# Teardown steps (optional)
+# Note: The project and all its resources (instances, networks, profiles)
+# will be automatically deleted during teardown
+teardown:
+  - name: Cleanup message
+    node: project-container-1
+    step:
+      type: execute
+      options:
+        command: echo "Cleanup complete - project will be deleted"
