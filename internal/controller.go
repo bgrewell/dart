@@ -82,6 +82,7 @@ func (tc *TestController) executeStepsInParallel(steps []ifaces.Step) error {
 					errChan <- err
 					return
 				}
+				f.Complete()
 			}
 		}(nodeSteps)
 	}
@@ -90,8 +91,13 @@ func (tc *TestController) executeStepsInParallel(steps []ifaces.Step) error {
 	close(errChan)
 
 	// Check if any errors occurred
-	if err := <-errChan; err != nil {
-		return err
+	select {
+	case err := <-errChan:
+		if err != nil {
+			return err
+		}
+	default:
+		// No errors
 	}
 
 	return nil
@@ -141,8 +147,13 @@ func (tc *TestController) executeNodesInParallel(setupCompletedNodes *[]string, 
 	close(errChan)
 
 	// Check if any errors occurred
-	if err := <-errChan; err != nil {
-		return err
+	select {
+	case err := <-errChan:
+		if err != nil {
+			return err
+		}
+	default:
+		// No errors
 	}
 
 	return nil
