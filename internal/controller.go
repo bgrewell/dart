@@ -54,8 +54,8 @@ type TestController struct {
 
 func (tc *TestController) Run() error {
 
-	nodeSetupMsg := "running setup on %s"
-	nodeTeardownMsg := "running teardown on %s"
+	nodeSetupMsg := "running setup"
+	nodeTeardownMsg := "running teardown"
 
 	// Setup completed nodes
 	var setupCompletedNodes []string
@@ -72,7 +72,7 @@ func (tc *TestController) Run() error {
 			tc.formatter.PrintHeader(cleanupMsg)
 			for _, name := range setupCompletedNodes {
 				node := tc.Nodes[name]
-				c := tc.formatter.StartTask(fmt.Sprintf(nodeTeardownMsg, name), name, "running")
+				c := tc.formatter.StartTask(nodeTeardownMsg, name, "running")
 				err := node.Teardown()
 				if err != nil {
 					c.Error()
@@ -91,14 +91,9 @@ func (tc *TestController) Run() error {
 	}()
 
 	// Get the max length of the setup/teardown and the tests for formatting
-	longestSetup := 0
-	for name := range tc.Nodes {
-		if len(fmt.Sprintf(nodeSetupMsg, name)) > longestSetup {
-			longestSetup = len(fmt.Sprintf(nodeSetupMsg, name))
-		}
-		if len(fmt.Sprintf(nodeTeardownMsg, name)) > longestSetup {
-			longestSetup = len(fmt.Sprintf(nodeTeardownMsg, name))
-		}
+	longestSetup := len(nodeSetupMsg)
+	if len(nodeTeardownMsg) > longestSetup {
+		longestSetup = len(nodeTeardownMsg)
 	}
 	for _, step := range append(tc.Setup, tc.Teardown...) {
 		if len(step.Title()) > longestSetup {
@@ -158,7 +153,7 @@ func (tc *TestController) Run() error {
 	}
 
 	for name, node := range tc.Nodes {
-		c := tc.formatter.StartTask(fmt.Sprintf(nodeSetupMsg, name), name, "running")
+		c := tc.formatter.StartTask(nodeSetupMsg, name, "running")
 		err := node.Setup()
 		if err != nil {
 			c.Error()
@@ -238,7 +233,7 @@ func (tc *TestController) Run() error {
 	}
 
 	for name, node := range tc.Nodes {
-		c := tc.formatter.StartTask(fmt.Sprintf(nodeTeardownMsg, name), name, "running")
+		c := tc.formatter.StartTask(nodeTeardownMsg, name, "running")
 		err := node.Teardown()
 		if err != nil {
 			c.Error()
