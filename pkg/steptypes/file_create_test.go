@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-
 // TestFileCreateStep verifies basic file creation.
 func TestFileCreateStep(t *testing.T) {
 	tempFile := filepath.Join(os.TempDir(), "test_file_create.txt")

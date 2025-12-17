@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-
 // TestFileDeleteStep verifies basic file deletion.
 func TestFileDeleteStep(t *testing.T) {
 	tempFile := filepath.Join(os.TempDir(), "test_file_delete.txt")

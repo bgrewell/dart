@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-
 // TestFileReadStep verifies file reading and content validation.
 func TestFileReadStep(t *testing.T) {
 	tempFile := "/tmp/test_read.txt"

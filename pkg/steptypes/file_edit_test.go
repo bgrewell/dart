@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-
 // TestFileEditStepInsertAfterLine verifies inserting after a line number.
 func TestFileEditStepInsertAfterLine(t *testing.T) {
 	tempFile := filepath.Join(os.TempDir(), "test_file_edit_insert_line.txt")

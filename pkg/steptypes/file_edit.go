@@ -289,3 +289,4 @@ func (s *FileEditStep) removeByRegexMatch(content string) (string, error) {
 	return re.ReplaceAllString(content, ""), nil
 }
 
+
