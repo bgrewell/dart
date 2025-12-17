@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"sync"
 	"github.com/bgrewell/dart/internal/eval"
 	"github.com/bgrewell/dart/internal/formatters"
 	"github.com/bgrewell/dart/pkg/ifaces"
@@ -52,6 +53,112 @@ type TestController struct {
 	teardownOnly bool
 }
 
+// executeStepsInParallel groups steps by node and executes them in parallel.
+// Steps for the same node are executed sequentially to preserve order.
+// Steps for different nodes are executed in parallel.
+func (tc *TestController) executeStepsInParallel(steps []ifaces.Step) error {
+	// Group steps by node
+	stepsByNode := make(map[string][]ifaces.Step)
+	for _, step := range steps {
+		nodeName := step.NodeName()
+		stepsByNode[nodeName] = append(stepsByNode[nodeName], step)
+	}
+
+	// Execute steps for each node in parallel
+	var wg sync.WaitGroup
+	errChan := make(chan error, len(stepsByNode))
+
+	for _, nodeSteps := range stepsByNode {
+		wg.Add(1)
+		go func(steps []ifaces.Step) {
+			defer wg.Done()
+			// Execute steps for this node sequentially
+			for _, step := range steps {
+				f := tc.formatter.StartTask(step.Title(), "running")
+				err := step.Run(f)
+				if err != nil {
+					f.Error()
+					tc.formatter.PrintError(err)
+					errChan <- err
+					return
+				}
+				f.Complete()
+			}
+		}(nodeSteps)
+	}
+
+	wg.Wait()
+	close(errChan)
+
+	// Check if any errors occurred
+	select {
+	case err := <-errChan:
+		if err != nil {
+			return err
+		}
+	default:
+		// No errors
+	}
+
+	return nil
+}
+
+// executeNodesInParallel executes setup or teardown for all nodes in parallel.
+func (tc *TestController) executeNodesInParallel(setupCompletedNodes *[]string, operation string) error {
+	nodeSetupMsg := "running setup on %s"
+	nodeTeardownMsg := "running teardown on %s"
+	
+	var wg sync.WaitGroup
+	errChan := make(chan error, len(tc.Nodes))
+	var mu sync.Mutex
+
+	for name, node := range tc.Nodes {
+		wg.Add(1)
+		go func(nodeName string, n ifaces.Node) {
+			defer wg.Done()
+			
+			if operation == "setup" {
+				c := tc.formatter.StartTask(fmt.Sprintf(nodeSetupMsg, nodeName), "running")
+				err := n.Setup()
+				if err != nil {
+					c.Error()
+					tc.formatter.PrintError(err)
+					errChan <- err
+					return
+				}
+				mu.Lock()
+				*setupCompletedNodes = append(*setupCompletedNodes, nodeName)
+				mu.Unlock()
+				c.Complete()
+			} else if operation == "teardown" {
+				c := tc.formatter.StartTask(fmt.Sprintf(nodeTeardownMsg, nodeName), "running")
+				err := n.Teardown()
+				if err != nil {
+					c.Error()
+					errChan <- err
+					return
+				}
+				c.Complete()
+			}
+		}(name, node)
+	}
+
+	wg.Wait()
+	close(errChan)
+
+	// Check if any errors occurred
+	select {
+	case err := <-errChan:
+		if err != nil {
+			return err
+		}
+	default:
+		// No errors
+	}
+
+	return nil
+}
+
 func (tc *TestController) Run() error {
 
 	nodeSetupMsg := "running setup on %s"
@@ -98,6 +205,19 @@ func (tc *TestController) Run() error {
 		}
 		if len(fmt.Sprintf(nodeTeardownMsg, name)) > longestSetup {
 			longestSetup = len(fmt.Sprintf(nodeTeardownMsg, name))
+		}
+	}
+	// Include platform setup/teardown messages
+	for _, platform := range tc.Platforms {
+		if platform.Configured() {
+			platformSetupMsg := fmt.Sprintf("setting up %s environment", platform.Name())
+			platformTeardownMsg := fmt.Sprintf("tearing down %s environment", platform.Name())
+			if len(platformSetupMsg) > longestSetup {
+				longestSetup = len(platformSetupMsg)
+			}
+			if len(platformTeardownMsg) > longestSetup {
+				longestSetup = len(platformTeardownMsg)
+			}
 		}
 	}
 	for _, step := range append(tc.Setup, tc.Teardown...) {
@@ -148,27 +268,17 @@ func (tc *TestController) Run() error {
 		}
 	}
 
-	for name, node := range tc.Nodes {
-		c := tc.formatter.StartTask(fmt.Sprintf(nodeSetupMsg, name), "running")
-		err := node.Setup()
-		if err != nil {
-			c.Error()
-			tc.formatter.PrintError(err)
-			return err
-		}
-		setupCompletedNodes = append(setupCompletedNodes, name)
-		c.Complete()
+	// Execute node setup in parallel
+	err := tc.executeNodesInParallel(&setupCompletedNodes, "setup")
+	if err != nil {
+		return err
 	}
 
+	// Execute setup steps in parallel (grouped by node)
 	if len(tc.Setup) > 0 {
-		for _, step := range tc.Setup {
-			f := tc.formatter.StartTask(step.Title(), "running")
-			err := step.Run(f)
-			if err != nil {
-				f.Error()
-				tc.formatter.PrintError(err)
-				return err
-			}
+		err := tc.executeStepsInParallel(tc.Setup)
+		if err != nil {
+			return err
 		}
 		tc.formatter.PrintEmpty()
 	}
@@ -219,23 +329,17 @@ func (tc *TestController) Run() error {
 	// Run the teardown steps
 	tc.formatter.PrintHeader("Running test teardown")
 	if len(tc.Teardown) > 0 {
-		for _, step := range tc.Teardown {
-			f := tc.formatter.StartTask(step.Title(), "running")
-			err := step.Run(f)
-			if err != nil {
-				return err
-			}
+		err := tc.executeStepsInParallel(tc.Teardown)
+		if err != nil {
+			return err
 		}
 	}
 
-	for name, node := range tc.Nodes {
-		c := tc.formatter.StartTask(fmt.Sprintf(nodeTeardownMsg, name), "running")
-		err := node.Teardown()
-		if err != nil {
-			c.Error()
-			return err
-		}
-		c.Complete()
+	// Execute node teardown in parallel
+	var dummyNodes []string
+	err = tc.executeNodesInParallel(&dummyNodes, "teardown")
+	if err != nil {
+		return err
 	}
 
 	// Teardown all configured platforms in reverse order
