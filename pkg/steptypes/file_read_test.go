@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/bgrewell/dart/internal/formatters"
+	"github.com/bgrewell/dart/pkg/nodetypes"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -16,6 +17,7 @@ func TestFileReadStep(t *testing.T) {
 
 	step := &FileReadStep{
 		BaseStep: BaseStep{title: "Read File"},
+		node:     nodetypes.NewLocalNode(nil),
 		filePath: tempFile,
 		contains: "DART",
 	}

@@ -138,7 +138,7 @@ func CreateSteps(configs []*config.StepConfig, nodes map[string]ifaces.Node) ([]
 }
 
 // createFileCreateStep creates a FileCreateStep from configuration
-func createFileCreateStep(c *config.StepConfig, _ ifaces.Node) (*FileCreateStep, error) {
+func createFileCreateStep(c *config.StepConfig, node ifaces.Node) (*FileCreateStep, error) {
 	filePath, _ := c.Step.Options["path"].(string)
 	if filePath == "" {
 		return nil, helpers.ErrMissingFilePath
@@ -155,6 +155,7 @@ func createFileCreateStep(c *config.StepConfig, _ ifaces.Node) (*FileCreateStep,
 
 	return &FileCreateStep{
 		BaseStep:  BaseStep{title: c.Name},
+		node:      node,
 		filePath:  filePath,
 		contents:  contents,
 		overwrite: overwrite,
@@ -164,7 +165,7 @@ func createFileCreateStep(c *config.StepConfig, _ ifaces.Node) (*FileCreateStep,
 }
 
 // createFileDeleteStep creates a FileDeleteStep from configuration
-func createFileDeleteStep(c *config.StepConfig, _ ifaces.Node) (*FileDeleteStep, error) {
+func createFileDeleteStep(c *config.StepConfig, node ifaces.Node) (*FileDeleteStep, error) {
 	filePath, _ := c.Step.Options["path"].(string)
 	if filePath == "" {
 		return nil, helpers.ErrMissingFilePath
@@ -174,13 +175,14 @@ func createFileDeleteStep(c *config.StepConfig, _ ifaces.Node) (*FileDeleteStep,
 
 	return &FileDeleteStep{
 		BaseStep:     BaseStep{title: c.Name},
+		node:         node,
 		filePath:     filePath,
 		ignoreErrors: ignoreErrors,
 	}, nil
 }
 
 // createFileEditStep creates a FileEditStep from configuration
-func createFileEditStep(c *config.StepConfig, _ ifaces.Node) (*FileEditStep, error) {
+func createFileEditStep(c *config.StepConfig, node ifaces.Node) (*FileEditStep, error) {
 	filePath, _ := c.Step.Options["path"].(string)
 	if filePath == "" {
 		return nil, helpers.ErrMissingFilePath
@@ -243,6 +245,7 @@ func createFileEditStep(c *config.StepConfig, _ ifaces.Node) (*FileEditStep, err
 
 	return &FileEditStep{
 		BaseStep:    BaseStep{title: c.Name},
+		node:        node,
 		filePath:    filePath,
 		operation:   operation,
 		position:    position,

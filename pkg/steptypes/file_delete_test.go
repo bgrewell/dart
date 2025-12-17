@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/bgrewell/dart/internal/formatters"
+	"github.com/bgrewell/dart/pkg/nodetypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,6 +21,7 @@ func TestFileDeleteStep(t *testing.T) {
 
 	step := &FileDeleteStep{
 		BaseStep: BaseStep{title: "Delete Test File"},
+		node:     nodetypes.NewLocalNode(nil),
 		filePath: tempFile,
 	}
 
@@ -37,6 +39,7 @@ func TestFileDeleteStepNotExists(t *testing.T) {
 
 	step := &FileDeleteStep{
 		BaseStep: BaseStep{title: "Delete Non-existent File"},
+		node:     nodetypes.NewLocalNode(nil),
 		filePath: tempFile,
 	}
 
@@ -53,6 +56,7 @@ func TestFileDeleteStepIgnoreErrors(t *testing.T) {
 
 	step := &FileDeleteStep{
 		BaseStep:     BaseStep{title: "Delete Non-existent File Ignore"},
+		node:         nodetypes.NewLocalNode(nil),
 		filePath:     tempFile,
 		ignoreErrors: true,
 	}

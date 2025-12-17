@@ -1,8 +1,9 @@
 package steptypes
 
 import (
+	"encoding/base64"
 	"fmt"
-	"os"
+	"io"
 	"regexp"
 	"strconv"
 	"strings"
@@ -42,6 +43,7 @@ const (
 // FileEditStep edits a file using insert, replace, or remove operations.
 type FileEditStep struct {
 	BaseStep
+	node      ifaces.Node
 	filePath  string
 	operation EditOperation
 	// For insert operations
@@ -58,23 +60,34 @@ type FileEditStep struct {
 
 // Run executes the file edit operation.
 func (s *FileEditStep) Run(updater formatters.TaskCompleter) error {
-	// Read the file
-	data, err := os.ReadFile(s.filePath)
+	// Read the file from the node
+	readCmd := fmt.Sprintf("cat '%s'", s.filePath)
+	result, err := s.node.Execute(readCmd)
 	if err != nil {
 		updater.Error()
-		return fmt.Errorf("failed to read file: %w", err)
+		return fmt.Errorf("failed to execute read command: %w", err)
+	}
+	if result.ExitCode != 0 {
+		updater.Error()
+		return fmt.Errorf("failed to read file: %s", result.Stderr)
 	}
 
+	// Read the content from stdout
+	data, err := io.ReadAll(result.Stdout)
+	if err != nil {
+		updater.Error()
+		return fmt.Errorf("failed to read command output: %w", err)
+	}
 	content := string(data)
-	var result string
 
+	var editedContent string
 	switch s.operation {
 	case EditInsert:
-		result, err = s.doInsert(content)
+		editedContent, err = s.doInsert(content)
 	case EditReplace:
-		result, err = s.doReplace(content)
+		editedContent, err = s.doReplace(content)
 	case EditRemove:
-		result, err = s.doRemove(content)
+		editedContent, err = s.doRemove(content)
 	default:
 		updater.Error()
 		return fmt.Errorf("unknown edit operation: %s", s.operation)
@@ -85,11 +98,18 @@ func (s *FileEditStep) Run(updater formatters.TaskCompleter) error {
 		return err
 	}
 
-	// Write the modified content back
-	err = os.WriteFile(s.filePath, []byte(result), 0644)
+	// Write the modified content back using base64 encoding
+	encoded := base64.StdEncoding.EncodeToString([]byte(editedContent))
+	writeCmd := fmt.Sprintf("echo '%s' | base64 -d > '%s'", encoded, s.filePath)
+	result, err = s.node.Execute(writeCmd)
 	if err != nil {
 		updater.Error()
-		return fmt.Errorf("failed to write file: %w", err)
+		return fmt.Errorf("failed to execute write command: %w", err)
+	}
+	if result.ExitCode != 0 {
+		updater.Error()
+		stderr, _ := io.ReadAll(result.Stderr)
+		return fmt.Errorf("failed to write file: %s", string(stderr))
 	}
 
 	updater.Complete()
@@ -267,3 +287,4 @@ func (s *FileEditStep) removeByRegexMatch(content string) (string, error) {
 
 	return re.ReplaceAllString(content, ""), nil
 }
+

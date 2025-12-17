@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/bgrewell/dart/internal/formatters"
+	"github.com/bgrewell/dart/pkg/nodetypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,6 +19,7 @@ func TestFileCreateStep(t *testing.T) {
 
 	step := &FileCreateStep{
 		BaseStep:  BaseStep{title: "Create Test File"},
+		node:      nodetypes.NewLocalNode(nil),
 		filePath:  tempFile,
 		contents:  "Hello World",
 		overwrite: false,
@@ -46,6 +48,7 @@ func TestFileCreateStepOverwrite(t *testing.T) {
 
 	step := &FileCreateStep{
 		BaseStep:  BaseStep{title: "Overwrite Test File"},
+		node:      nodetypes.NewLocalNode(nil),
 		filePath:  tempFile,
 		contents:  "New content",
 		overwrite: true,
@@ -72,6 +75,7 @@ func TestFileCreateStepNoOverwrite(t *testing.T) {
 
 	step := &FileCreateStep{
 		BaseStep:  BaseStep{title: "No Overwrite Test File"},
+		node:      nodetypes.NewLocalNode(nil),
 		filePath:  tempFile,
 		contents:  "New content",
 		overwrite: false,
@@ -92,6 +96,7 @@ func TestFileCreateStepWithCreateDir(t *testing.T) {
 
 	step := &FileCreateStep{
 		BaseStep:  BaseStep{title: "Create File With Dir"},
+		node:      nodetypes.NewLocalNode(nil),
 		filePath:  tempFile,
 		contents:  "Test content",
 		createDir: true,
