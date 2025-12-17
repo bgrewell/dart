@@ -1,0 +1,118 @@
+---
+# Test suite to demonstrate parallel execution with Docker
+suite: Parallel Execution Demo with Docker
+
+docker:
+  networks:
+    - name: test_net
+      subnet: 172.20.0.0/16
+      gateway: 172.20.0.1
+
+nodes:
+  - name: node1
+    type: docker
+    options:
+      image: ubuntu:latest
+      exec_opts:
+        shell: /bin/bash
+      networks:
+        - name: test_net
+          ip: 172.20.0.10
+
+  - name: node2
+    type: docker
+    options:
+      image: ubuntu:latest
+      exec_opts:
+        shell: /bin/bash
+      networks:
+        - name: test_net
+          ip: 172.20.0.20
+
+  - name: node3
+    type: docker
+    options:
+      image: ubuntu:latest
+      exec_opts:
+        shell: /bin/bash
+      networks:
+        - name: test_net
+          ip: 172.20.0.30
+
+# These setup steps will run in parallel across different nodes
+# Steps on the same node will run sequentially
+setup:
+  - name: step 1 on node1
+    node: node1
+    step:
+      type: execute
+      options:
+        command: echo "Node1 Step1 starting" && sleep 3 && echo "Node1 Step1 done"
+
+  - name: step 2 on node1
+    node: node1
+    step:
+      type: execute
+      options:
+        command: echo "Node1 Step2 starting" && sleep 3 && echo "Node1 Step2 done"
+
+  - name: step 1 on node2
+    node: node2
+    step:
+      type: execute
+      options:
+        command: echo "Node2 Step1 starting" && sleep 3 && echo "Node2 Step1 done"
+
+  - name: step 2 on node2
+    node: node2
+    step:
+      type: execute
+      options:
+        command: echo "Node2 Step2 starting" && sleep 3 && echo "Node2 Step2 done"
+
+  - name: step 1 on node3
+    node: node3
+    step:
+      type: execute
+      options:
+        command: echo "Node3 Step1 starting" && sleep 3 && echo "Node3 Step1 done"
+
+  - name: step 2 on node3
+    node: node3
+    step:
+      type: execute
+      options:
+        command: echo "Node3 Step2 starting" && sleep 3 && echo "Node3 Step2 done"
+
+# A simple test
+tests:
+  - name: connectivity test
+    node: node1
+    type: execute
+    options:
+      command: ping -c 2 172.20.0.20
+      evaluate:
+        exit_code: 0
+
+# Teardown steps will also run in parallel
+teardown:
+  - name: cleanup on node1
+    node: node1
+    step:
+      type: execute
+      options:
+        command: echo "Node1 cleanup done"
+
+  - name: cleanup on node2
+    node: node2
+    step:
+      type: execute
+      options:
+        command: echo "Node2 cleanup done"
+
+  - name: cleanup on node3
+    node: node3
+    step:
+      type: execute
+      options:
+        command: echo "Node3 cleanup done"

@@ -196,6 +196,19 @@ func (tc *TestController) Run() error {
 			longestSetup = len(fmt.Sprintf(nodeTeardownMsg, name))
 		}
 	}
+	// Include platform setup/teardown messages
+	for _, platform := range tc.Platforms {
+		if platform.Configured() {
+			platformSetupMsg := fmt.Sprintf("setting up %s environment", platform.Name())
+			platformTeardownMsg := fmt.Sprintf("tearing down %s environment", platform.Name())
+			if len(platformSetupMsg) > longestSetup {
+				longestSetup = len(platformSetupMsg)
+			}
+			if len(platformTeardownMsg) > longestSetup {
+				longestSetup = len(platformTeardownMsg)
+			}
+		}
+	}
 	for _, step := range append(tc.Setup, tc.Teardown...) {
 		if len(step.Title()) > longestSetup {
 			longestSetup = len(step.Title())

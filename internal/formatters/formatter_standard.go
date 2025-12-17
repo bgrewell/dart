@@ -2,6 +2,7 @@ package formatters
 
 import (
 	"fmt"
+	"sync"
 	"github.com/bgrewell/dart/internal/results"
 	"github.com/fatih/color"
 	"github.com/theckman/yacspin"
@@ -30,6 +31,7 @@ func NewStandardFormatter() *StandardFormatter {
 	return &StandardFormatter{
 		indent:       2,
 		detailIndent: 7,
+		mu:           &sync.Mutex{},
 	}
 }
 
@@ -38,9 +40,12 @@ type StandardFormatter struct {
 	testColumnWidth int
 	indent          int
 	detailIndent    int
+	mu              *sync.Mutex
 }
 
 func (sf *StandardFormatter) PrintError(err error) {
+	sf.mu.Lock()
+	defer sf.mu.Unlock()
 	fmt.Printf("%s%s\n", strings.Repeat(" ", sf.detailIndent-sf.indent), valueFailColor.Sprintf(err.Error()))
 }
 
@@ -127,6 +132,8 @@ func (sf *StandardFormatter) SetTestColumnWidth(width int) {
 }
 
 func (sf *StandardFormatter) StartTask(task, status string) TaskCompleter {
+	sf.mu.Lock()
+	defer sf.mu.Unlock()
 
 	spinner, _ := yacspin.New(yacspin.Config{
 		Frequency:         100 * time.Millisecond,
