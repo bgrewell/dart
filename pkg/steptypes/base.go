@@ -129,6 +129,12 @@ func CreateSteps(configs []*config.StepConfig, nodes map[string]ifaces.Node) ([]
 				return nil, err
 			}
 			steps = append(steps, step)
+		case "file_read":
+			step, err := createFileReadStep(c, node)
+			if err != nil {
+				return nil, err
+			}
+			steps = append(steps, step)
 		default:
 			return nil, helpers.ErrUnknownStepType
 		}
@@ -254,5 +260,22 @@ func createFileEditStep(c *config.StepConfig, node ifaces.Node) (*FileEditStep, 
 		lineNumber:  lineNumber,
 		content:     content,
 		useCaptures: useCaptures,
+	}, nil
+}
+
+// createFileReadStep creates a FileReadStep from configuration
+func createFileReadStep(c *config.StepConfig, node ifaces.Node) (*FileReadStep, error) {
+	filePath, _ := c.Step.Options["path"].(string)
+	if filePath == "" {
+		return nil, helpers.ErrMissingFilePath
+	}
+
+	contains, _ := c.Step.Options["contains"].(string)
+
+	return &FileReadStep{
+		BaseStep: BaseStep{title: c.Name},
+		node:     node,
+		filePath: filePath,
+		contains: contains,
 	}, nil
 }

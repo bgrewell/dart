@@ -69,7 +69,8 @@ func (s *FileEditStep) Run(updater formatters.TaskCompleter) error {
 	}
 	if result.ExitCode != 0 {
 		updater.Error()
-		return fmt.Errorf("failed to read file: %s", result.Stderr)
+		stderr, _ := io.ReadAll(result.Stderr)
+		return fmt.Errorf("failed to read file: %s", string(stderr))
 	}
 
 	// Read the content from stdout
