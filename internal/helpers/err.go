@@ -30,6 +30,16 @@ var (
 	ErrCommandNotString = WrapError("command is not a string")
 	// ErrInvalidCommandType is returned when the command field is neither a string nor an array
 	ErrInvalidCommandType = WrapError("command must be a string or array of strings")
+	// ErrInvalidEditOperation is returned when an invalid edit operation is specified
+	ErrInvalidEditOperation = WrapError("invalid edit operation")
+	// ErrInvalidMatchType is returned when an invalid match type is specified
+	ErrInvalidMatchType = WrapError("invalid match type")
+	// ErrInvalidInsertPosition is returned when an invalid insert position is specified
+	ErrInvalidInsertPosition = WrapError("invalid insert position")
+	// ErrMissingFilePath is returned when a file path is required but not provided
+	ErrMissingFilePath = WrapError("file path is required")
+	// ErrMissingMatch is returned when a match pattern is required but not provided
+	ErrMissingMatch = WrapError("match pattern is required")
 )
 
 // WrapError adds file and line number information to an error message
