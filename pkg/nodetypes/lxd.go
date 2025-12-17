@@ -104,13 +104,20 @@ func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err err
 			
 			// Connect with generated certificates (not yet trusted)
 			args := &lxdclient.ConnectionArgs{
-				TLSClientCert:      certPEM,
-				TLSClientKey:       keyPEM,
-				InsecureSkipVerify: true, // We need to skip verification for initial connection
+				TLSClientCert: certPEM,
+				TLSClientKey:  keyPEM,
 			}
 			
+			// For token-based authentication, we must skip verification initially since we're not yet
+			// in the trust store. However, if a server certificate is provided, we can validate against it.
 			if nodeopts.ServerCert != "" {
+				// Server cert provided - validate against it
 				args.TLSServerCert = nodeopts.ServerCert
+				args.InsecureSkipVerify = false
+			} else {
+				// No server cert - must skip verification for initial connection
+				// This is acceptable for token-based auth as the token itself provides authentication
+				args.InsecureSkipVerify = true
 			}
 			
 			client, err = lxdclient.ConnectLXD(nodeopts.RemoteAddr, args)
@@ -390,8 +397,8 @@ func (d *LxdNode) Close() error {
 
 // generateSelfSignedCert generates a self-signed certificate for LXD client authentication
 func generateSelfSignedCert() (certPEM, keyPEM string, err error) {
-	// Generate private key
-	privateKey, err := rsa.GenerateKey(rand.Reader, 4096)
+	// Generate private key (2048-bit RSA provides good security/performance balance)
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to generate private key: %w", err)
 	}
