@@ -11,20 +11,22 @@ var _ ifaces.Step = &ExecuteStep{}
 // ExecuteStep runs shell commands on a node.
 type ExecuteStep struct {
 	BaseStep
-	node    ifaces.Node
-	command string
+	node     ifaces.Node
+	commands []string
 }
 
-// Run executes the command and evaluates success.
+// Run executes the commands sequentially and evaluates success.
 func (s *ExecuteStep) Run(updater formatters.TaskCompleter) error {
-	result, err := s.node.Execute(s.command)
-	if err != nil {
-		updater.Error()
-		return err
-	}
-	if result.ExitCode != 0 {
-		updater.Error()
-		return fmt.Errorf("command failed with exit code %d: %s", result.ExitCode, result.Stderr)
+	for _, command := range s.commands {
+		result, err := s.node.Execute(command)
+		if err != nil {
+			updater.Error()
+			return err
+		}
+		if result.ExitCode != 0 {
+			updater.Error()
+			return fmt.Errorf("command failed with exit code %d: %s", result.ExitCode, result.Stderr)
+		}
 	}
 	updater.Complete()
 	return nil
