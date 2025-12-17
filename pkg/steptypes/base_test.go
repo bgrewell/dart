@@ -123,3 +123,236 @@ func TestCreateStepsExecuteNonStringInArray(t *testing.T) {
 	assert.Nil(t, steps)
 	assert.ErrorIs(t, err, helpers.ErrCommandNotString)
 }
+
+// TestCreateStepsFileCreate verifies creating a file_create step.
+func TestCreateStepsFileCreate(t *testing.T) {
+	mockNode := nodetypes.NewMockNode()
+	nodes := map[string]ifaces.Node{
+		"test-node": mockNode,
+	}
+
+	configs := []*config.StepConfig{
+		{
+			Name: "Create File",
+			Node: "test-node",
+			Step: config.StepDetails{
+				Type: "file_create",
+				Options: map[string]interface{}{
+					"path":       "/tmp/test.txt",
+					"contents":   "Hello World",
+					"overwrite":  true,
+					"create_dir": true,
+				},
+			},
+		},
+	}
+
+	steps, err := CreateSteps(configs, nodes)
+
+	assert.NoError(t, err)
+	assert.Len(t, steps, 1)
+
+	createStep, ok := steps[0].(*FileCreateStep)
+	assert.True(t, ok)
+	assert.Equal(t, "Create File", createStep.Title())
+	assert.Equal(t, "/tmp/test.txt", createStep.filePath)
+	assert.Equal(t, "Hello World", createStep.contents)
+	assert.True(t, createStep.overwrite)
+	assert.True(t, createStep.createDir)
+}
+
+// TestCreateStepsFileCreateMissingPath verifies error when path is missing.
+func TestCreateStepsFileCreateMissingPath(t *testing.T) {
+	mockNode := nodetypes.NewMockNode()
+	nodes := map[string]ifaces.Node{
+		"test-node": mockNode,
+	}
+
+	configs := []*config.StepConfig{
+		{
+			Name: "Create File No Path",
+			Node: "test-node",
+			Step: config.StepDetails{
+				Type: "file_create",
+				Options: map[string]interface{}{
+					"contents": "Hello World",
+				},
+			},
+		},
+	}
+
+	steps, err := CreateSteps(configs, nodes)
+
+	assert.Nil(t, steps)
+	assert.ErrorIs(t, err, helpers.ErrMissingFilePath)
+}
+
+// TestCreateStepsFileDelete verifies creating a file_delete step.
+func TestCreateStepsFileDelete(t *testing.T) {
+	mockNode := nodetypes.NewMockNode()
+	nodes := map[string]ifaces.Node{
+		"test-node": mockNode,
+	}
+
+	configs := []*config.StepConfig{
+		{
+			Name: "Delete File",
+			Node: "test-node",
+			Step: config.StepDetails{
+				Type: "file_delete",
+				Options: map[string]interface{}{
+					"path":          "/tmp/test.txt",
+					"ignore_errors": true,
+				},
+			},
+		},
+	}
+
+	steps, err := CreateSteps(configs, nodes)
+
+	assert.NoError(t, err)
+	assert.Len(t, steps, 1)
+
+	deleteStep, ok := steps[0].(*FileDeleteStep)
+	assert.True(t, ok)
+	assert.Equal(t, "Delete File", deleteStep.Title())
+	assert.Equal(t, "/tmp/test.txt", deleteStep.filePath)
+	assert.True(t, deleteStep.ignoreErrors)
+}
+
+// TestCreateStepsFileEdit verifies creating a file_edit step.
+func TestCreateStepsFileEdit(t *testing.T) {
+	mockNode := nodetypes.NewMockNode()
+	nodes := map[string]ifaces.Node{
+		"test-node": mockNode,
+	}
+
+	configs := []*config.StepConfig{
+		{
+			Name: "Edit File",
+			Node: "test-node",
+			Step: config.StepDetails{
+				Type: "file_edit",
+				Options: map[string]interface{}{
+					"path":         "/tmp/test.txt",
+					"operation":    "replace",
+					"match_type":   "regex",
+					"match":        `\d+`,
+					"content":      "XXX",
+					"use_captures": true,
+				},
+			},
+		},
+	}
+
+	steps, err := CreateSteps(configs, nodes)
+
+	assert.NoError(t, err)
+	assert.Len(t, steps, 1)
+
+	editStep, ok := steps[0].(*FileEditStep)
+	assert.True(t, ok)
+	assert.Equal(t, "Edit File", editStep.Title())
+	assert.Equal(t, "/tmp/test.txt", editStep.filePath)
+	assert.Equal(t, EditReplace, editStep.operation)
+	assert.Equal(t, MatchRegex, editStep.matchType)
+	assert.Equal(t, `\d+`, editStep.match)
+	assert.Equal(t, "XXX", editStep.content)
+	assert.True(t, editStep.useCaptures)
+}
+
+// TestCreateStepsFileEditInsertByLine verifies creating a file_edit step with line-based insert.
+func TestCreateStepsFileEditInsertByLine(t *testing.T) {
+	mockNode := nodetypes.NewMockNode()
+	nodes := map[string]ifaces.Node{
+		"test-node": mockNode,
+	}
+
+	configs := []*config.StepConfig{
+		{
+			Name: "Edit File Insert",
+			Node: "test-node",
+			Step: config.StepDetails{
+				Type: "file_edit",
+				Options: map[string]interface{}{
+					"path":        "/tmp/test.txt",
+					"operation":   "insert",
+					"position":    "before",
+					"match_type":  "line",
+					"line_number": 5,
+					"content":     "new line",
+				},
+			},
+		},
+	}
+
+	steps, err := CreateSteps(configs, nodes)
+
+	assert.NoError(t, err)
+	assert.Len(t, steps, 1)
+
+	editStep, ok := steps[0].(*FileEditStep)
+	assert.True(t, ok)
+	assert.Equal(t, EditInsert, editStep.operation)
+	assert.Equal(t, InsertBefore, editStep.position)
+	assert.Equal(t, MatchLine, editStep.matchType)
+	assert.Equal(t, 5, editStep.lineNumber)
+}
+
+// TestCreateStepsFileEditInvalidOperation verifies error for invalid operation.
+func TestCreateStepsFileEditInvalidOperation(t *testing.T) {
+	mockNode := nodetypes.NewMockNode()
+	nodes := map[string]ifaces.Node{
+		"test-node": mockNode,
+	}
+
+	configs := []*config.StepConfig{
+		{
+			Name: "Edit File Invalid Op",
+			Node: "test-node",
+			Step: config.StepDetails{
+				Type: "file_edit",
+				Options: map[string]interface{}{
+					"path":      "/tmp/test.txt",
+					"operation": "invalid",
+					"match":     "test",
+				},
+			},
+		},
+	}
+
+	steps, err := CreateSteps(configs, nodes)
+
+	assert.Nil(t, steps)
+	assert.ErrorIs(t, err, helpers.ErrInvalidEditOperation)
+}
+
+// TestCreateStepsFileEditMissingMatch verifies error when match is missing.
+func TestCreateStepsFileEditMissingMatch(t *testing.T) {
+	mockNode := nodetypes.NewMockNode()
+	nodes := map[string]ifaces.Node{
+		"test-node": mockNode,
+	}
+
+	configs := []*config.StepConfig{
+		{
+			Name: "Edit File No Match",
+			Node: "test-node",
+			Step: config.StepDetails{
+				Type: "file_edit",
+				Options: map[string]interface{}{
+					"path":       "/tmp/test.txt",
+					"operation":  "replace",
+					"match_type": "plain",
+					// match is missing
+					"content": "replacement",
+				},
+			},
+		},
+	}
+
+	steps, err := CreateSteps(configs, nodes)
+
+	assert.Nil(t, steps)
+	assert.ErrorIs(t, err, helpers.ErrMissingMatch)
+}

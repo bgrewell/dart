@@ -1,0 +1,173 @@
+---
+# File Operations Example Test Suite
+# This example demonstrates the file_create, file_edit, and file_delete step types
+# for managing files during test setup and teardown phases.
+
+suite: File Operations Example
+
+nodes:
+  - name: local
+    type: local
+    options:
+      shell: /bin/bash
+
+setup:
+  # Example 1: Create a simple configuration file
+  - name: create config file
+    node: local
+    step:
+      type: file_create
+      options:
+        path: /tmp/dart-example/config.txt
+        contents: |
+          # Application Configuration
+          app_name=MyApp
+          version=1.0.0
+          debug=false
+          log_level=info
+        create_dir: true
+        overwrite: true
+
+  # Example 2: Create a JSON file
+  - name: create settings json
+    node: local
+    step:
+      type: file_create
+      options:
+        path: /tmp/dart-example/settings.json
+        contents: |
+          {
+            "database": {
+              "host": "localhost",
+              "port": 5432,
+              "name": "testdb"
+            },
+            "cache": {
+              "enabled": true,
+              "ttl": 3600
+            }
+          }
+        create_dir: true
+        overwrite: true
+
+  # Example 3: Edit file - Insert a line after a specific line number
+  - name: add import statement
+    node: local
+    step:
+      type: file_edit
+      options:
+        path: /tmp/dart-example/config.txt
+        operation: insert
+        match_type: line
+        line_number: 2
+        position: after
+        content: "environment=testing"
+
+  # Example 4: Edit file - Replace using plain text match
+  - name: enable debug mode
+    node: local
+    step:
+      type: file_edit
+      options:
+        path: /tmp/dart-example/config.txt
+        operation: replace
+        match_type: plain
+        match: "debug=false"
+        content: "debug=true"
+
+  # Example 5: Edit file - Replace using regex with capture groups
+  - name: update version number
+    node: local
+    step:
+      type: file_edit
+      options:
+        path: /tmp/dart-example/config.txt
+        operation: replace
+        match_type: regex
+        match: "version=(\\d+)\\.(\\d+)\\.(\\d+)"
+        content: "version=$1.$2.1"
+        use_captures: true
+
+  # Example 6: Edit file - Insert before a regex match
+  - name: add comment before log level
+    node: local
+    step:
+      type: file_edit
+      options:
+        path: /tmp/dart-example/config.txt
+        operation: insert
+        match_type: regex
+        match: "log_level=.*"
+        position: before
+        content: "# Logging configuration\n"
+
+  # Example 7: Edit file - Remove content using plain match
+  - name: remove environment line
+    node: local
+    step:
+      type: file_edit
+      options:
+        path: /tmp/dart-example/config.txt
+        operation: remove
+        match_type: plain
+        match: "environment=testing\n"
+
+tests:
+  # Verify the configuration file was modified correctly
+  - name: verify config file exists
+    node: local
+    type: execute
+    options:
+      command: cat /tmp/dart-example/config.txt
+      evaluate:
+        exit_code: 0
+
+  - name: verify debug is enabled
+    node: local
+    type: execute
+    options:
+      command: grep "debug=true" /tmp/dart-example/config.txt
+      evaluate:
+        exit_code: 0
+
+  - name: verify version was updated
+    node: local
+    type: execute
+    options:
+      command: grep "version=1.0.1" /tmp/dart-example/config.txt
+      evaluate:
+        exit_code: 0
+
+  - name: verify json file exists
+    node: local
+    type: execute
+    options:
+      command: cat /tmp/dart-example/settings.json | grep "testdb"
+      evaluate:
+        exit_code: 0
+
+teardown:
+  # Example 8: Delete files during teardown
+  - name: cleanup config file
+    node: local
+    step:
+      type: file_delete
+      options:
+        path: /tmp/dart-example/config.txt
+        ignore_errors: true
+
+  - name: cleanup settings file
+    node: local
+    step:
+      type: file_delete
+      options:
+        path: /tmp/dart-example/settings.json
+        ignore_errors: true
+
+  # Clean up the example directory
+  - name: cleanup example directory
+    node: local
+    step:
+      type: execute
+      options:
+        command: rmdir /tmp/dart-example 2>/dev/null || true
