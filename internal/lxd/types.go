@@ -62,3 +62,10 @@ type InstanceConfig struct {
 	Ephemeral    bool              `json:"ephemeral" yaml:"ephemeral"`
 	Architecture string            `json:"architecture" yaml:"architecture"`
 }
+
+// ProjectConfig holds configuration for an LXD project
+type ProjectConfig struct {
+	Name        string            `json:"name" yaml:"name"`
+	Description string            `json:"description" yaml:"description"`
+	Config      map[string]string `json:"config" yaml:"config"`
+}

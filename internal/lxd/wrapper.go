@@ -66,6 +66,7 @@ type Wrapper struct {
 	cfg               *config.LxdConfig
 	networkNamesToId  map[string]string
 	instanceNamesToId map[string]string
+	projectName       string
 }
 
 // Connect establishes a connection to the LXD server
@@ -126,6 +127,29 @@ func (w *Wrapper) Setup() error {
 
 	ctx := context.Background()
 
+	// Create the project if configured
+	if w.cfg.Project != nil {
+		projectName := w.cfg.Project.Name
+		if projectName == "" {
+			return fmt.Errorf("project name cannot be empty")
+		}
+
+		// Create the project
+		if err := CreateProject(ctx, w.server, projectName, w.cfg.Project.Config, w.cfg.Project.Description); err != nil {
+			return fmt.Errorf("failed to create project %s: %w", projectName, err)
+		}
+
+		// Ensure the default profile exists in the project
+		if err := EnsureDefaultProfile(ctx, w.server, projectName); err != nil {
+			return fmt.Errorf("failed to ensure default profile in project %s: %w", projectName, err)
+		}
+
+		// Set the project name so subsequent operations use this project
+		w.projectName = projectName
+		// Update server to use the project
+		w.server = w.server.UseProject(projectName)
+	}
+
 	// Create the networks
 	for _, net := range w.cfg.Networks {
 		if err := w.CreateNetwork(net.Name, net.Subnet, net.Gateway); err != nil {
@@ -165,6 +189,15 @@ func (w *Wrapper) Teardown() error {
 			if err := DeleteProfile(ctx, w.server, profile.Name); err != nil {
 				return err
 			}
+		}
+	}
+
+	// Delete the project if it was created
+	if w.cfg.Project != nil && w.projectName != "" {
+		// Switch back to default project before deleting
+		defaultServer := w.server.UseProject("default")
+		if err := DeleteProject(ctx, defaultServer, w.projectName); err != nil {
+			return fmt.Errorf("failed to delete project %s: %w", w.projectName, err)
 		}
 	}
 

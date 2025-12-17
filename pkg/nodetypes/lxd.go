@@ -50,6 +50,8 @@ type LxdNodeOpts struct {
 	ServerCert   string `yaml:"server_cert,omitempty" json:"server_cert"`       // Path to server certificate file (optional, for custom CA)
 	TrustToken   string `yaml:"trust_token,omitempty" json:"trust_token"`       // One-time trust token from 'lxc config trust add' (modern authentication)
 	SkipVerify   bool   `yaml:"skip_verify,omitempty" json:"skip_verify"`       // Skip TLS verification (not recommended for production)
+	// Project support
+	Project      string `yaml:"project,omitempty" json:"project"`               // LXD project to use (defaults to "default")
 }
 
 // NewLxdNode creates a new LXD node without using the wrapper
@@ -75,6 +77,9 @@ func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err err
 	}
 	if nodeopts.InstanceType == "" {
 		nodeopts.InstanceType = "container"
+	}
+	if nodeopts.Project == "" {
+		nodeopts.Project = "default"
 	}
 
 	// If image contains a name:alias, split it and configure the server and protocol
@@ -170,6 +175,11 @@ func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err err
 		}
 	}
 
+	// Use the specified project (or default)
+	if nodeopts.Project != "default" {
+		client = client.UseProject(nodeopts.Project)
+	}
+
 	return &LxdNode{
 		name:    name,
 		options: nodeopts,
@@ -205,6 +215,9 @@ func NewLxdNodeWithWrapper(wrapper *lxd.Wrapper, name string, opts ifaces.NodeOp
 	if nodeopts.InstanceType == "" {
 		nodeopts.InstanceType = "container"
 	}
+	if nodeopts.Project == "" {
+		nodeopts.Project = "default"
+	}
 
 	// If image contains a name:alias, split it and configure the server and protocol
 	if strings.Contains(nodeopts.Image, ":") {
@@ -217,11 +230,17 @@ func NewLxdNodeWithWrapper(wrapper *lxd.Wrapper, name string, opts ifaces.NodeOp
 		nodeopts.Protocol = protocol
 	}
 
+	// Get the server from wrapper and use the project if specified
+	client := wrapper.GetServer()
+	if nodeopts.Project != "default" {
+		client = client.UseProject(nodeopts.Project)
+	}
+
 	return &LxdNode{
 		name:    name,
 		options: nodeopts,
 		wrapper: wrapper,
-		client:  wrapper.GetServer(),
+		client:  client,
 	}, nil
 }
 

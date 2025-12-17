@@ -30,6 +30,7 @@ type DockerConfig struct {
 
 // LxdConfig is the configuration for LXD
 type LxdConfig struct {
+	Project  *LxdProjectConfig   `json:"project" yaml:"project"`
 	Networks []*LxdNetworkConfig `json:"networks" yaml:"networks"`
 	Profiles []*LxdProfileConfig `json:"profiles" yaml:"profiles"`
 	Images   []*LxdImageConfig   `json:"images" yaml:"images"`
@@ -117,6 +118,13 @@ type LxdImageConfig struct {
 	Alias    string `json:"alias" yaml:"alias"`
 	Server   string `json:"server" yaml:"server"`
 	Protocol string `json:"protocol" yaml:"protocol"` // "lxd" or "simplestreams"
+}
+
+// LxdProjectConfig is the configuration for an LXD project
+type LxdProjectConfig struct {
+	Name        string            `json:"name" yaml:"name"`
+	Description string            `json:"description" yaml:"description"`
+	Config      map[string]string `json:"config" yaml:"config"`
 }
 
 func LoadConfiguration(cfgPath string) (config *Configuration, err error) {
