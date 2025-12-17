@@ -6,15 +6,10 @@ import (
 	"testing"
 
 	"github.com/bgrewell/dart/internal/formatters"
-	"github.com/bgrewell/dart/pkg/nodetypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// getTestNode returns a local node for testing
-func getTestNode() *nodetypes.LocalNode {
-	return nodetypes.NewLocalNode(nil).(*nodetypes.LocalNode)
-}
 
 // TestFileEditStepInsertAfterLine verifies inserting after a line number.
 func TestFileEditStepInsertAfterLine(t *testing.T) {
