@@ -281,9 +281,9 @@ func padRightWithPeriods(s string, n int) string {
 
 func (sf *StandardFormatter) formatNodeBox(nodeName string) string {
 	if sf.nodeNameWidth > 0 {
-		// Pad the node name to the fixed width, accounting for the brackets
+		// Pad the node name to the fixed width, accounting for the brackets and internal spaces
 		paddedNodeName := fmt.Sprintf("%-*s", sf.nodeNameWidth, nodeName)
-		return nodeBracketColor.Sprint("[") + colorize256(46, paddedNodeName) + nodeBracketColor.Sprint("]") + " "
+		return nodeBracketColor.Sprint("[ ") + colorize256(46, paddedNodeName) + nodeBracketColor.Sprint(" ]") + " "
 	}
 	return ""
 }
