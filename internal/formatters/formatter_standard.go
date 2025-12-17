@@ -12,6 +12,11 @@ import (
 
 var _ Formatter = &StandardFormatter{}
 
+// ANSI 256-color escape code helper
+func colorize256(colorCode int, text string) string {
+	return fmt.Sprintf("\033[38;5;%dm%s\033[0m", colorCode, text)
+}
+
 var (
 	headerColor        = color.New(color.FgHiBlue).Add(color.Bold)
 	headerPrefixColor  = color.New(color.FgHiWhite).Add(color.Bold)
@@ -24,6 +29,8 @@ var (
 	valuePassColor     = color.New(color.FgHiGreen)
 	valueFailColor     = color.New(color.FgHiRed)
 	valueRanColor      = color.New(color.FgHiYellow)
+	nodeNameColor      = color.New(color.FgHiGreen)
+	nodeBracketColor   = numberPaddingColor
 )
 
 func NewStandardFormatter() *StandardFormatter {
@@ -36,6 +43,7 @@ func NewStandardFormatter() *StandardFormatter {
 type StandardFormatter struct {
 	taskColumnWidth int
 	testColumnWidth int
+	nodeNameWidth   int
 	indent          int
 	detailIndent    int
 }
@@ -126,7 +134,11 @@ func (sf *StandardFormatter) SetTestColumnWidth(width int) {
 	sf.testColumnWidth = width
 }
 
-func (sf *StandardFormatter) StartTask(task, status string) TaskCompleter {
+func (sf *StandardFormatter) SetNodeNameWidth(width int) {
+	sf.nodeNameWidth = width
+}
+
+func (sf *StandardFormatter) StartTask(task, nodeName, status string) TaskCompleter {
 
 	spinner, _ := yacspin.New(yacspin.Config{
 		Frequency:         100 * time.Millisecond,
@@ -147,7 +159,8 @@ func (sf *StandardFormatter) StartTask(task, status string) TaskCompleter {
 	}
 
 	indent := strings.Repeat(" ", sf.indent)
-	message := fmt.Sprintf("%s%s", indent, c.Message)
+	nodeBox := sf.formatNodeBox(nodeName)
+	message := fmt.Sprintf("%s%s%s", indent, nodeBox, c.Message)
 	messages := []func(string){c.spinner.Message, c.spinner.StopMessage, c.spinner.StopFailMessage}
 	c.spinner.Start()
 	for _, m := range messages {
@@ -156,7 +169,7 @@ func (sf *StandardFormatter) StartTask(task, status string) TaskCompleter {
 	return c
 }
 
-func (sf *StandardFormatter) StartTest(id, name string) TestCompleter {
+func (sf *StandardFormatter) StartTest(id, name, nodeName string) TestCompleter {
 	spinner, _ := yacspin.New(yacspin.Config{
 		Frequency:         100 * time.Millisecond,
 		ShowCursor:        false,
@@ -179,7 +192,8 @@ func (sf *StandardFormatter) StartTest(id, name string) TestCompleter {
 
 	pad := strings.Repeat("0", 5-len(id))
 	indent := strings.Repeat(" ", sf.indent)
-	message := fmt.Sprintf("%s%s%s: %s", indent, numberPaddingColor.Sprintf(pad), numberColor.Sprintf(c.TestId), c.TestName)
+	nodeBox := sf.formatNodeBox(nodeName)
+	message := fmt.Sprintf("%s%s%s: %s%s", indent, numberPaddingColor.Sprintf(pad), numberColor.Sprintf(c.TestId), nodeBox, c.TestName)
 	messages := []func(string){c.spinner.Message, c.spinner.StopMessage, c.spinner.StopFailMessage}
 	c.spinner.Start()
 	for _, m := range messages {
@@ -263,4 +277,13 @@ type BaseCompleter struct {
 
 func padRightWithPeriods(s string, n int) string {
 	return fmt.Sprintf("%s %s ", s, strings.Repeat(".", n))
+}
+
+func (sf *StandardFormatter) formatNodeBox(nodeName string) string {
+	if sf.nodeNameWidth > 0 {
+		// Pad the node name to the fixed width, accounting for the brackets and internal spaces
+		paddedNodeName := fmt.Sprintf("%-*s", sf.nodeNameWidth, nodeName)
+		return nodeBracketColor.Sprint("[ ") + colorize256(46, paddedNodeName) + nodeBracketColor.Sprint(" ]") + " "
+	}
+	return ""
 }

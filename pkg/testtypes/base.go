@@ -22,6 +22,7 @@ var (
 
 type BaseTest struct {
 	name        string
+	nodeName    string
 	node        ifaces.Node
 	testType    string
 	setup       []string
@@ -51,6 +52,7 @@ func CreateTests(configs []*config.TestConfig, nodes map[string]ifaces.Node) (te
 
 		base := BaseTest{
 			name:     cfg.Name,
+			nodeName: cfg.Node,
 			node:     node,
 			testType: cfg.Type,
 			setup:    cfg.Setup,

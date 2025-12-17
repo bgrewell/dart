@@ -72,7 +72,7 @@ func (tc *TestController) Run() error {
 			tc.formatter.PrintHeader(cleanupMsg)
 			for _, name := range setupCompletedNodes {
 				node := tc.Nodes[name]
-				c := tc.formatter.StartTask(fmt.Sprintf(nodeTeardownMsg, name), "running")
+				c := tc.formatter.StartTask(fmt.Sprintf(nodeTeardownMsg, name), name, "running")
 				err := node.Teardown()
 				if err != nil {
 					c.Error()
@@ -83,7 +83,7 @@ func (tc *TestController) Run() error {
 			// Teardown platforms in reverse order
 			for i := len(setupCompletedPlatforms) - 1; i >= 0; i-- {
 				platform := setupCompletedPlatforms[i]
-				t := tc.formatter.StartTask(fmt.Sprintf("tearing down %s environment", platform.Name()), "running")
+				t := tc.formatter.StartTask(fmt.Sprintf("tearing down %s environment", platform.Name()), "", "running")
 				_ = platform.Teardown()
 				t.Complete()
 			}
@@ -115,6 +115,15 @@ func (tc *TestController) Run() error {
 	}
 	tc.formatter.SetTestColumnWidth(longestTest)
 
+	// Calculate the longest node name for alignment
+	longestNodeName := 0
+	for name := range tc.Nodes {
+		if len(name) > longestNodeName {
+			longestNodeName = len(name)
+		}
+	}
+	tc.formatter.SetNodeNameWidth(longestNodeName)
+
 	// If teardown only is set, skip the setup and tests
 	if tc.teardownOnly {
 		cleanupMsg = "Running teardown only"
@@ -136,7 +145,7 @@ func (tc *TestController) Run() error {
 	// Setup all configured platforms (e.g., Docker, LXD) before setting up nodes
 	for _, platform := range tc.Platforms {
 		if platform.Configured() {
-			t := tc.formatter.StartTask(fmt.Sprintf("setting up %s environment", platform.Name()), "running")
+			t := tc.formatter.StartTask(fmt.Sprintf("setting up %s environment", platform.Name()), "", "running")
 			err := platform.Setup()
 			if err != nil {
 				t.Error()
@@ -149,7 +158,7 @@ func (tc *TestController) Run() error {
 	}
 
 	for name, node := range tc.Nodes {
-		c := tc.formatter.StartTask(fmt.Sprintf(nodeSetupMsg, name), "running")
+		c := tc.formatter.StartTask(fmt.Sprintf(nodeSetupMsg, name), name, "running")
 		err := node.Setup()
 		if err != nil {
 			c.Error()
@@ -162,7 +171,7 @@ func (tc *TestController) Run() error {
 
 	if len(tc.Setup) > 0 {
 		for _, step := range tc.Setup {
-			f := tc.formatter.StartTask(step.Title(), "running")
+			f := tc.formatter.StartTask(step.Title(), step.NodeName(), "running")
 			err := step.Run(f)
 			if err != nil {
 				f.Error()
@@ -184,7 +193,7 @@ func (tc *TestController) Run() error {
 	tc.formatter.PrintHeader("Running tests")
 	for idx, test := range tc.Tests {
 		id := idx + 1
-		f := tc.formatter.StartTest(strconv.Itoa(id), test.Name())
+		f := tc.formatter.StartTest(strconv.Itoa(id), test.Name(), test.NodeName())
 		results, err := test.Run(f)
 		if err != nil {
 			// TODO: This is an error not a fail, there should be a distinction since they are handled differently
@@ -220,7 +229,7 @@ func (tc *TestController) Run() error {
 	tc.formatter.PrintHeader("Running test teardown")
 	if len(tc.Teardown) > 0 {
 		for _, step := range tc.Teardown {
-			f := tc.formatter.StartTask(step.Title(), "running")
+			f := tc.formatter.StartTask(step.Title(), step.NodeName(), "running")
 			err := step.Run(f)
 			if err != nil {
 				return err
@@ -229,7 +238,7 @@ func (tc *TestController) Run() error {
 	}
 
 	for name, node := range tc.Nodes {
-		c := tc.formatter.StartTask(fmt.Sprintf(nodeTeardownMsg, name), "running")
+		c := tc.formatter.StartTask(fmt.Sprintf(nodeTeardownMsg, name), name, "running")
 		err := node.Teardown()
 		if err != nil {
 			c.Error()
@@ -242,7 +251,7 @@ func (tc *TestController) Run() error {
 	for i := len(tc.Platforms) - 1; i >= 0; i-- {
 		platform := tc.Platforms[i]
 		if platform.Configured() {
-			t := tc.formatter.StartTask(fmt.Sprintf("tearing down %s environment", platform.Name()), "running")
+			t := tc.formatter.StartTask(fmt.Sprintf("tearing down %s environment", platform.Name()), "", "running")
 			err := platform.Teardown()
 			if err != nil {
 				t.Error()
