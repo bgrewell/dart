@@ -81,6 +81,10 @@ func (t *ExecutionTest) Name() string {
 	return t.name
 }
 
+func (t *ExecutionTest) NodeName() string {
+	return t.nodeName
+}
+
 func (t *ExecutionTest) Run(updater formatters.TestCompleter) (results map[string]*eval.EvaluateResult, err error) {
 
 	// TODO: Should have an error channel to returns errors in.

@@ -24,6 +24,7 @@ var (
 	valuePassColor     = color.New(color.FgHiGreen)
 	valueFailColor     = color.New(color.FgHiRed)
 	valueRanColor      = color.New(color.FgHiYellow)
+	nodeNameColor      = color.New(color.FgBlack, color.BgHiYellow).Add(color.Bold)
 )
 
 func NewStandardFormatter() *StandardFormatter {
@@ -126,7 +127,7 @@ func (sf *StandardFormatter) SetTestColumnWidth(width int) {
 	sf.testColumnWidth = width
 }
 
-func (sf *StandardFormatter) StartTask(task, status string) TaskCompleter {
+func (sf *StandardFormatter) StartTask(task, nodeName, status string) TaskCompleter {
 
 	spinner, _ := yacspin.New(yacspin.Config{
 		Frequency:         100 * time.Millisecond,
@@ -147,7 +148,11 @@ func (sf *StandardFormatter) StartTask(task, status string) TaskCompleter {
 	}
 
 	indent := strings.Repeat(" ", sf.indent)
-	message := fmt.Sprintf("%s%s", indent, c.Message)
+	nodeBox := ""
+	if nodeName != "" {
+		nodeBox = nodeNameColor.Sprintf("[%s]", nodeName) + " "
+	}
+	message := fmt.Sprintf("%s%s%s", indent, nodeBox, c.Message)
 	messages := []func(string){c.spinner.Message, c.spinner.StopMessage, c.spinner.StopFailMessage}
 	c.spinner.Start()
 	for _, m := range messages {
@@ -156,7 +161,7 @@ func (sf *StandardFormatter) StartTask(task, status string) TaskCompleter {
 	return c
 }
 
-func (sf *StandardFormatter) StartTest(id, name string) TestCompleter {
+func (sf *StandardFormatter) StartTest(id, name, nodeName string) TestCompleter {
 	spinner, _ := yacspin.New(yacspin.Config{
 		Frequency:         100 * time.Millisecond,
 		ShowCursor:        false,
@@ -179,7 +184,11 @@ func (sf *StandardFormatter) StartTest(id, name string) TestCompleter {
 
 	pad := strings.Repeat("0", 5-len(id))
 	indent := strings.Repeat(" ", sf.indent)
-	message := fmt.Sprintf("%s%s%s: %s", indent, numberPaddingColor.Sprintf(pad), numberColor.Sprintf(c.TestId), c.TestName)
+	nodeBox := ""
+	if nodeName != "" {
+		nodeBox = nodeNameColor.Sprintf("[%s]", nodeName) + " "
+	}
+	message := fmt.Sprintf("%s%s%s: %s%s", indent, numberPaddingColor.Sprintf(pad), numberColor.Sprintf(c.TestId), nodeBox, c.TestName)
 	messages := []func(string){c.spinner.Message, c.spinner.StopMessage, c.spinner.StopFailMessage}
 	c.spinner.Start()
 	for _, m := range messages {

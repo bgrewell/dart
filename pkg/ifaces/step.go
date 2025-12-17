@@ -33,4 +33,5 @@ import "github.com/bgrewell/dart/internal/formatters"
 type Step interface {
 	Run(updater formatters.TaskCompleter) error
 	Title() string
+	NodeName() string
 }

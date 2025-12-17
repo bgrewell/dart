@@ -3,8 +3,8 @@ package formatters
 type Formatter interface {
 	SetTaskColumnWidth(width int)
 	SetTestColumnWidth(width int)
-	StartTask(task, status string) TaskCompleter
-	StartTest(id, name string) TestCompleter
+	StartTask(task, nodeName, status string) TaskCompleter
+	StartTest(id, name, nodeName string) TestCompleter
 	PrintHeader(header string)
 	PrintResults(pass, fail, ran int)
 	PrintPass(name string, details interface{})
