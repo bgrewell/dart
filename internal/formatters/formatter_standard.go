@@ -12,6 +12,11 @@ import (
 
 var _ Formatter = &StandardFormatter{}
 
+// ANSI 256-color escape code helper
+func colorize256(colorCode int, text string) string {
+	return fmt.Sprintf("\033[38;5;%dm%s\033[0m", colorCode, text)
+}
+
 var (
 	headerColor        = color.New(color.FgHiBlue).Add(color.Bold)
 	headerPrefixColor  = color.New(color.FgHiWhite).Add(color.Bold)
@@ -278,7 +283,7 @@ func (sf *StandardFormatter) formatNodeBox(nodeName string) string {
 	if sf.nodeNameWidth > 0 {
 		// Pad the node name to the fixed width, accounting for the brackets
 		paddedNodeName := fmt.Sprintf("%-*s", sf.nodeNameWidth, nodeName)
-		return nodeBracketColor.Sprint("[") + nodeNameColor.Sprint(paddedNodeName) + nodeBracketColor.Sprint("]") + " "
+		return nodeBracketColor.Sprint("[") + colorize256(46, paddedNodeName) + nodeBracketColor.Sprint("]") + " "
 	}
 	return ""
 }
