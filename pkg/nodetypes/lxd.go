@@ -82,6 +82,14 @@ func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err err
 	// Connect to LXD server (local or remote)
 	var client lxdclient.InstanceServer
 	if nodeopts.RemoteAddr != "" {
+		// Remote LXD server connection
+		// Validate that if remote connection is configured, proper authentication is provided
+		if nodeopts.ClientCert == "" || nodeopts.ClientKey == "" {
+			if !nodeopts.SkipVerify {
+				return nil, fmt.Errorf("remote LXD connection requires client_cert and client_key, or set skip_verify: true (not recommended for production)")
+			}
+		}
+		
 		// Connect to remote LXD server using HTTPS
 		args := &lxdclient.ConnectionArgs{
 			InsecureSkipVerify: nodeopts.SkipVerify,
@@ -119,6 +127,9 @@ func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err err
 }
 
 // NewLxdNodeWithWrapper creates a new LXD node using the provided wrapper
+// Note: When using a wrapper, the connection to the LXD server is managed by the wrapper itself.
+// Remote connection configuration in node options will be ignored.
+// Use NewWrapper or NewWrapperWithOptions to configure remote connections when using wrappers.
 func NewLxdNodeWithWrapper(wrapper *lxd.Wrapper, name string, opts ifaces.NodeOptions) (node ifaces.Node, err error) {
 
 	jsonData, err := json.Marshal(opts)
