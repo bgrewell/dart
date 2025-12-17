@@ -16,6 +16,7 @@ func TestFileReadStep(t *testing.T) {
 
 	step := &FileReadStep{
 		BaseStep: BaseStep{title: "Read File"},
+		node:     getTestNode(),
 		filePath: tempFile,
 		contains: "DART",
 	}

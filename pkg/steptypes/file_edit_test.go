@@ -20,6 +20,7 @@ func TestFileEditStepInsertAfterLine(t *testing.T) {
 
 	step := &FileEditStep{
 		BaseStep:   BaseStep{title: "Insert After Line"},
+		node:       getTestNode(),
 		filePath:   tempFile,
 		operation:  EditInsert,
 		position:   InsertAfter,
@@ -49,6 +50,7 @@ func TestFileEditStepInsertBeforeLine(t *testing.T) {
 
 	step := &FileEditStep{
 		BaseStep:   BaseStep{title: "Insert Before Line"},
+		node:       getTestNode(),
 		filePath:   tempFile,
 		operation:  EditInsert,
 		position:   InsertBefore,
@@ -77,6 +79,7 @@ func TestFileEditStepInsertByPlainMatch(t *testing.T) {
 
 	step := &FileEditStep{
 		BaseStep:  BaseStep{title: "Insert After Plain"},
+		node:      getTestNode(),
 		filePath:  tempFile,
 		operation: EditInsert,
 		position:  InsertAfter,
@@ -105,6 +108,7 @@ func TestFileEditStepInsertByRegexMatch(t *testing.T) {
 
 	step := &FileEditStep{
 		BaseStep:  BaseStep{title: "Insert After Regex"},
+		node:      getTestNode(),
 		filePath:  tempFile,
 		operation: EditInsert,
 		position:  InsertAfter,
@@ -133,6 +137,7 @@ func TestFileEditStepReplacePlain(t *testing.T) {
 
 	step := &FileEditStep{
 		BaseStep:  BaseStep{title: "Replace Plain"},
+		node:      getTestNode(),
 		filePath:  tempFile,
 		operation: EditReplace,
 		matchType: MatchPlain,
@@ -160,6 +165,7 @@ func TestFileEditStepReplaceRegex(t *testing.T) {
 
 	step := &FileEditStep{
 		BaseStep:  BaseStep{title: "Replace Regex"},
+		node:      getTestNode(),
 		filePath:  tempFile,
 		operation: EditReplace,
 		matchType: MatchRegex,
@@ -187,6 +193,7 @@ func TestFileEditStepReplaceWithCaptures(t *testing.T) {
 
 	step := &FileEditStep{
 		BaseStep:    BaseStep{title: "Replace With Captures"},
+		node:        getTestNode(),
 		filePath:    tempFile,
 		operation:   EditReplace,
 		matchType:   MatchRegex,
@@ -215,6 +222,7 @@ func TestFileEditStepReplaceWithNamedCaptures(t *testing.T) {
 
 	step := &FileEditStep{
 		BaseStep:    BaseStep{title: "Replace With Named Captures"},
+		node:        getTestNode(),
 		filePath:    tempFile,
 		operation:   EditReplace,
 		matchType:   MatchRegex,
@@ -243,6 +251,7 @@ func TestFileEditStepRemovePlain(t *testing.T) {
 
 	step := &FileEditStep{
 		BaseStep:  BaseStep{title: "Remove Plain"},
+		node:      getTestNode(),
 		filePath:  tempFile,
 		operation: EditRemove,
 		matchType: MatchPlain,
@@ -269,6 +278,7 @@ func TestFileEditStepRemoveRegex(t *testing.T) {
 
 	step := &FileEditStep{
 		BaseStep:  BaseStep{title: "Remove Regex"},
+		node:      getTestNode(),
 		filePath:  tempFile,
 		operation: EditRemove,
 		matchType: MatchRegex,
@@ -295,6 +305,7 @@ func TestFileEditStepMatchNotFound(t *testing.T) {
 
 	step := &FileEditStep{
 		BaseStep:  BaseStep{title: "Match Not Found"},
+		node:      getTestNode(),
 		filePath:  tempFile,
 		operation: EditReplace,
 		matchType: MatchPlain,
@@ -320,6 +331,7 @@ func TestFileEditStepInvalidRegex(t *testing.T) {
 
 	step := &FileEditStep{
 		BaseStep:  BaseStep{title: "Invalid Regex"},
+		node:      getTestNode(),
 		filePath:  tempFile,
 		operation: EditReplace,
 		matchType: MatchRegex,
@@ -345,6 +357,7 @@ func TestFileEditStepLineNumberOutOfRange(t *testing.T) {
 
 	step := &FileEditStep{
 		BaseStep:   BaseStep{title: "Line Out of Range"},
+		node:       getTestNode(),
 		filePath:   tempFile,
 		operation:  EditInsert,
 		matchType:  MatchLine,

@@ -18,6 +18,7 @@ func TestFileCreateStep(t *testing.T) {
 
 	step := &FileCreateStep{
 		BaseStep:  BaseStep{title: "Create Test File"},
+		node:      getTestNode(),
 		filePath:  tempFile,
 		contents:  "Hello World",
 		overwrite: false,
@@ -46,6 +47,7 @@ func TestFileCreateStepOverwrite(t *testing.T) {
 
 	step := &FileCreateStep{
 		BaseStep:  BaseStep{title: "Overwrite Test File"},
+		node:      getTestNode(),
 		filePath:  tempFile,
 		contents:  "New content",
 		overwrite: true,
@@ -72,6 +74,7 @@ func TestFileCreateStepNoOverwrite(t *testing.T) {
 
 	step := &FileCreateStep{
 		BaseStep:  BaseStep{title: "No Overwrite Test File"},
+		node:      getTestNode(),
 		filePath:  tempFile,
 		contents:  "New content",
 		overwrite: false,
@@ -92,6 +95,7 @@ func TestFileCreateStepWithCreateDir(t *testing.T) {
 
 	step := &FileCreateStep{
 		BaseStep:  BaseStep{title: "Create File With Dir"},
+		node:      getTestNode(),
 		filePath:  tempFile,
 		contents:  "Test content",
 		createDir: true,

@@ -20,6 +20,7 @@ func TestFileDeleteStep(t *testing.T) {
 
 	step := &FileDeleteStep{
 		BaseStep: BaseStep{title: "Delete Test File"},
+		node:     getTestNode(),
 		filePath: tempFile,
 	}
 
@@ -37,6 +38,7 @@ func TestFileDeleteStepNotExists(t *testing.T) {
 
 	step := &FileDeleteStep{
 		BaseStep: BaseStep{title: "Delete Non-existent File"},
+		node:     getTestNode(),
 		filePath: tempFile,
 	}
 
@@ -53,6 +55,7 @@ func TestFileDeleteStepIgnoreErrors(t *testing.T) {
 
 	step := &FileDeleteStep{
 		BaseStep:     BaseStep{title: "Delete Non-existent File Ignore"},
+		node:         getTestNode(),
 		filePath:     tempFile,
 		ignoreErrors: true,
 	}
