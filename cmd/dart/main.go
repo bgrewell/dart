@@ -161,12 +161,19 @@ func Controller(params ControllerParams) (ctrl *internal.TestController, err err
 func RegisterHooks(params RunParams) {
 	params.LC.Append(fx.Hook{
 		OnStart: func(context context.Context) error {
-			iterations := *params.Flags.Iterations
+			iterations := 1
+			if params.Flags.Iterations != nil {
+				iterations = *params.Flags.Iterations
+			}
+			var lastErr error
 			for i := 0; i < iterations; i++ {
 				err := params.Ctrl.Run()
 				if err != nil {
-					return params.Shutdowner.Shutdown(fx.ExitCode(1))
+					lastErr = err
 				}
+			}
+			if lastErr != nil {
+				return params.Shutdowner.Shutdown(fx.ExitCode(1))
 			}
 			return params.Shutdowner.Shutdown()
 		},
