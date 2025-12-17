@@ -13,7 +13,6 @@ var _ ifaces.Step = &FileDeleteStep{}
 // FileDeleteStep deletes a specified file.
 type FileDeleteStep struct {
 	BaseStep
-	node         ifaces.Node
 	filePath     string
 	ignoreErrors bool
 }

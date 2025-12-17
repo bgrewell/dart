@@ -42,7 +42,6 @@ const (
 // FileEditStep edits a file using insert, replace, or remove operations.
 type FileEditStep struct {
 	BaseStep
-	node      ifaces.Node
 	filePath  string
 	operation EditOperation
 	// For insert operations

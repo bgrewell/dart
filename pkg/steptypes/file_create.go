@@ -14,7 +14,6 @@ var _ ifaces.Step = &FileCreateStep{}
 // FileCreateStep creates a new file with specified content.
 type FileCreateStep struct {
 	BaseStep
-	node      ifaces.Node
 	filePath  string
 	contents  string
 	overwrite bool
