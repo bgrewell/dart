@@ -26,6 +26,7 @@ type CmdlineFlags struct {
 	PauseOnError *bool
 	SetupOnly    *bool
 	TeardownOnly *bool
+	Iterations   *int
 }
 
 type ControllerParams struct {
@@ -44,6 +45,7 @@ type RunParams struct {
 	LC         fx.Lifecycle
 	Shutdowner fx.Shutdowner
 	Ctrl       *internal.TestController
+	Flags      *CmdlineFlags
 }
 
 func Configuration(cmdFlags *CmdlineFlags) (*config.Configuration, error) {
@@ -159,9 +161,18 @@ func Controller(params ControllerParams) (ctrl *internal.TestController, err err
 func RegisterHooks(params RunParams) {
 	params.LC.Append(fx.Hook{
 		OnStart: func(context context.Context) error {
-			// TODO: Cleanup the mess here
-			err := params.Ctrl.Run()
-			if err != nil {
+			iterations := 1
+			if params.Flags.Iterations != nil {
+				iterations = *params.Flags.Iterations
+			}
+			var lastErr error
+			for i := 0; i < iterations; i++ {
+				err := params.Ctrl.Run()
+				if err != nil {
+					lastErr = err
+				}
+			}
+			if lastErr != nil {
 				return params.Shutdowner.Shutdown(fx.ExitCode(1))
 			}
 			return params.Shutdowner.Shutdown()
@@ -191,6 +202,7 @@ func main() {
 	cfgFlags.StopOnError = u.AddBooleanOption("s", "stop-on-error", false, "Stop on error", "", nil)
 	cfgFlags.SetupOnly = u.AddBooleanOption("setup", "setup-only", false, "Only run the setup steps", "", nil)
 	cfgFlags.TeardownOnly = u.AddBooleanOption("teardown", "teardown-only", false, "Only run the teardown steps", "", nil)
+	cfgFlags.Iterations = u.AddIntegerOption("i", "iterations", 1, "Number of iterations to run", "", nil)
 
 	if !u.Parse() {
 		u.PrintError(fmt.Errorf("Failed to parse command line arguments"))
