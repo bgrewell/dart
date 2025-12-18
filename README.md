@@ -450,8 +450,8 @@ Below is a simplified example of how DART logs its operations during a test run.
 
 ```bash
 [+] Running test setup
-  running setup on localhost ......... done 
-  running setup on locker-test ....... done 
+  running setup ...................... done 
+  running setup ...................... done 
   ensure sshpass is installed ........ done 
   ensure dns is working .............. done 
   install locker ..................... done 
@@ -472,8 +472,8 @@ Below is a simplified example of how DART logs its operations during a test run.
   00008: verify bob can again access the system ...... passed
 
 [+] Running test teardown
-  running teardown on localhost ...... done 
-  running teardown on locker-test .... done 
+  running teardown ................... done 
+  running teardown ................... done 
 
 [+] Results
   Pass: 00008
