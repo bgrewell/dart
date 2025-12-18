@@ -1,0 +1,83 @@
+---
+# Multi-Node Configuration Example
+# This demonstrates the new feature where you can specify either a single node
+# or an array of nodes for steps and tests. When an array is provided, the 
+# step/test will be automatically expanded to run on each specified node.
+
+suite: Multi-Node Feature Demo
+
+# Note: This example would typically use multiple actual nodes (e.g., Docker containers,
+# LXD containers, SSH nodes). For demonstration purposes, we're using a single local node.
+# In a real scenario, you would have multiple distinct nodes like:
+# - node01 (docker container)
+# - node02 (docker container)
+# - node03 (SSH remote)
+
+nodes:
+  - name: local
+    type: local
+    options:
+      shell: /bin/bash
+
+setup:
+  # Traditional single node syntax (still works)
+  - name: Setup step on single node
+    node: local
+    step:
+      type: execute
+      options:
+        command: echo "This runs on a single node"
+
+  # NEW: Multi-node syntax using array
+  # In a real scenario with nodes [web-server, db-server], this would expand to:
+  # - One step running on web-server
+  # - One step running on db-server
+  # - name: Install dependencies
+  #   node: [web-server, db-server]
+  #   step:
+  #     type: apt
+  #     options:
+  #       packages:
+  #         - curl
+  #         - wget
+
+tests:
+  # Traditional single node syntax
+  - name: Test on single node
+    node: local
+    type: execute
+    options:
+      command: echo "Single node test"
+      evaluate:
+        match: "Single node test"
+        exit_code: 0
+
+  # NEW: Multi-node test syntax
+  # In a real scenario with nodes [node01, node02, node03], this would expand to:
+  # - Test running on node01
+  # - Test running on node02  
+  # - Test running on node03
+  # - name: Check connectivity
+  #   node: [node01, node02, node03]
+  #   type: execute
+  #   options:
+  #     command: ping -c 1 8.8.8.8
+  #     evaluate:
+  #       exit_code: 0
+
+teardown:
+  # NEW: Multi-node teardown
+  # This would run cleanup on all specified nodes
+  # - name: Cleanup temp files
+  #   node: [web-server, db-server, cache-server]
+  #   step:
+  #     type: execute
+  #     options:
+  #       command: rm -rf /tmp/test-*
+
+  - name: Final cleanup
+    node: local
+    step:
+      type: execute
+      options:
+        command: echo "Cleanup complete"
