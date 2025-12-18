@@ -42,7 +42,7 @@ func CreateTests(configs []*config.TestConfig, nodes map[string]ifaces.Node) (te
 	// Parse the configurations into test objects
 	for _, cfg := range configs {
 
-		// After expansion, each config should have exactly one node
+		// After expansion, each config has exactly one node
 		nodeName := cfg.Node[0]
 		node, ok := nodes[nodeName]
 		if !ok {
