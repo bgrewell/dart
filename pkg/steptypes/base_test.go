@@ -20,7 +20,7 @@ func TestCreateStepsExecuteSingleCommand(t *testing.T) {
 	configs := []*config.StepConfig{
 		{
 			Name: "Single Command",
-			Node: "test-node",
+			Node: config.NodeReference{"test-node"},
 			Step: config.StepDetails{
 				Type: "execute",
 				Options: map[string]interface{}{
@@ -51,7 +51,7 @@ func TestCreateStepsExecuteMultipleCommands(t *testing.T) {
 	configs := []*config.StepConfig{
 		{
 			Name: "Multiple Commands",
-			Node: "test-node",
+			Node: config.NodeReference{"test-node"},
 			Step: config.StepDetails{
 				Type: "execute",
 				Options: map[string]interface{}{
@@ -82,7 +82,7 @@ func TestCreateStepsExecuteInvalidCommandType(t *testing.T) {
 	configs := []*config.StepConfig{
 		{
 			Name: "Invalid Command",
-			Node: "test-node",
+			Node: config.NodeReference{"test-node"},
 			Step: config.StepDetails{
 				Type: "execute",
 				Options: map[string]interface{}{
@@ -108,7 +108,7 @@ func TestCreateStepsExecuteNonStringInArray(t *testing.T) {
 	configs := []*config.StepConfig{
 		{
 			Name: "Invalid Array Command",
-			Node: "test-node",
+			Node: config.NodeReference{"test-node"},
 			Step: config.StepDetails{
 				Type: "execute",
 				Options: map[string]interface{}{
@@ -134,7 +134,7 @@ func TestCreateStepsFileCreate(t *testing.T) {
 	configs := []*config.StepConfig{
 		{
 			Name: "Create File",
-			Node: "test-node",
+			Node: config.NodeReference{"test-node"},
 			Step: config.StepDetails{
 				Type: "file_create",
 				Options: map[string]interface{}{
@@ -171,7 +171,7 @@ func TestCreateStepsFileCreateMissingPath(t *testing.T) {
 	configs := []*config.StepConfig{
 		{
 			Name: "Create File No Path",
-			Node: "test-node",
+			Node: config.NodeReference{"test-node"},
 			Step: config.StepDetails{
 				Type: "file_create",
 				Options: map[string]interface{}{
@@ -197,7 +197,7 @@ func TestCreateStepsFileDelete(t *testing.T) {
 	configs := []*config.StepConfig{
 		{
 			Name: "Delete File",
-			Node: "test-node",
+			Node: config.NodeReference{"test-node"},
 			Step: config.StepDetails{
 				Type: "file_delete",
 				Options: map[string]interface{}{
@@ -230,7 +230,7 @@ func TestCreateStepsFileEdit(t *testing.T) {
 	configs := []*config.StepConfig{
 		{
 			Name: "Edit File",
-			Node: "test-node",
+			Node: config.NodeReference{"test-node"},
 			Step: config.StepDetails{
 				Type: "file_edit",
 				Options: map[string]interface{}{
@@ -271,7 +271,7 @@ func TestCreateStepsFileEditInsertByLine(t *testing.T) {
 	configs := []*config.StepConfig{
 		{
 			Name: "Edit File Insert",
-			Node: "test-node",
+			Node: config.NodeReference{"test-node"},
 			Step: config.StepDetails{
 				Type: "file_edit",
 				Options: map[string]interface{}{
@@ -309,7 +309,7 @@ func TestCreateStepsFileEditInvalidOperation(t *testing.T) {
 	configs := []*config.StepConfig{
 		{
 			Name: "Edit File Invalid Op",
-			Node: "test-node",
+			Node: config.NodeReference{"test-node"},
 			Step: config.StepDetails{
 				Type: "file_edit",
 				Options: map[string]interface{}{
@@ -337,7 +337,7 @@ func TestCreateStepsFileEditMissingMatch(t *testing.T) {
 	configs := []*config.StepConfig{
 		{
 			Name: "Edit File No Match",
-			Node: "test-node",
+			Node: config.NodeReference{"test-node"},
 			Step: config.StepDetails{
 				Type: "file_edit",
 				Options: map[string]interface{}{

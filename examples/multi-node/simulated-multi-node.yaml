@@ -1,0 +1,51 @@
+---
+# Multi-Node Simulated Example
+# This example demonstrates the multi-node feature using simulated steps
+# which don't require actual nodes but show how the configuration expands
+
+suite: Multi-Node Simulated Example
+
+nodes:
+  - name: local
+    type: local
+    options:
+      shell: /bin/bash
+
+setup:
+  # This single configuration expands to one step for local
+  # In a real multi-node scenario with [web01, web02, web03], this would
+  # expand to 3 steps, one for each node
+  - name: Simulated package installation
+    node: local
+    step:
+      type: simulated
+      options:
+        time: 1
+        message: Installing packages
+
+  # Traditional single-node syntax
+  - name: Configure specific node
+    node: local
+    step:
+      type: execute
+      options:
+        command: echo "Configuration complete"
+
+tests:
+  # Test that will run on the local node
+  - name: Verify installation
+    node: local
+    type: execute
+    options:
+      command: echo "All packages installed successfully"
+      evaluate:
+        contains: "successfully"
+        exit_code: 0
+
+teardown:
+  - name: Cleanup
+    node: local
+    step:
+      type: execute
+      options:
+        command: echo "Cleanup complete"

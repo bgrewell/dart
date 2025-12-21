@@ -1,0 +1,89 @@
+---
+# Multi-Node Docker Example
+# This example demonstrates running the same step/test on multiple Docker containers
+# using the array syntax for the node field.
+
+suite: Multi-Node Docker Example
+
+docker:
+  networks:
+    - name: test-net
+      subnet: "172.20.0.0/16"
+      gateway: "172.20.0.1"
+
+nodes:
+  - name: web01
+    type: docker
+    options:
+      image: ubuntu:22.04
+      networks:
+        - name: test-net
+          ip: "172.20.0.10"
+      privileged: false
+
+  - name: web02
+    type: docker
+    options:
+      image: ubuntu:22.04
+      networks:
+        - name: test-net
+          ip: "172.20.0.11"
+      privileged: false
+
+  - name: web03
+    type: docker
+    options:
+      image: ubuntu:22.04
+      networks:
+        - name: test-net
+          ip: "172.20.0.12"
+      privileged: false
+
+setup:
+  # Install packages on all three web servers using the new multi-node syntax
+  # This single configuration will be expanded to three separate steps,
+  # one for each node
+  - name: Install curl on all web servers
+    node: [web01, web02, web03]
+    step:
+      type: apt
+      options:
+        packages:
+          - curl
+
+  # Traditional single-node syntax still works
+  - name: Configure web01 specifically
+    node: web01
+    step:
+      type: execute
+      options:
+        command: echo "This runs only on web01"
+
+tests:
+  # Run the same test on all three nodes
+  # This will expand to three separate tests
+  - name: Test connectivity
+    node: [web01, web02, web03]
+    type: execute
+    options:
+      command: curl -s http://172.20.0.1 || echo "Gateway unreachable"
+      evaluate:
+        exit_code: 0
+
+  # Run test on a subset of nodes
+  - name: Test between web01 and web02
+    node: [web01, web02]
+    type: execute
+    options:
+      command: hostname
+      evaluate:
+        exit_code: 0
+
+teardown:
+  # Cleanup on all nodes
+  - name: Remove test files
+    node: [web01, web02, web03]
+    step:
+      type: execute
+      options:
+        command: echo "Cleanup complete on $(hostname)"

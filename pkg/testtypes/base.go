@@ -42,8 +42,9 @@ func CreateTests(configs []*config.TestConfig, nodes map[string]ifaces.Node) (te
 	// Parse the configurations into test objects
 	for _, cfg := range configs {
 
-		// Find the node
-		node, ok := nodes[cfg.Node]
+		// After expansion, each config has exactly one node
+		nodeName := cfg.Node[0]
+		node, ok := nodes[nodeName]
 		if !ok {
 			return nil, helpers.ErrNodeNotFound
 		}
@@ -52,7 +53,7 @@ func CreateTests(configs []*config.TestConfig, nodes map[string]ifaces.Node) (te
 
 		base := BaseTest{
 			name:     cfg.Name,
-			nodeName: cfg.Node,
+			nodeName: nodeName,
 			node:     node,
 			testType: cfg.Type,
 			setup:    cfg.Setup,

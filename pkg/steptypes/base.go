@@ -65,7 +65,9 @@ func CreateSteps(configs []*config.StepConfig, nodes map[string]ifaces.Node) ([]
 	var steps []ifaces.Step
 
 	for _, c := range configs {
-		node, ok := nodes[c.Node]
+		// After expansion, each config has exactly one node
+		nodeName := c.Node[0]
+		node, ok := nodes[nodeName]
 		if !ok {
 			return nil, helpers.ErrNodeNotFound
 		}
@@ -73,7 +75,7 @@ func CreateSteps(configs []*config.StepConfig, nodes map[string]ifaces.Node) ([]
 		switch c.Step.Type {
 		case "simulated":
 			steps = append(steps, &SimulatedStep{
-				BaseStep:  BaseStep{title: c.Name, nodeName: c.Node},
+				BaseStep:  BaseStep{title: c.Name, nodeName: nodeName},
 				sleepTime: c.Step.Options["time"].(int),
 			})
 		case "execute":
@@ -94,7 +96,7 @@ func CreateSteps(configs []*config.StepConfig, nodes map[string]ifaces.Node) ([]
 				return nil, helpers.ErrInvalidCommandType
 			}
 			steps = append(steps, &ExecuteStep{
-				BaseStep: BaseStep{title: c.Name, nodeName: c.Node},
+				BaseStep: BaseStep{title: c.Name, nodeName: nodeName},
 				node:     node,
 				commands: commands,
 			})
@@ -113,7 +115,7 @@ func CreateSteps(configs []*config.StepConfig, nodes map[string]ifaces.Node) ([]
 			}
 
 			steps = append(steps, &AptStep{
-				BaseStep: BaseStep{title: c.Name, nodeName: c.Node},
+				BaseStep: BaseStep{title: c.Name, nodeName: nodeName},
 				node:     node,
 				packages: packages,
 			})
@@ -145,6 +147,9 @@ func CreateSteps(configs []*config.StepConfig, nodes map[string]ifaces.Node) ([]
 
 // createFileCreateStep creates a FileCreateStep from configuration
 func createFileCreateStep(c *config.StepConfig, _ ifaces.Node) (*FileCreateStep, error) {
+	// After expansion, each config has exactly one node
+	nodeName := c.Node[0]
+	
 	filePath, _ := c.Step.Options["path"].(string)
 	if filePath == "" {
 		return nil, helpers.ErrMissingFilePath
@@ -160,7 +165,7 @@ func createFileCreateStep(c *config.StepConfig, _ ifaces.Node) (*FileCreateStep,
 	}
 
 	return &FileCreateStep{
-		BaseStep:  BaseStep{title: c.Name, nodeName: c.Node},
+		BaseStep:  BaseStep{title: c.Name, nodeName: nodeName},
 		filePath:  filePath,
 		contents:  contents,
 		overwrite: overwrite,
@@ -171,6 +176,9 @@ func createFileCreateStep(c *config.StepConfig, _ ifaces.Node) (*FileCreateStep,
 
 // createFileDeleteStep creates a FileDeleteStep from configuration
 func createFileDeleteStep(c *config.StepConfig, _ ifaces.Node) (*FileDeleteStep, error) {
+	// After expansion, each config has exactly one node
+	nodeName := c.Node[0]
+	
 	filePath, _ := c.Step.Options["path"].(string)
 	if filePath == "" {
 		return nil, helpers.ErrMissingFilePath
@@ -179,7 +187,7 @@ func createFileDeleteStep(c *config.StepConfig, _ ifaces.Node) (*FileDeleteStep,
 	ignoreErrors, _ := c.Step.Options["ignore_errors"].(bool)
 
 	return &FileDeleteStep{
-		BaseStep:     BaseStep{title: c.Name, nodeName: c.Node},
+		BaseStep:     BaseStep{title: c.Name, nodeName: nodeName},
 		filePath:     filePath,
 		ignoreErrors: ignoreErrors,
 	}, nil
@@ -187,6 +195,9 @@ func createFileDeleteStep(c *config.StepConfig, _ ifaces.Node) (*FileDeleteStep,
 
 // createFileEditStep creates a FileEditStep from configuration
 func createFileEditStep(c *config.StepConfig, _ ifaces.Node) (*FileEditStep, error) {
+	// After expansion, each config has exactly one node
+	nodeName := c.Node[0]
+	
 	filePath, _ := c.Step.Options["path"].(string)
 	if filePath == "" {
 		return nil, helpers.ErrMissingFilePath
@@ -248,7 +259,7 @@ func createFileEditStep(c *config.StepConfig, _ ifaces.Node) (*FileEditStep, err
 	}
 
 	return &FileEditStep{
-		BaseStep:    BaseStep{title: c.Name, nodeName: c.Node},
+		BaseStep:    BaseStep{title: c.Name, nodeName: nodeName},
 		filePath:    filePath,
 		operation:   operation,
 		position:    position,
