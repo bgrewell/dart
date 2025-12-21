@@ -8,7 +8,7 @@ require (
 	github.com/bgrewell/go-execute/v2 v2.0.0-20250315155905-f3774428d423
 	github.com/bgrewell/usage v0.0.0-20240520234822-8edfa3622b16
 	github.com/canonical/lxd v0.0.0-20250210151822-7f1cf4eddcaa
-	github.com/docker/docker v27.0.0+incompatible
+	github.com/docker/docker v28.0.0+incompatible
 	github.com/fatih/color v1.16.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.10.0
