@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  security-events: write
 
 jobs:
   trivy-scan:
@@ -27,15 +28,21 @@ jobs:
           go-version-file: 'go.mod'
       
       - name: Run Trivy vulnerability scanner in repo mode
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: 'fs'
           scan-ref: '.'
           format: 'sarif'
           output: 'trivy-results.sarif'
       
+      - name: Upload SARIF to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+      
       - name: Run Trivy vulnerability scanner for JSON report
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: 'fs'
           scan-ref: '.'
@@ -43,7 +50,7 @@ jobs:
           output: 'trivy-results.json'
       
       - name: Run Trivy vulnerability scanner for human-readable report
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: 'fs'
           scan-ref: '.'
@@ -51,7 +58,7 @@ jobs:
           output: 'trivy-results.txt'
       
       - name: Generate SBOM with Trivy
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: 'fs'
           scan-ref: '.'
@@ -59,7 +66,7 @@ jobs:
           output: 'sbom.json'
       
       - name: Generate SBOM in SPDX format
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: 'fs'
           scan-ref: '.'
