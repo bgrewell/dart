@@ -22,6 +22,7 @@ import (
 	"github.com/bgrewell/dart/internal/helpers"
 	"github.com/bgrewell/dart/internal/lxc"
 	"github.com/bgrewell/dart/internal/lxd"
+	"github.com/bgrewell/dart/internal/platform"
 	"github.com/bgrewell/dart/pkg/ifaces"
 	lxdclient "github.com/canonical/lxd/client"
 	"github.com/canonical/lxd/shared/api"
@@ -82,6 +83,25 @@ func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err err
 	}
 	if nodeopts.Project == "" {
 		nodeopts.Project = lxd.DefaultProject
+	}
+
+	// Detect runtime for local connections (needed for image translation)
+	var detectedRuntime platform.Runtime = platform.RuntimeLXD
+	if nodeopts.RemoteAddr == "" && nodeopts.Socket == "" {
+		// Auto-detect LXD vs Incus
+		result, err := platform.DetectRuntime()
+		if err != nil {
+			return nil, fmt.Errorf("failed to detect container runtime: %w", err)
+		}
+		nodeopts.Socket = result.SocketPath
+		detectedRuntime = result.Runtime
+	} else if nodeopts.Socket == "/var/lib/incus/unix.socket" {
+		detectedRuntime = platform.RuntimeIncus
+	}
+
+	// Translate image name for Incus if needed (before parsing remote:alias)
+	if detectedRuntime == platform.RuntimeIncus && strings.Contains(nodeopts.Image, ":") {
+		nodeopts.Image = platform.TranslateImage(nodeopts.Image, detectedRuntime)
 	}
 
 	// If image contains a name:alias, split it and configure the server and protocol
@@ -221,6 +241,12 @@ func NewLxdNodeWithWrapper(wrapper *lxd.Wrapper, name string, opts ifaces.NodeOp
 	}
 	if nodeopts.Project == "" {
 		nodeopts.Project = lxd.DefaultProject
+	}
+
+	// Translate image name for Incus if needed (before parsing remote:alias)
+	wrapperRuntime := wrapper.GetRuntime()
+	if wrapperRuntime == platform.RuntimeIncus && strings.Contains(nodeopts.Image, ":") {
+		nodeopts.Image = platform.TranslateImage(nodeopts.Image, wrapperRuntime)
 	}
 
 	// If image contains a name:alias, split it and configure the server and protocol

@@ -202,6 +202,38 @@ nodes:
 
 See `examples/lxd/lxd-remote.yaml` for a complete example.
 
+### LXD/Incus Auto-Detection
+
+DART automatically detects whether the host system has LXD or Incus installed and configures the appropriate socket path. This allows test configurations to be portable across systems without modification.
+
+**Detection Priority:**
+1. `/var/lib/incus/unix.socket` (Incus)
+2. `/var/snap/lxd/common/lxd/unix.socket` (LXD snap)
+3. `/var/lib/lxd/unix.socket` (LXD native)
+
+**Image Name Translation:**
+
+When Incus is detected, DART automatically translates LXD-style image references:
+- `ubuntu:24.04` becomes `images:ubuntu/24.04`
+- `images:debian/12` remains unchanged
+
+**Limitations:**
+
+This auto-detection provides basic compatibility but has limitations. For production use or complex scenarios, we recommend configuring your test definitions explicitly for your target virtualization platform:
+
+```yaml
+# Explicit socket configuration (recommended for production)
+lxd:
+  socket: /var/lib/incus/unix.socket
+
+nodes:
+  - name: test-container
+    type: lxd
+    options:
+      image: images:ubuntu/24.04  # Use Incus-native format
+      instance_type: container
+```
+
 ### LXD Project Support
 
 LXD projects provide resource isolation and organization within LXD. DART supports creating and managing LXD projects, automatically copying the default profile, and organizing instances, networks, and profiles within projects.

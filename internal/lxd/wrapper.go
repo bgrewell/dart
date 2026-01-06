@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"github.com/bgrewell/dart/internal/config"
+	"github.com/bgrewell/dart/internal/platform"
 	"github.com/bgrewell/dart/pkg/ifaces"
 	lxd "github.com/canonical/lxd/client"
 	"github.com/canonical/lxd/shared/api"
@@ -42,13 +43,30 @@ func NewWrapper(cfg *config.LxdConfig) (*Wrapper, error) {
 		instanceNamesToId: make(map[string]string),
 	}
 
-	// Connect to the LXD server using socket from config if specified
+	// Determine socket path: explicit config takes precedence, otherwise auto-detect
 	var opts *ConnectionOptions
 	if cfg != nil && cfg.Socket != "" {
 		opts = &ConnectionOptions{
 			UnixSocket: cfg.Socket,
 		}
+		// Infer runtime from explicit socket path
+		if cfg.Socket == "/var/lib/incus/unix.socket" {
+			w.runtime = platform.RuntimeIncus
+		} else {
+			w.runtime = platform.RuntimeLXD
+		}
+	} else {
+		// Auto-detect LXD vs Incus
+		result, err := platform.DetectRuntime()
+		if err != nil {
+			return nil, fmt.Errorf("failed to detect container runtime: %w", err)
+		}
+		opts = &ConnectionOptions{
+			UnixSocket: result.SocketPath,
+		}
+		w.runtime = result.Runtime
 	}
+
 	if err := w.Connect(opts); err != nil {
 		return nil, err
 	}
@@ -79,6 +97,7 @@ type Wrapper struct {
 	networkNamesToId  map[string]string
 	instanceNamesToId map[string]string
 	projectName       string
+	runtime           platform.Runtime
 }
 
 // Connect establishes a connection to the LXD server
@@ -129,6 +148,11 @@ func (w *Wrapper) Name() string {
 // GetServer returns the underlying LXD instance server
 func (w *Wrapper) GetServer() lxd.InstanceServer {
 	return w.server
+}
+
+// GetRuntime returns the detected container runtime (LXD or Incus)
+func (w *Wrapper) GetRuntime() platform.Runtime {
+	return w.runtime
 }
 
 // Setup configures the LXD wrapper by creating networks and profiles
