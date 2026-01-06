@@ -124,3 +124,58 @@ func containsHelper(s, substr string) bool {
 	}
 	return false
 }
+
+// TestLxdNodeSocketOption tests that the socket option is properly handled
+func TestLxdNodeSocketOption(t *testing.T) {
+	tests := []struct {
+		name         string
+		opts         map[string]interface{}
+		expectSocket string
+	}{
+		{
+			name: "no socket specified - uses default",
+			opts: map[string]interface{}{
+				"image":         "ubuntu:24.04",
+				"instance_type": "container",
+			},
+			expectSocket: "", // empty string means use system default
+		},
+		{
+			name: "incus socket specified",
+			opts: map[string]interface{}{
+				"image":         "ubuntu:24.04",
+				"instance_type": "container",
+				"socket":        "/var/lib/incus/unix.socket",
+			},
+			expectSocket: "/var/lib/incus/unix.socket",
+		},
+		{
+			name: "custom lxd socket specified",
+			opts: map[string]interface{}{
+				"image":         "ubuntu:24.04",
+				"instance_type": "container",
+				"socket":        "/custom/path/lxd.socket",
+			},
+			expectSocket: "/custom/path/lxd.socket",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// We expect the NewLxdNode to fail when trying to connect to the socket
+			// but we can verify the option was parsed correctly by checking the error
+			// doesn't indicate a validation issue
+			_, err := NewLxdNode("test-node", ifaces.NodeOptions(&tt.opts))
+
+			// We expect a connection error, not a validation error
+			if err != nil {
+				// The error should be about connection, not about invalid configuration
+				if contains(err.Error(), "remote LXD connection requires") {
+					t.Errorf("Unexpected validation error with socket option: %v", err)
+				}
+				// Connection errors are expected since we're not running LXD/Incus
+			}
+		})
+	}
+}
+

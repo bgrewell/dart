@@ -42,8 +42,14 @@ func NewWrapper(cfg *config.LxdConfig) (*Wrapper, error) {
 		instanceNamesToId: make(map[string]string),
 	}
 
-	// Connect to the LXD server
-	if err := w.Connect(nil); err != nil {
+	// Connect to the LXD server using socket from config if specified
+	var opts *ConnectionOptions
+	if cfg != nil && cfg.Socket != "" {
+		opts = &ConnectionOptions{
+			UnixSocket: cfg.Socket,
+		}
+	}
+	if err := w.Connect(opts); err != nil {
 		return nil, err
 	}
 

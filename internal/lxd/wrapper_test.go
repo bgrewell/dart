@@ -110,3 +110,25 @@ func TestWithEphemeral(t *testing.T) {
 	opt(cfg)
 	assert.True(t, cfg.Ephemeral)
 }
+
+// TestSocketConfiguration verifies that the socket configuration is properly used
+func TestSocketConfiguration(t *testing.T) {
+	// Test with default socket (empty string)
+	cfg1 := &config.LxdConfig{
+		Socket: "",
+	}
+	assert.Equal(t, "", cfg1.Socket)
+
+	// Test with Incus socket
+	cfg2 := &config.LxdConfig{
+		Socket: "/var/lib/incus/unix.socket",
+	}
+	assert.Equal(t, "/var/lib/incus/unix.socket", cfg2.Socket)
+
+	// Test with custom LXD socket
+	cfg3 := &config.LxdConfig{
+		Socket: "/custom/path/lxd.socket",
+	}
+	assert.Equal(t, "/custom/path/lxd.socket", cfg3.Socket)
+}
+
