@@ -62,7 +62,7 @@ type DockerConfig struct {
 
 // LxdConfig is the configuration for LXD
 type LxdConfig struct {
-	Socket   string              `json:"socket" yaml:"socket"`       // Unix socket path (default: "" for system default, can be set to Incus socket like "/var/lib/incus/unix.socket")
+	Socket   string              `json:"socket" yaml:"socket"`       // Unix socket path for local connections
 	Project  *LxdProjectConfig   `json:"project" yaml:"project"`
 	Networks []*LxdNetworkConfig `json:"networks" yaml:"networks"`
 	Profiles []*LxdProfileConfig `json:"profiles" yaml:"profiles"`

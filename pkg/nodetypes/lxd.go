@@ -44,7 +44,7 @@ type LxdNodeOpts struct {
 	ExecOptions  map[string]interface{} `yaml:"exec_opts,omitempty" json:"exec_opts"`
 	Networks     []LxdNetworkOpts       `yaml:"networks,omitempty" json:"networks"`
 	// Socket path for local connections (supports both LXD and Incus)
-	Socket       string `yaml:"socket,omitempty" json:"socket"`                 // Unix socket path (default: "" for LXD default, can be set to Incus socket like "/var/lib/incus/unix.socket")
+	Socket       string `yaml:"socket,omitempty" json:"socket"`
 	// Remote connection options (for connecting to remote LXD servers)
 	RemoteAddr   string `yaml:"remote_addr,omitempty" json:"remote_addr"`       // HTTPS address for remote LXD server (e.g., "https://10.0.0.1:8443")
 	ClientCert   string `yaml:"client_cert,omitempty" json:"client_cert"`       // Path to client certificate file
