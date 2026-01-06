@@ -43,6 +43,8 @@ type LxdNodeOpts struct {
 	Profiles     []string               `yaml:"profiles,omitempty" json:"profiles"`
 	ExecOptions  map[string]interface{} `yaml:"exec_opts,omitempty" json:"exec_opts"`
 	Networks     []LxdNetworkOpts       `yaml:"networks,omitempty" json:"networks"`
+	// Socket path for local connections (supports both LXD and Incus)
+	Socket       string `yaml:"socket,omitempty" json:"socket"`                 // Unix socket path (default: "" for LXD default, can be set to Incus socket like "/var/lib/incus/unix.socket")
 	// Remote connection options (for connecting to remote LXD servers)
 	RemoteAddr   string `yaml:"remote_addr,omitempty" json:"remote_addr"`       // HTTPS address for remote LXD server (e.g., "https://10.0.0.1:8443")
 	ClientCert   string `yaml:"client_cert,omitempty" json:"client_cert"`       // Path to client certificate file
@@ -169,7 +171,9 @@ func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err err
 		}
 	} else {
 		// Connect to local LXD server using Unix socket
-		client, err = lxdclient.ConnectLXDUnix("", nil)
+		// Use the specified socket path, or empty string for system default
+		socketPath := nodeopts.Socket
+		client, err = lxdclient.ConnectLXDUnix(socketPath, nil)
 		if err != nil {
 			return nil, err
 		}

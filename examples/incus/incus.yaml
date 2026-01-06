@@ -1,0 +1,143 @@
+---
+# Incus Container Test Suite Example
+# This example demonstrates how to use Incus containers as test nodes.
+# Incus is a fork of LXD and uses the same API, so the LXD node type can be used
+# with Incus by simply specifying the Incus socket path.
+# 
+# Prerequisites:
+#   - Incus must be installed and running on the host
+#   - The user must have access to the Incus socket (usually via 'incus-admin' group)
+#   - Run 'incus admin init' if you haven't already to configure Incus
+
+suite: Incus Test Suite
+
+# Optional: Define Incus resources that will be managed by the test suite
+# Networks and profiles defined here will be created during setup and
+# removed during teardown
+# 
+# NOTE: The socket field specifies the Unix socket path for Incus.
+# The default Incus socket is at /var/lib/incus/unix.socket
+lxd:
+  # Specify the Incus socket path (this is what makes it use Incus instead of LXD)
+  socket: /var/lib/incus/unix.socket
+  
+  # Define networks for the test suite (optional)
+  networks:
+    - name: test-network
+      type: bridge
+      subnet: 10.100.0.0/24
+      gateway: 10.100.0.1
+  
+  # Define custom profiles (optional)
+  profiles:
+    - name: test-profile
+      description: Profile for test containers
+      config:
+        limits.cpu: "2"
+        limits.memory: "2GB"
+
+# Define the nodes that will be used in the test suite
+nodes:
+  # Basic Incus container node
+  - name: incus-container
+    type: lxd  # Use 'lxd' type - it works with both LXD and Incus
+    options:
+      # Image format: remote:alias (e.g., ubuntu:24.04, images:debian/12)
+      # Common remotes: ubuntu, images
+      image: ubuntu:24.04
+      
+      # Instance type: "container" (default) or "virtual-machine"
+      instance_type: container
+      
+      # Override the socket at the node level if needed
+      # socket: /var/lib/incus/unix.socket
+      
+      # Profiles to apply (optional)
+      # profiles:
+      #   - default
+      #   - test-profile
+      
+      # Execution options
+      exec_opts:
+        shell: /bin/bash
+      
+      # Network configuration (optional)
+      # networks:
+      #   - name: test-network
+      #     ip: 10.100.0.10
+
+  # Second container for multi-node tests
+  - name: incus-client
+    type: lxd
+    options:
+      image: ubuntu:24.04
+      instance_type: container
+      exec_opts:
+        shell: /bin/bash
+
+# Setup steps executed before tests
+setup:
+  - name: Update package lists
+    node: incus-container
+    step:
+      type: execute
+      options:
+        command: apt-get update -qq
+        timeout: 120
+
+  - name: Install test dependencies
+    node: incus-container
+    step:
+      type: simulated
+      options:
+        time: 2
+        message: Installing test dependencies
+
+# Tests to execute
+tests:
+  # Basic command execution test
+  - name: Echo Test
+    node: incus-container
+    type: execute
+    options:
+      command: echo "Hello from Incus container"
+      evaluate:
+        match: "Hello from Incus container"
+        exit_code: 0
+
+  # Test OS information
+  - name: Check OS Release
+    node: incus-container
+    type: execute
+    options:
+      command: cat /etc/os-release | grep -i ubuntu
+      evaluate:
+        exit_code: 0
+
+  # Test network connectivity between containers
+  - name: Check Network Stack
+    node: incus-client
+    type: execute
+    options:
+      command: ip addr show
+      evaluate:
+        exit_code: 0
+
+  # Test file operations
+  - name: File Write Test
+    node: incus-container
+    type: execute
+    options:
+      command: echo "test content" > /tmp/test.txt && cat /tmp/test.txt
+      evaluate:
+        match: "test content"
+        exit_code: 0
+
+# Teardown steps (optional) - containers are automatically stopped and deleted
+teardown:
+  - name: Cleanup temp files
+    node: incus-container
+    step:
+      type: execute
+      options:
+        command: rm -f /tmp/test.txt
