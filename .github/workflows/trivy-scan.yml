@@ -59,7 +59,8 @@ jobs:
       
       - name: Publish Trivy Output to Summary
         run: |
-          if [[ -s trivy-results.txt ]]; then
+          set -euo pipefail
+          if [[ -f trivy-results.txt && -s trivy-results.txt ]]; then
             {
               echo "## 🔍 Trivy Vulnerability Scan Results"
               echo ""
