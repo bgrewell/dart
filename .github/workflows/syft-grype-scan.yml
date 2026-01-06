@@ -49,7 +49,7 @@ jobs:
       
       - name: Generate SBOM with Syft (Human-readable)
         run: |
-          syft dir:. -o table > SBOM.txt
+          syft dir:. -o table 2>/dev/null > SBOM.txt
       
       # Scan for vulnerabilities using Grype
       - name: Run Grype vulnerability scanner (SARIF)
@@ -68,7 +68,7 @@ jobs:
       
       - name: Run Grype vulnerability scanner (Human-readable VEX)
         run: |
-          grype sbom:sbom-cyclonedx.json -o table > VEX.txt
+          grype sbom:sbom-cyclonedx.json -o table 2>/dev/null > VEX.txt
       
       - name: Publish Grype Output to Summary
         run: |

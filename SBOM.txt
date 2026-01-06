@@ -1,5 +1,3 @@
-[0000] ERROR failed to fetch latest version: Get "https://toolbox-data.anchore.io/syft/releases/latest/VERSION": dial tcp: lookup toolbox-data.anchore.io on 127.0.0.53:53: server misbehaving
-[0000]  WARN no explicit name and version provided for directory source, deriving artifact ID from the given path (which is not ideal)
 NAME                                                             VERSION                               TYPE           
 actions/checkout                                                 v4                                    github-action  
 actions/setup-go                                                 v5                                    github-action  
