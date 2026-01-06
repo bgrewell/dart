@@ -57,6 +57,25 @@ jobs:
           format: 'table'
           output: 'trivy-results.txt'
       
+      - name: Publish Trivy Output to Summary
+        run: |
+          if [[ -s trivy-results.txt ]]; then
+            {
+              echo "## 🔍 Trivy Vulnerability Scan Results"
+              echo ""
+              echo "<details><summary>Click to expand full report</summary>"
+              echo ""
+              echo '```'
+              cat trivy-results.txt
+              echo '```'
+              echo "</details>"
+            } >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## ✅ Trivy Vulnerability Scan Results" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "No vulnerabilities found." >> $GITHUB_STEP_SUMMARY
+          fi
+      
       - name: Generate SBOM with Trivy
         uses: aquasecurity/trivy-action@0.28.0
         with:
