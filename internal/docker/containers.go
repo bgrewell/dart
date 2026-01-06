@@ -122,7 +122,7 @@ func RunCommandInContainer(cli client.APIClient, containerID string, command str
 	ctx := context.Background()
 
 	// Create an exec instance
-	execConfig := types.ExecConfig{
+	execConfig := container.ExecOptions{
 		Cmd:          strslice.StrSlice{"sh", "-c", command},
 		AttachStdout: true,
 		AttachStderr: true,
@@ -134,7 +134,7 @@ func RunCommandInContainer(cli client.APIClient, containerID string, command str
 	execID := execIDResp.ID
 
 	// Start the exec instance
-	resp, err := cli.ContainerExecAttach(ctx, execID, types.ExecStartCheck{})
+	resp, err := cli.ContainerExecAttach(ctx, execID, container.ExecStartOptions{})
 	if err != nil {
 		return -1, nil, nil, fmt.Errorf("could not attach to exec instance: %v", err)
 	}
