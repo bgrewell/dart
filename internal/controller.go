@@ -2,10 +2,12 @@ package internal
 
 import (
 	"fmt"
+	"strings"
+	"strconv"
+
 	"github.com/bgrewell/dart/internal/eval"
 	"github.com/bgrewell/dart/internal/formatters"
 	"github.com/bgrewell/dart/pkg/ifaces"
-	"strconv"
 )
 
 func NewTestController(
@@ -50,6 +52,33 @@ type TestController struct {
 	pauseOnFail  bool
 	setupOnly    bool
 	teardownOnly bool
+}
+
+// handleSetupError handles errors during setup phases when pauseOnFail is enabled.
+// Returns (retry, continue) - if retry is true, the step should be retried.
+// If continue is true, skip the step and continue. If both are false, abort.
+func (tc *TestController) handleSetupError(stepName string, err error) (retry bool, cont bool) {
+	if !tc.pauseOnFail {
+		return false, false
+	}
+
+	fmt.Printf("\nSetup step '%s' failed. Options:\n", stepName)
+	fmt.Println("  [c]ontinue - Skip and continue with setup/tests")
+	fmt.Println("  [r]etry    - Retry this step")
+	fmt.Println("  [q]uit     - Cleanup and exit")
+	fmt.Print("Choice [c/r/q]: ")
+
+	var input string
+	fmt.Scanln(&input)
+
+	switch strings.ToLower(strings.TrimSpace(input)) {
+	case "c", "continue":
+		return false, true
+	case "r", "retry":
+		return true, false
+	default:
+		return false, false
+	}
 }
 
 func (tc *TestController) Run() error {
@@ -140,38 +169,72 @@ func (tc *TestController) Run() error {
 	// Setup all configured platforms (e.g., Docker, LXD) before setting up nodes
 	for _, platform := range tc.Platforms {
 		if platform.Configured() {
-			t := tc.formatter.StartTask(fmt.Sprintf("setting up %s environment", platform.Name()), "", "running")
-			err := platform.Setup()
-			if err != nil {
-				t.Error()
-				tc.formatter.PrintError(err)
-				return err
+			stepName := fmt.Sprintf("setting up %s environment", platform.Name())
+		platformRetry:
+			for {
+				t := tc.formatter.StartTask(stepName, "", "running")
+				err := platform.Setup()
+				if err != nil {
+					t.Error()
+					tc.formatter.PrintError(err)
+					retry, cont := tc.handleSetupError(stepName, err)
+					if retry {
+						continue platformRetry
+					}
+					if cont {
+						break platformRetry
+					}
+					return err
+				}
+				setupCompletedPlatforms = append(setupCompletedPlatforms, platform)
+				t.Complete()
+				break
 			}
-			setupCompletedPlatforms = append(setupCompletedPlatforms, platform)
-			t.Complete()
 		}
 	}
 
 	for name, node := range tc.Nodes {
-		c := tc.formatter.StartTask(nodeSetupMsg, name, "running")
-		err := node.Setup()
-		if err != nil {
-			c.Error()
-			tc.formatter.PrintError(err)
-			return err
+	nodeRetry:
+		for {
+			c := tc.formatter.StartTask(nodeSetupMsg, name, "running")
+			err := node.Setup()
+			if err != nil {
+				c.Error()
+				tc.formatter.PrintError(err)
+				retry, cont := tc.handleSetupError(fmt.Sprintf("node '%s' setup", name), err)
+				if retry {
+					continue nodeRetry
+				}
+				if cont {
+					break nodeRetry
+				}
+				return err
+			}
+			setupCompletedNodes = append(setupCompletedNodes, name)
+			c.Complete()
+			break
 		}
-		setupCompletedNodes = append(setupCompletedNodes, name)
-		c.Complete()
 	}
 
 	if len(tc.Setup) > 0 {
 		for _, step := range tc.Setup {
-			f := tc.formatter.StartTask(step.Title(), step.NodeName(), "running")
-			err := step.Run(f)
-			if err != nil {
-				f.Error()
-				tc.formatter.PrintError(err)
-				return err
+		stepRetry:
+			for {
+				f := tc.formatter.StartTask(step.Title(), step.NodeName(), "running")
+				err := step.Run(f)
+				if err != nil {
+					f.Error()
+					tc.formatter.PrintError(err)
+					retry, cont := tc.handleSetupError(step.Title(), err)
+					if retry {
+						continue stepRetry
+					}
+					if cont {
+						break stepRetry
+					}
+					return err
+				}
+				break
 			}
 		}
 		tc.formatter.PrintEmpty()
