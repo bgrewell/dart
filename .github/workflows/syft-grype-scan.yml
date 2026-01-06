@@ -1,0 +1,159 @@
+name: Syft SBOM and Grype Vulnerability Scan
+
+on:
+  # Manual trigger
+  workflow_dispatch:
+  # Trigger on tagged pushes
+  push:
+    tags:
+      - 'v*'
+      - '*.*.*'
+
+permissions:
+  contents: write
+  security-events: write
+
+jobs:
+  syft-grype-scan:
+    name: Syft SBOM & Grype Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+      
+      # Install Syft for SBOM generation
+      - name: Install Syft
+        uses: anchore/sbom-action/download-syft@v0.17.9
+      
+      # Install Grype for vulnerability scanning
+      - name: Install Grype
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin v0.104.3
+      
+      # Generate SBOM in multiple formats using Syft
+      - name: Generate SBOM with Syft (CycloneDX JSON)
+        run: |
+          syft dir:. -o cyclonedx-json=sbom-cyclonedx.json
+      
+      - name: Generate SBOM with Syft (SPDX JSON)
+        run: |
+          syft dir:. -o spdx-json=sbom-spdx.json
+      
+      - name: Generate SBOM with Syft (Human-readable)
+        run: |
+          # Generate SBOM table, suppressing only stderr for clean output file
+          syft dir:. -o table 2>/dev/null > SBOM.txt
+          if [ ! -s SBOM.txt ]; then
+            echo "Warning: SBOM.txt is empty" >&2
+            exit 1
+          fi
+      
+      # Scan for vulnerabilities using Grype
+      - name: Run Grype vulnerability scanner (SARIF)
+        run: |
+          grype sbom:sbom-cyclonedx.json -o sarif > grype-results.sarif
+      
+      - name: Upload SARIF to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'grype-results.sarif'
+      
+      - name: Run Grype vulnerability scanner (JSON)
+        run: |
+          grype sbom:sbom-cyclonedx.json -o json > grype-results.json
+      
+      - name: Run Grype vulnerability scanner (Human-readable VEX)
+        run: |
+          # Generate VEX table, suppressing only stderr for clean output file
+          grype sbom:sbom-cyclonedx.json -o table 2>/dev/null > VEX.txt || true
+          # It's okay if VEX.txt is empty (no vulnerabilities found)
+      
+      - name: Publish Grype Output to Summary
+        run: |
+          set -euo pipefail
+          if [[ -f VEX.txt && -s VEX.txt ]]; then
+            {
+              echo "## 🔍 Grype Vulnerability Scan Results"
+              echo ""
+              echo "<details><summary>Click to expand full report</summary>"
+              echo ""
+              echo '```'
+              cat VEX.txt
+              echo '```'
+              echo "</details>"
+            } >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## ✅ Grype Vulnerability Scan Results" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "No vulnerabilities found." >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - name: Publish SBOM to Summary
+        run: |
+          set -euo pipefail
+          if [[ -f SBOM.txt && -s SBOM.txt ]]; then
+            {
+              echo "## 📦 Software Bill of Materials (SBOM)"
+              echo ""
+              echo "<details><summary>Click to expand SBOM</summary>"
+              echo ""
+              echo '```'
+              head -n 100 SBOM.txt
+              echo '```'
+              echo "</details>"
+            } >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      # Commit SBOM.txt and VEX.txt to repository
+      - name: Commit SBOM and VEX files to repository
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add SBOM.txt VEX.txt
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update SBOM.txt and VEX.txt from Syft and Grype scan [skip ci]"
+            # Retry push up to 3 times in case of race conditions
+            for i in {1..3}; do
+              if git push; then
+                echo "Successfully pushed changes"
+                break
+              else
+                echo "Push failed, retrying in 5 seconds... (attempt $i/3)"
+                sleep 5
+                git pull --rebase || true
+              fi
+            done
+          fi
+      
+      - name: Upload Grype vulnerability scan results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: grype-vulnerability-reports
+          path: |
+            grype-results.sarif
+            grype-results.json
+            VEX.txt
+          retention-days: 90
+      
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sbom-reports
+          path: |
+            sbom-cyclonedx.json
+            sbom-spdx.json
+            SBOM.txt
+          retention-days: 90
