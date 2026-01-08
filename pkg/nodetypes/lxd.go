@@ -1,7 +1,6 @@
 package nodetypes
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -23,6 +22,7 @@ import (
 	"github.com/bgrewell/dart/internal/lxc"
 	"github.com/bgrewell/dart/internal/lxd"
 	"github.com/bgrewell/dart/internal/platform"
+	"github.com/bgrewell/dart/internal/stream"
 	"github.com/bgrewell/dart/pkg/ifaces"
 	lxdclient "github.com/canonical/lxd/client"
 	"github.com/canonical/lxd/shared/api"
@@ -403,10 +403,15 @@ func (d *LxdNode) Execute(command string, options ...execution.ExecutionOption) 
 		return nil, helpers.WrapError("lxd client not initialized")
 	}
 
-	var wout, werr bytes.Buffer
+	debugEnabled := execution.IsDebugMode()
+
+	// Create TeeWriters that optionally stream to console
+	stdoutWriter := stream.NewTeeWriter(stream.StreamStdout, d.name, debugEnabled)
+	stderrWriter := stream.NewTeeWriter(stream.StreamStderr, d.name, debugEnabled)
+
 	execArgs := lxdclient.InstanceExecArgs{
-		Stdout: &wout,
-		Stderr: &werr,
+		Stdout: stdoutWriter,
+		Stderr: stderrWriter,
 	}
 
 	// Execute the command using bash
@@ -434,8 +439,8 @@ func (d *LxdNode) Execute(command string, options ...execution.ExecutionOption) 
 	return &execution.ExecutionResult{
 		ExecutionId: helpers.GetRandomId(),
 		ExitCode:    int(exitCode),
-		Stdout:      &wout,
-		Stderr:      &werr,
+		Stdout:      stdoutWriter.Reader(),
+		Stderr:      stderrWriter.Reader(),
 	}, nil
 }
 

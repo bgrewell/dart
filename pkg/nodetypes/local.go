@@ -1,17 +1,20 @@
 package nodetypes
 
 import (
-	"github.com/bgrewell/dart/internal/execution"
-	"github.com/bgrewell/dart/internal/helpers"
-	"github.com/bgrewell/dart/pkg/ifaces"
-	"github.com/bgrewell/go-execute/v2"
+	"io"
 	"os/exec"
 	"syscall"
+
+	"github.com/bgrewell/dart/internal/execution"
+	"github.com/bgrewell/dart/internal/helpers"
+	"github.com/bgrewell/dart/internal/stream"
+	"github.com/bgrewell/dart/pkg/ifaces"
+	"github.com/bgrewell/go-execute/v2"
 )
 
 var _ ifaces.Node = &LocalNode{}
 
-func NewLocalNode(opts ifaces.NodeOptions) ifaces.Node {
+func NewLocalNode(name string, opts ifaces.NodeOptions) ifaces.Node {
 
 	var options []execution.ExecutionOption
 	if opts != nil {
@@ -19,11 +22,13 @@ func NewLocalNode(opts ifaces.NodeOptions) ifaces.Node {
 	}
 
 	return &LocalNode{
+		name:           name,
 		defaultOptions: options,
 	}
 }
 
 type LocalNode struct {
+	name           string
 	defaultOptions []execution.ExecutionOption
 }
 
@@ -62,11 +67,24 @@ func (l *LocalNode) Execute(command string, options ...execution.ExecutionOption
 		}
 	}
 
+	// Stream output to console if debug mode is enabled, while capturing for evaluation
+	var stdout, stderr io.Reader = ret.Stdout, ret.Stderr
+	if execution.IsDebugMode() {
+		stdout, err = stream.StreamCopy(ret.Stdout, stream.StreamStdout, l.name, true)
+		if err != nil {
+			return nil, err
+		}
+		stderr, err = stream.StreamCopy(ret.Stderr, stream.StreamStderr, l.name, true)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Return the result
 	return &execution.ExecutionResult{
 		ExecutionId: helpers.GetRandomId(),
 		ExitCode:    exitCode,
-		Stdout:      ret.Stdout,
-		Stderr:      ret.Stderr,
+		Stdout:      stdout,
+		Stderr:      stderr,
 	}, nil
 }

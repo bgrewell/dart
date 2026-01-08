@@ -1,10 +1,31 @@
 package execution
 
 import (
-	"github.com/bgrewell/go-execute/v2"
 	"io"
 	"os"
+	"sync"
+
+	"github.com/bgrewell/go-execute/v2"
 )
+
+var (
+	debugMu      sync.RWMutex
+	debugEnabled bool
+)
+
+// SetDebugMode enables or disables debug output streaming globally.
+func SetDebugMode(enabled bool) {
+	debugMu.Lock()
+	defer debugMu.Unlock()
+	debugEnabled = enabled
+}
+
+// IsDebugMode returns whether debug mode is enabled.
+func IsDebugMode() bool {
+	debugMu.RLock()
+	defer debugMu.RUnlock()
+	return debugEnabled
+}
 
 // ExecutionOption is a wrapper that allows for the passing of options to the Execute method
 type ExecutionOption struct {

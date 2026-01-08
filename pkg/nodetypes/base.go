@@ -34,7 +34,7 @@ func CreateNodesWithWrappers(configs []*config.NodeConfig, dockerWrapper *docker
 			if localNodeExists {
 				return nil, helpers.ErrLocalNodeAlreadyExists
 			}
-			node = NewLocalNode(&cfg.Options)
+			node = NewLocalNode(cfg.Name, &cfg.Options)
 			localNodeExists = true
 		case "docker":
 			node, err = NewDockerNode(dockerWrapper, cfg.Name, &cfg.Options)
