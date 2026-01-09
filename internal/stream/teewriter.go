@@ -3,7 +3,6 @@ package stream
 import (
 	"bytes"
 	"io"
-	"os"
 	"sync"
 
 	"github.com/fatih/color"
@@ -20,7 +19,6 @@ const (
 // TeeWriter writes to both a buffer (for evaluation) and console (for debug output).
 type TeeWriter struct {
 	buf        *bytes.Buffer
-	console    io.Writer
 	prefix     string
 	streamType StreamType
 	mu         sync.Mutex
@@ -29,22 +27,18 @@ type TeeWriter struct {
 
 // NewTeeWriter creates a writer that captures output and optionally streams to console.
 func NewTeeWriter(streamType StreamType, nodeName string, enabled bool) *TeeWriter {
-	var console io.Writer
 	var prefix string
 
 	if enabled {
 		if streamType == StreamStdout {
-			console = os.Stdout
 			prefix = color.HiGreenString("[%s:stdout] ", nodeName)
 		} else {
-			console = os.Stderr
 			prefix = color.HiRedString("[%s:stderr] ", nodeName)
 		}
 	}
 
 	return &TeeWriter{
 		buf:        &bytes.Buffer{},
-		console:    console,
 		prefix:     prefix,
 		streamType: streamType,
 		enabled:    enabled,
@@ -63,18 +57,26 @@ func (tw *TeeWriter) Write(p []byte) (n int, err error) {
 	}
 
 	// Stream to console if debug mode is enabled
-	if tw.enabled && tw.console != nil {
+	if tw.enabled {
+		coordinator := GetCoordinator()
+
 		// Prefix each line with stream identifier
 		lines := bytes.Split(p, []byte("\n"))
 		for i, line := range lines {
 			if len(line) > 0 {
-				tw.console.Write([]byte(tw.prefix))
-				tw.console.Write(line)
-				tw.console.Write([]byte("\n"))
+				debugLine := tw.prefix + string(line)
+				if tw.streamType == StreamStderr {
+					coordinator.WriteDebugLineStderr(debugLine)
+				} else {
+					coordinator.WriteDebugLine(debugLine)
+				}
 			} else if i < len(lines)-1 {
-				// Empty line in the middle, still print newline
-				tw.console.Write([]byte(tw.prefix))
-				tw.console.Write([]byte("\n"))
+				// Empty line in the middle, still print
+				if tw.streamType == StreamStderr {
+					coordinator.WriteDebugLineStderr(tw.prefix)
+				} else {
+					coordinator.WriteDebugLine(tw.prefix)
+				}
 			}
 		}
 	}
