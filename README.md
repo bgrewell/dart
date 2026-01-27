@@ -432,12 +432,28 @@ DART is actively developing additional task types to enhance environment managem
 
 ## Installation
 
-Installation methods vary depending on your environment. Generally, you can:
+Installation methods vary depending on your environment. You can:
 
-- Clone the DART repository.
-- Build from source or install via any officially supported package distribution.
+- **Install from a released version (recommended):**
+  ```bash
+  go install github.com/bgrewell/dart/cmd/dart@latest
+  # Or install a specific version:
+  go install github.com/bgrewell/dart/cmd/dart@v1.0.0
+  ```
 
-*(Please refer to the official documentation for detailed installation instructions.)*
+- **Clone and build from source:**
+  ```bash
+  git clone https://github.com/bgrewell/dart.git
+  cd dart
+  go build -o dart ./cmd/dart
+  ```
+
+Each release includes:
+- Software Bill of Materials (SBOM) in multiple formats (CycloneDX, SPDX)
+- Vulnerability Scan (VEX) results from Grype security scanning
+- Full release notes
+
+*(Please refer to the [Releases page](https://github.com/bgrewell/dart/releases) for available versions and security information.)*
 
 ---
 

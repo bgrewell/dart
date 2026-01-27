@@ -1,4 +1,4 @@
-name: Syft SBOM and Grype Vulnerability Scan
+name: Release with SBOM and VEX
 
 on:
   # Manual trigger
@@ -14,8 +14,8 @@ permissions:
   security-events: write
 
 jobs:
-  syft-grype-scan:
-    name: Syft SBOM & Grype Security Scan
+  build-and-release:
+    name: Build Release with SBOM & VEX
     runs-on: ubuntu-latest
     
     steps:
@@ -157,3 +157,19 @@ jobs:
             sbom-spdx.json
             SBOM.txt
           retention-days: 90
+      
+      # Create GitHub Release and attach SBOM and VEX artifacts
+      - name: Create GitHub Release with SBOM and VEX
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            sbom-cyclonedx.json
+            sbom-spdx.json
+            SBOM.txt
+            grype-results.sarif
+            grype-results.json
+            VEX.txt
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
