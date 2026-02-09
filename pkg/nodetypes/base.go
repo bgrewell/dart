@@ -1,9 +1,10 @@
 package nodetypes
 
 import (
+	"fmt"
+
 	"github.com/bgrewell/dart/internal/config"
 	"github.com/bgrewell/dart/internal/docker"
-	"github.com/bgrewell/dart/internal/helpers"
 	"github.com/bgrewell/dart/internal/lxd"
 	"github.com/bgrewell/dart/pkg/ifaces"
 )
@@ -23,7 +24,10 @@ func CreateNodesWithWrappers(configs []*config.NodeConfig, dockerWrapper *docker
 
 	for _, cfg := range configs {
 		if _, exists := nodes[cfg.Name]; exists {
-			return nil, helpers.ErrNodeAlreadyExists
+			return nil, &config.ConfigError{
+				Message:  fmt.Sprintf("duplicate node name %q", cfg.Name),
+				Location: cfg.Loc,
+			}
 		}
 
 		var node ifaces.Node
@@ -32,7 +36,10 @@ func CreateNodesWithWrappers(configs []*config.NodeConfig, dockerWrapper *docker
 		switch cfg.Type {
 		case "local":
 			if localNodeExists {
-				return nil, helpers.ErrLocalNodeAlreadyExists
+				return nil, &config.ConfigError{
+					Message:  fmt.Sprintf("only one local node allowed; %q is a duplicate", cfg.Name),
+					Location: cfg.Loc,
+				}
 			}
 			node = NewLocalNode(&cfg.Options)
 			localNodeExists = true
@@ -61,7 +68,10 @@ func CreateNodesWithWrappers(configs []*config.NodeConfig, dockerWrapper *docker
 				node, err = NewLxdNode(cfg.Name, &opts)
 			}
 		default:
-			return nil, helpers.ErrUnknownNodeType
+			return nil, &config.ConfigError{
+				Message:  fmt.Sprintf("unknown node type %q", cfg.Type),
+				Location: cfg.TypeLoc,
+			}
 		}
 
 		if err != nil {

@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
+
 	"github.com/bgrewell/dart/internal"
 	"github.com/bgrewell/dart/internal/config"
 	"github.com/bgrewell/dart/internal/docker"
@@ -14,9 +17,9 @@ import (
 	"github.com/bgrewell/dart/pkg/steptypes"
 	"github.com/bgrewell/dart/pkg/testtypes"
 	"github.com/bgrewell/usage"
+	"go.uber.org/dig"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
-	"os"
 )
 
 type CmdlineFlags struct {
@@ -241,6 +244,12 @@ func main() {
 	)
 
 	if err := app.Start(ctx); err != nil {
+		rootErr := dig.RootCause(err)
+		var cfgErr *config.ConfigError
+		if errors.As(rootErr, &cfgErr) {
+			fmt.Fprint(os.Stderr, config.RenderConfigError(cfgErr))
+			os.Exit(1)
+		}
 		log.Fatalf("Failed to start: %v", err)
 	}
 
