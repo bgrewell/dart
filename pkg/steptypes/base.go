@@ -1,11 +1,11 @@
 package steptypes
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/bgrewell/dart/internal/config"
 	"github.com/bgrewell/dart/internal/formatters"
-	"github.com/bgrewell/dart/internal/helpers"
 	"github.com/bgrewell/dart/pkg/ifaces"
 )
 
@@ -69,7 +69,10 @@ func CreateSteps(configs []*config.StepConfig, nodes map[string]ifaces.Node) ([]
 		nodeName := c.Node[0]
 		node, ok := nodes[nodeName]
 		if !ok {
-			return nil, helpers.ErrNodeNotFound
+			return nil, &config.ConfigError{
+				Message:  fmt.Sprintf("node %q not found (referenced in step %q)", nodeName, c.Name),
+				Location: c.NodeLoc,
+			}
 		}
 
 		switch c.Step.Type {
@@ -88,12 +91,18 @@ func CreateSteps(configs []*config.StepConfig, nodes map[string]ifaces.Node) ([]
 				for i, v := range cmd {
 					s, ok := v.(string)
 					if !ok {
-						return nil, helpers.ErrCommandNotString
+						return nil, &config.ConfigError{
+							Message:  fmt.Sprintf("command entry is not a string in step %q", c.Name),
+							Location: c.Loc,
+						}
 					}
 					commands[i] = s
 				}
 			default:
-				return nil, helpers.ErrInvalidCommandType
+				return nil, &config.ConfigError{
+					Message:  fmt.Sprintf("command must be a string or array of strings in step %q", c.Name),
+					Location: c.Loc,
+				}
 			}
 			steps = append(steps, &ExecuteStep{
 				BaseStep: BaseStep{title: c.Name, nodeName: nodeName},
@@ -103,14 +112,20 @@ func CreateSteps(configs []*config.StepConfig, nodes map[string]ifaces.Node) ([]
 		case "apt":
 			rawPackages, ok := c.Step.Options["packages"].([]interface{})
 			if !ok {
-				return nil, helpers.ErrPackagesNotArray
+				return nil, &config.ConfigError{
+					Message:  fmt.Sprintf("packages field is not an array in step %q", c.Name),
+					Location: c.Loc,
+				}
 			}
 
 			packages := make([]string, len(rawPackages))
 			for i, pkg := range rawPackages {
 				packages[i], ok = pkg.(string)
 				if !ok {
-					return nil, helpers.ErrPackageNotString
+					return nil, &config.ConfigError{
+						Message:  fmt.Sprintf("package entry is not a string in step %q", c.Name),
+						Location: c.Loc,
+					}
 				}
 			}
 
@@ -138,7 +153,10 @@ func CreateSteps(configs []*config.StepConfig, nodes map[string]ifaces.Node) ([]
 			}
 			steps = append(steps, step)
 		default:
-			return nil, helpers.ErrUnknownStepType
+			return nil, &config.ConfigError{
+				Message:  fmt.Sprintf("unknown step type %q", c.Step.Type),
+				Location: c.Step.TypeLoc,
+			}
 		}
 	}
 
@@ -152,7 +170,10 @@ func createFileCreateStep(c *config.StepConfig, _ ifaces.Node) (*FileCreateStep,
 	
 	filePath, _ := c.Step.Options["path"].(string)
 	if filePath == "" {
-		return nil, helpers.ErrMissingFilePath
+		return nil, &config.ConfigError{
+			Message:  fmt.Sprintf("file path is required in step %q", c.Name),
+			Location: c.Loc,
+		}
 	}
 
 	contents, _ := c.Step.Options["contents"].(string)
@@ -178,10 +199,13 @@ func createFileCreateStep(c *config.StepConfig, _ ifaces.Node) (*FileCreateStep,
 func createFileDeleteStep(c *config.StepConfig, _ ifaces.Node) (*FileDeleteStep, error) {
 	// After expansion, each config has exactly one node
 	nodeName := c.Node[0]
-	
+
 	filePath, _ := c.Step.Options["path"].(string)
 	if filePath == "" {
-		return nil, helpers.ErrMissingFilePath
+		return nil, &config.ConfigError{
+			Message:  fmt.Sprintf("file path is required in step %q", c.Name),
+			Location: c.Loc,
+		}
 	}
 
 	ignoreErrors, _ := c.Step.Options["ignore_errors"].(bool)
@@ -197,10 +221,13 @@ func createFileDeleteStep(c *config.StepConfig, _ ifaces.Node) (*FileDeleteStep,
 func createFileEditStep(c *config.StepConfig, _ ifaces.Node) (*FileEditStep, error) {
 	// After expansion, each config has exactly one node
 	nodeName := c.Node[0]
-	
+
 	filePath, _ := c.Step.Options["path"].(string)
 	if filePath == "" {
-		return nil, helpers.ErrMissingFilePath
+		return nil, &config.ConfigError{
+			Message:  fmt.Sprintf("file path is required in step %q", c.Name),
+			Location: c.Loc,
+		}
 	}
 
 	operationStr, _ := c.Step.Options["operation"].(string)
@@ -213,7 +240,10 @@ func createFileEditStep(c *config.StepConfig, _ ifaces.Node) (*FileEditStep, err
 	case "remove":
 		operation = EditRemove
 	default:
-		return nil, helpers.ErrInvalidEditOperation
+		return nil, &config.ConfigError{
+			Message:  fmt.Sprintf("invalid edit operation %q in step %q", operationStr, c.Name),
+			Location: c.Loc,
+		}
 	}
 
 	positionStr, _ := c.Step.Options["position"].(string)
@@ -226,7 +256,10 @@ func createFileEditStep(c *config.StepConfig, _ ifaces.Node) (*FileEditStep, err
 	case "":
 		position = InsertAfter // default
 	default:
-		return nil, helpers.ErrInvalidInsertPosition
+		return nil, &config.ConfigError{
+			Message:  fmt.Sprintf("invalid insert position %q in step %q", positionStr, c.Name),
+			Location: c.Loc,
+		}
 	}
 
 	matchTypeStr, _ := c.Step.Options["match_type"].(string)
@@ -241,7 +274,10 @@ func createFileEditStep(c *config.StepConfig, _ ifaces.Node) (*FileEditStep, err
 	case "":
 		matchType = MatchPlain // default
 	default:
-		return nil, helpers.ErrInvalidMatchType
+		return nil, &config.ConfigError{
+			Message:  fmt.Sprintf("invalid match type %q in step %q", matchTypeStr, c.Name),
+			Location: c.Loc,
+		}
 	}
 
 	match, _ := c.Step.Options["match"].(string)
@@ -255,7 +291,10 @@ func createFileEditStep(c *config.StepConfig, _ ifaces.Node) (*FileEditStep, err
 
 	// Validate required fields based on match type
 	if matchType != MatchLine && match == "" {
-		return nil, helpers.ErrMissingMatch
+		return nil, &config.ConfigError{
+			Message:  fmt.Sprintf("match pattern is required in step %q", c.Name),
+			Location: c.Loc,
+		}
 	}
 
 	return &FileEditStep{

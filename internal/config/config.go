@@ -71,15 +71,18 @@ type LxdConfig struct {
 
 // StepConfig is the configuration for a single setup/teardown step
 type StepConfig struct {
-	Name string        `json:"name" yaml:"name"`
-	Node NodeReference `json:"node" yaml:"node"`
-	Step StepDetails   `json:"step" yaml:"step"`
+	Name    string         `json:"name" yaml:"name"`
+	Node    NodeReference  `json:"node" yaml:"node"`
+	Step    StepDetails    `json:"step" yaml:"step"`
+	Loc     SourceLocation `json:"-" yaml:"-"`
+	NodeLoc SourceLocation `json:"-" yaml:"-"`
 }
 
 // StepDetails is the details of a single step
 type StepDetails struct {
 	Type    string                 `json:"type" yaml:"type"`
 	Options map[string]interface{} `json:"options" yaml:"options"`
+	TypeLoc SourceLocation         `json:"-" yaml:"-"`
 }
 
 // NodeConfig is the configuration for a single node
@@ -87,6 +90,8 @@ type NodeConfig struct {
 	Name    string                 `json:"name" yaml:"name"`
 	Type    string                 `json:"type" yaml:"type"`
 	Options map[string]interface{} `json:"options" yaml:"options"`
+	Loc     SourceLocation         `json:"-" yaml:"-"`
+	TypeLoc SourceLocation         `json:"-" yaml:"-"`
 }
 
 // TestConfig is the configuration for a single test
@@ -98,6 +103,9 @@ type TestConfig struct {
 	Teardown []string               `json:"teardown" yaml:"teardown"`
 	Type     string                 `json:"type" yaml:"type"`
 	Options  map[string]interface{} `json:"options" yaml:"options"`
+	Loc      SourceLocation         `json:"-" yaml:"-"`
+	NodeLoc  SourceLocation         `json:"-" yaml:"-"`
+	TypeLoc  SourceLocation         `json:"-" yaml:"-"`
 }
 
 // NetworkConfig is the configuration for a single network
@@ -161,17 +169,22 @@ type LxdProjectConfig struct {
 }
 
 func LoadConfiguration(cfgPath string) (config *Configuration, err error) {
-	data, err := os.ReadFile(cfgPath)
+	absPath, err := filepath.Abs(cfgPath)
+	if err != nil {
+		absPath = cfgPath
+	}
+
+	data, err := os.ReadFile(absPath)
 	if err != nil {
 		return nil, err
 	}
 
-	dir := path.Dir(cfgPath)
+	dir := path.Dir(absPath)
 
-	return ParseConfiguration(data, dir)
+	return ParseConfiguration(data, dir, absPath)
 }
 
-func ParseConfiguration(data []byte, location string) (config *Configuration, err error) {
+func ParseConfiguration(data []byte, location string, filePath ...string) (config *Configuration, err error) {
 	data, err = processLoadFromDirectives(data, location)
 	if err != nil {
 		return nil, err
@@ -181,6 +194,11 @@ func ParseConfiguration(data []byte, location string) (config *Configuration, er
 	err = yaml.Unmarshal(data, config)
 	if err != nil {
 		return nil, err
+	}
+
+	// Extract line numbers before expansion (indices match 1:1 with YAML sequences)
+	if len(filePath) > 0 && filePath[0] != "" {
+		extractLocations(data, filePath[0], config)
 	}
 
 	// Expand multi-node configurations
@@ -275,9 +293,11 @@ func expandStepConfigs(configs []*StepConfig) []*StepConfig {
 			for _, nodeName := range cfg.Node {
 				// Create a copy of the config
 				newCfg := &StepConfig{
-					Name: cfg.Name,
-					Node: NodeReference{nodeName},
-					Step: cfg.Step,
+					Name:    cfg.Name,
+					Node:    NodeReference{nodeName},
+					Step:    cfg.Step,
+					Loc:     cfg.Loc,
+					NodeLoc: cfg.NodeLoc,
 				}
 				expanded = append(expanded, newCfg)
 			}
@@ -305,6 +325,9 @@ func expandTestConfigs(configs []*TestConfig) []*TestConfig {
 					Teardown: cfg.Teardown,
 					Type:     cfg.Type,
 					Options:  cfg.Options,
+					Loc:      cfg.Loc,
+					NodeLoc:  cfg.NodeLoc,
+					TypeLoc:  cfg.TypeLoc,
 				}
 				expanded = append(expanded, newCfg)
 			}
