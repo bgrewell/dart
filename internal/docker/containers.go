@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"time"
 
+	"github.com/bgrewell/dart/internal/stream"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -13,7 +15,6 @@ import (
 	"github.com/docker/docker/api/types/strslice"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
-	"io"
 )
 
 // ContainerOptions is a function type that sets options for creating a container.
@@ -154,6 +155,48 @@ func RunCommandInContainer(cli client.APIClient, containerID string, command str
 	}
 
 	return inspectResp.ExitCode, &sout, &serr, nil
+}
+
+// RunCommandInContainerStreaming runs a command with optional real-time output streaming.
+func RunCommandInContainerStreaming(cli client.APIClient, containerID, containerName, command string, debugEnabled bool) (exitCode int, stdout, stderr io.Reader, err error) {
+	ctx := context.Background()
+
+	// Create an exec instance
+	execConfig := container.ExecOptions{
+		Cmd:          strslice.StrSlice{"sh", "-c", command},
+		AttachStdout: true,
+		AttachStderr: true,
+	}
+	execIDResp, err := cli.ContainerExecCreate(ctx, containerID, execConfig)
+	if err != nil {
+		return -1, nil, nil, fmt.Errorf("could not create exec instance: %v", err)
+	}
+	execID := execIDResp.ID
+
+	// Start the exec instance
+	resp, err := cli.ContainerExecAttach(ctx, execID, container.ExecStartOptions{})
+	if err != nil {
+		return -1, nil, nil, fmt.Errorf("could not attach to exec instance: %v", err)
+	}
+	defer resp.Close()
+
+	// Create TeeWriters for stdout and stderr
+	stdoutWriter := stream.NewTeeWriter(stream.StreamStdout, containerName, debugEnabled)
+	stderrWriter := stream.NewTeeWriter(stream.StreamStderr, containerName, debugEnabled)
+
+	// Use stdcopy to demultiplex the Docker stream
+	_, err = stdcopy.StdCopy(stdoutWriter, stderrWriter, resp.Reader)
+	if err != nil {
+		return -1, stdoutWriter.Reader(), stderrWriter.Reader(), fmt.Errorf("could not copy exec output: %v", err)
+	}
+
+	// Inspect the exec instance to get the exit code
+	inspectResp, err := cli.ContainerExecInspect(ctx, execID)
+	if err != nil {
+		return -1, stdoutWriter.Reader(), stderrWriter.Reader(), fmt.Errorf("could not inspect exec instance: %v", err)
+	}
+
+	return inspectResp.ExitCode, stdoutWriter.Reader(), stderrWriter.Reader(), nil
 }
 
 func ContainerLogs(ctx context.Context, cli client.APIClient, containerID string) (io.ReadCloser, error) {

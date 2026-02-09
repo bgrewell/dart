@@ -25,6 +25,7 @@ import (
 type CmdlineFlags struct {
 	ConfigFile   *string
 	Verbose      *bool
+	Debug        *bool
 	StopOnError  *bool
 	PauseOnError *bool
 	SetupOnly    *bool
@@ -154,6 +155,7 @@ func Controller(params ControllerParams) (ctrl *internal.TestController, err err
 		setup,
 		teardown,
 		*params.Flags.Verbose,
+		*params.Flags.Debug,
 		*params.Flags.StopOnError,
 		*params.Flags.PauseOnError,
 		*params.Flags.SetupOnly,
@@ -201,6 +203,7 @@ func main() {
 	cfgFlags := &CmdlineFlags{}
 	cfgFlags.ConfigFile = u.AddStringOption("c", "config", "config.yaml", "The path to the configuration file", "", nil)
 	cfgFlags.Verbose = u.AddBooleanOption("v", "verbose", false, "Enable verbose output", "", nil)
+	cfgFlags.Debug = u.AddBooleanOption("d", "debug", false, "Enable real-time streaming of command output", "", nil)
 	cfgFlags.PauseOnError = u.AddBooleanOption("p", "pause-on-error", false, "Pause on error", "", nil)
 	cfgFlags.StopOnError = u.AddBooleanOption("s", "stop-on-error", false, "Stop on error", "", nil)
 	cfgFlags.SetupOnly = u.AddBooleanOption("setup", "setup-only", false, "Only run the setup steps", "", nil)

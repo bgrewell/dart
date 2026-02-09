@@ -2,12 +2,14 @@ package formatters
 
 import (
 	"fmt"
-	"github.com/bgrewell/dart/internal/results"
-	"github.com/fatih/color"
-	"github.com/theckman/yacspin"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/bgrewell/dart/internal/results"
+	"github.com/bgrewell/dart/internal/stream"
+	"github.com/fatih/color"
+	"github.com/theckman/yacspin"
 )
 
 var _ Formatter = &StandardFormatter{}
@@ -166,6 +168,10 @@ func (sf *StandardFormatter) StartTask(task, nodeName, status string) TaskComple
 	for _, m := range messages {
 		m(message)
 	}
+
+	// Register spinner with coordinator for debug output coordination
+	stream.GetCoordinator().SetActiveSpinner(c.spinner)
+
 	return c
 }
 
@@ -199,6 +205,10 @@ func (sf *StandardFormatter) StartTest(id, name, nodeName string) TestCompleter 
 	for _, m := range messages {
 		m(message)
 	}
+
+	// Register spinner with coordinator for debug output coordination
+	stream.GetCoordinator().SetActiveSpinner(c.spinner)
+
 	return c
 }
 
@@ -212,17 +222,17 @@ func (s StandardTaskCompleter) Update(status string) {
 }
 
 func (s StandardTaskCompleter) Complete() {
-	//s.spinner.StopMessage(fmt.Sprintf("%s%s", s.Message, "done"))
+	stream.GetCoordinator().ClearActiveSpinner()
 	s.spinner.Stop()
 }
 
 func (s StandardTaskCompleter) Fail() {
-	//s.spinner.StopMessage(fmt.Sprintf("%s%s", s.Message, "failed"))
+	stream.GetCoordinator().ClearActiveSpinner()
 	s.spinner.StopFail()
 }
 
 func (s StandardTaskCompleter) Error() {
-	//s.spinner.StopMessage(fmt.Sprintf("%s%s", s.Message, "error"))
+	stream.GetCoordinator().ClearActiveSpinner()
 	s.spinner.StopFailCharacter("error")
 	s.spinner.StopFail()
 }
@@ -238,6 +248,7 @@ func (s StandardTestCompleter) Update(status string) {
 }
 
 func (s StandardTestCompleter) Complete(passed []bool) {
+	stream.GetCoordinator().ClearActiveSpinner()
 	if len(passed) == 0 {
 		s.spinner.StopColors("fgHiYellow")
 		s.spinner.StopCharacter("ran")
@@ -256,17 +267,17 @@ func (s StandardTestCompleter) Complete(passed []bool) {
 }
 
 func (s StandardTestCompleter) Passed() {
-	//s.spinner.StopMessage(fmt.Sprintf("%s %s%s", s.TestId, s.TestName, "passed"))
+	stream.GetCoordinator().ClearActiveSpinner()
 	s.spinner.Stop()
 }
 
 func (s StandardTestCompleter) Fail() {
-	//s.spinner.StopMessage(fmt.Sprintf("%s %s%s", s.TestId, s.TestName, "failed"))
+	stream.GetCoordinator().ClearActiveSpinner()
 	s.spinner.StopFail()
 }
 
 func (s StandardTestCompleter) Error() {
-	//s.spinner.StopMessage(fmt.Sprintf("%s %s%s", s.TestId, s.TestName, "error"))
+	stream.GetCoordinator().ClearActiveSpinner()
 	s.spinner.StopFailCharacter("error")
 	s.spinner.StopFail()
 }

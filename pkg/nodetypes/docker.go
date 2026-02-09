@@ -71,7 +71,7 @@ func (d *DockerNode) Teardown() error {
 }
 
 func (d *DockerNode) Execute(command string, options ...execution.ExecutionOption) (result *execution.ExecutionResult, err error) {
-	code, stdout, stderr, err := d.wrapper.ExecuteInContainer(d.name, command)
+	code, stdout, stderr, err := d.wrapper.ExecuteInContainerStreaming(d.name, command, execution.IsDebugMode())
 	if err != nil {
 		return nil, err
 	}

@@ -2,10 +2,11 @@ package internal
 
 import (
 	"fmt"
-	"strings"
 	"strconv"
+	"strings"
 
 	"github.com/bgrewell/dart/internal/eval"
+	"github.com/bgrewell/dart/internal/execution"
 	"github.com/bgrewell/dart/internal/formatters"
 	"github.com/bgrewell/dart/pkg/ifaces"
 )
@@ -18,11 +19,16 @@ func NewTestController(
 	setup []ifaces.Step,
 	teardown []ifaces.Step,
 	verbose bool,
+	debug bool,
 	stopOnFail bool,
 	pauseOnFail bool,
 	setupOnly bool,
 	teardownOnly bool,
 	formatter formatters.Formatter) *TestController {
+
+	// Set global debug mode for streaming output
+	execution.SetDebugMode(debug)
+
 	return &TestController{
 		Suite:        suite,
 		Nodes:        nodes,
@@ -32,6 +38,7 @@ func NewTestController(
 		Platforms:    platforms,
 		formatter:    formatter,
 		verbose:      verbose,
+		debug:        debug,
 		stopOnFail:   stopOnFail,
 		pauseOnFail:  pauseOnFail,
 		setupOnly:    setupOnly,
@@ -48,6 +55,7 @@ type TestController struct {
 	Platforms    []ifaces.PlatformManager
 	formatter    formatters.Formatter
 	verbose      bool
+	debug        bool
 	stopOnFail   bool
 	pauseOnFail  bool
 	setupOnly    bool
