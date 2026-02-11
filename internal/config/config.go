@@ -62,7 +62,7 @@ type DockerConfig struct {
 
 // LxdConfig is the configuration for LXD
 type LxdConfig struct {
-	Socket   string              `json:"socket" yaml:"socket"`       // Unix socket path for local connections
+	Socket   string              `json:"socket" yaml:"socket"` // Unix socket path for local connections
 	Project  *LxdProjectConfig   `json:"project" yaml:"project"`
 	Networks []*LxdNetworkConfig `json:"networks" yaml:"networks"`
 	Profiles []*LxdProfileConfig `json:"profiles" yaml:"profiles"`
@@ -139,10 +139,10 @@ type LxdNetworkConfig struct {
 
 // LxdProfileConfig is the configuration for an LXD profile
 type LxdProfileConfig struct {
-	Name        string                       `json:"name" yaml:"name"`
-	Description string                       `json:"description" yaml:"description"`
-	Config      map[string]string            `json:"config" yaml:"config"`
-	Devices     map[string]*LxdDeviceConfig  `json:"devices" yaml:"devices"`
+	Name        string                      `json:"name" yaml:"name"`
+	Description string                      `json:"description" yaml:"description"`
+	Config      map[string]string           `json:"config" yaml:"config"`
+	Devices     map[string]*LxdDeviceConfig `json:"devices" yaml:"devices"`
 }
 
 // LxdDeviceConfig is the configuration for an LXD device

@@ -131,7 +131,7 @@ func (cs *ComposeStack) ExecInService(service, command string) (exitCode int, st
 	// Read stdout and stderr to strings
 	stdoutBuf := new(strings.Builder)
 	stderrBuf := new(strings.Builder)
-	
+
 	if _, err := io.Copy(stdoutBuf, stdoutReader); err != nil {
 		return code, "", "", fmt.Errorf("could not read stdout: %v", err)
 	}

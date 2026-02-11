@@ -6,12 +6,12 @@ import (
 
 // MockPlatformManager is a mock implementation of PlatformManager for testing
 type MockPlatformManager struct {
-	configured    bool
-	setupCalled   bool
+	configured     bool
+	setupCalled    bool
 	teardownCalled bool
-	setupErr      error
-	teardownErr   error
-	name          string
+	setupErr       error
+	teardownErr    error
+	name           string
 }
 
 func (m *MockPlatformManager) Configured() bool {
@@ -63,7 +63,7 @@ func TestPlatformManagerInterface(t *testing.T) {
 
 	t.Run("setup and teardown", func(t *testing.T) {
 		pm := NewMockPlatformManager("docker", true)
-		
+
 		if err := pm.Setup(); err != nil {
 			t.Errorf("Setup() returned unexpected error: %v", err)
 		}

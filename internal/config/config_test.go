@@ -41,13 +41,13 @@ func TestNodeReference_UnmarshalYAML(t *testing.T) {
 			var config struct {
 				Node NodeReference `yaml:"node"`
 			}
-			
+
 			err := parseYAML([]byte(tt.yaml), &config)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("UnmarshalYAML() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			
+
 			if !tt.wantErr {
 				if len(config.Node) != len(tt.expected) {
 					t.Errorf("NodeReference length = %v, want %v", len(config.Node), len(tt.expected))
@@ -115,7 +115,7 @@ func TestExpandStepConfigs(t *testing.T) {
 			if len(result) != tt.expected {
 				t.Errorf("expandStepConfigs() got %v configs, want %v", len(result), tt.expected)
 			}
-			
+
 			// Verify each expanded config has exactly one node
 			for i, cfg := range result {
 				if len(cfg.Node) != 1 {
@@ -178,7 +178,7 @@ func TestExpandTestConfigs(t *testing.T) {
 			if len(result) != tt.expected {
 				t.Errorf("expandTestConfigs() got %v configs, want %v", len(result), tt.expected)
 			}
-			
+
 			// Verify each expanded config has exactly one node
 			for i, cfg := range result {
 				if len(cfg.Node) != 1 {
@@ -211,16 +211,16 @@ tests:
     options:
       command: echo test
 `
-	
+
 	config, err := ParseConfiguration([]byte(yamlData), ".")
 	if err != nil {
 		t.Fatalf("ParseConfiguration() error = %v", err)
 	}
-	
+
 	if len(config.Setup) != 1 {
 		t.Errorf("Setup should have 1 step, got %d", len(config.Setup))
 	}
-	
+
 	if len(config.Tests) != 1 {
 		t.Errorf("Tests should have 1 test, got %d", len(config.Tests))
 	}
