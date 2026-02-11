@@ -178,4 +178,3 @@ func TestLxdNodeSocketOption(t *testing.T) {
 		})
 	}
 }
-

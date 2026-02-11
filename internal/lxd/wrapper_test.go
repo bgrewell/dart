@@ -131,4 +131,3 @@ func TestSocketConfiguration(t *testing.T) {
 	}
 	assert.Equal(t, "/custom/path/lxd.socket", cfg3.Socket)
 }
-

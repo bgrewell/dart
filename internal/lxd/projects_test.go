@@ -10,7 +10,7 @@ func TestProjectConfigDefaults(t *testing.T) {
 	// when creating a project with minimal configuration
 
 	config := make(map[string]string)
-	
+
 	// Simulate the logic from CreateProject
 	if _, ok := config["features.images"]; !ok {
 		config["features.images"] = "true"
@@ -45,10 +45,10 @@ func TestProjectConfigCustomValues(t *testing.T) {
 	// This test validates that user-provided config values are not overwritten
 
 	config := map[string]string{
-		"features.images": "false",
+		"features.images":   "false",
 		"features.profiles": "false",
 	}
-	
+
 	// Simulate the logic from CreateProject
 	if _, ok := config["features.images"]; !ok {
 		config["features.images"] = "true"

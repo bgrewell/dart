@@ -45,16 +45,16 @@ type LxdNodeOpts struct {
 	ExecOptions  map[string]interface{} `yaml:"exec_opts,omitempty" json:"exec_opts"`
 	Networks     []LxdNetworkOpts       `yaml:"networks,omitempty" json:"networks"`
 	// Socket path for local connections (supports both LXD and Incus)
-	Socket       string `yaml:"socket,omitempty" json:"socket"`
+	Socket string `yaml:"socket,omitempty" json:"socket"`
 	// Remote connection options (for connecting to remote LXD servers)
-	RemoteAddr   string `yaml:"remote_addr,omitempty" json:"remote_addr"`       // HTTPS address for remote LXD server (e.g., "https://10.0.0.1:8443")
-	ClientCert   string `yaml:"client_cert,omitempty" json:"client_cert"`       // Path to client certificate file
-	ClientKey    string `yaml:"client_key,omitempty" json:"client_key"`         // Path to client key file
-	ServerCert   string `yaml:"server_cert,omitempty" json:"server_cert"`       // Path to server certificate file (optional, for custom CA)
-	TrustToken   string `yaml:"trust_token,omitempty" json:"trust_token"`       // One-time trust token from 'lxc config trust add' (modern authentication)
-	SkipVerify   bool   `yaml:"skip_verify,omitempty" json:"skip_verify"`       // Skip TLS verification (not recommended for production)
+	RemoteAddr string `yaml:"remote_addr,omitempty" json:"remote_addr"` // HTTPS address for remote LXD server (e.g., "https://10.0.0.1:8443")
+	ClientCert string `yaml:"client_cert,omitempty" json:"client_cert"` // Path to client certificate file
+	ClientKey  string `yaml:"client_key,omitempty" json:"client_key"`   // Path to client key file
+	ServerCert string `yaml:"server_cert,omitempty" json:"server_cert"` // Path to server certificate file (optional, for custom CA)
+	TrustToken string `yaml:"trust_token,omitempty" json:"trust_token"` // One-time trust token from 'lxc config trust add' (modern authentication)
+	SkipVerify bool   `yaml:"skip_verify,omitempty" json:"skip_verify"` // Skip TLS verification (not recommended for production)
 	// Project support
-	Project      string `yaml:"project,omitempty" json:"project"`               // LXD project to use (defaults to lxd.DefaultProject)
+	Project string `yaml:"project,omitempty" json:"project"` // LXD project to use (defaults to lxd.DefaultProject)
 }
 
 // NewLxdNode creates a new LXD node without using the wrapper
@@ -119,7 +119,7 @@ func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err err
 	var client lxdclient.InstanceServer
 	if nodeopts.RemoteAddr != "" {
 		// Remote LXD server connection
-		
+
 		// Check authentication method priority: trust_token > certificates > skip_verify
 		if nodeopts.TrustToken != "" {
 			// Use trust token authentication (modern approach)
@@ -128,13 +128,13 @@ func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err err
 			if err != nil {
 				return nil, fmt.Errorf("failed to generate temporary certificate for token auth: %w", err)
 			}
-			
+
 			// Connect with generated certificates (not yet trusted)
 			args := &lxdclient.ConnectionArgs{
 				TLSClientCert: certPEM,
 				TLSClientKey:  keyPEM,
 			}
-			
+
 			// For token-based authentication, we must skip verification initially since we're not yet
 			// in the trust store. However, if a server certificate is provided, we can validate against it.
 			if nodeopts.ServerCert != "" {
@@ -146,19 +146,19 @@ func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err err
 				// This is acceptable for token-based auth as the token itself provides authentication
 				args.InsecureSkipVerify = true
 			}
-			
+
 			client, err = lxdclient.ConnectLXD(nodeopts.RemoteAddr, args)
 			if err != nil {
 				return nil, fmt.Errorf("failed to connect to remote LXD server at %s for token auth: %w", nodeopts.RemoteAddr, err)
 			}
-			
+
 			// Authenticate using the trust token
 			clientName := fmt.Sprintf("dart-%s", name)
 			err = authenticateWithToken(client, nodeopts.TrustToken, clientName)
 			if err != nil {
 				return nil, fmt.Errorf("failed to authenticate with trust token: %w", err)
 			}
-			
+
 		} else {
 			// Use certificate-based authentication
 			// Validate that if remote connection is configured, proper authentication is provided
@@ -167,23 +167,23 @@ func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err err
 					return nil, fmt.Errorf("remote LXD connection requires either trust_token OR (client_cert AND client_key), or set skip_verify: true (not recommended for production)")
 				}
 			}
-			
+
 			// Connect to remote LXD server using HTTPS
 			args := &lxdclient.ConnectionArgs{
 				InsecureSkipVerify: nodeopts.SkipVerify,
 			}
-			
+
 			// Set client certificate and key if provided
 			if nodeopts.ClientCert != "" && nodeopts.ClientKey != "" {
 				args.TLSClientCert = nodeopts.ClientCert
 				args.TLSClientKey = nodeopts.ClientKey
 			}
-			
+
 			// Set server certificate if provided (for custom CA)
 			if nodeopts.ServerCert != "" {
 				args.TLSServerCert = nodeopts.ServerCert
 			}
-			
+
 			client, err = lxdclient.ConnectLXD(nodeopts.RemoteAddr, args)
 			if err != nil {
 				return nil, fmt.Errorf("failed to connect to remote LXD server at %s: %w", nodeopts.RemoteAddr, err)

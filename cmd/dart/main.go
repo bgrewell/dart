@@ -22,6 +22,13 @@ import (
 	"go.uber.org/fx/fxevent"
 )
 
+var (
+	version = "dev"
+	date    = "dev"
+	rev     = "dev"
+	branch  = "dev"
+)
+
 type CmdlineFlags struct {
 	ConfigFile   *string
 	Verbose      *bool
@@ -39,7 +46,7 @@ type ControllerParams struct {
 	Nodes         map[string]ifaces.Node
 	Tests         []ifaces.Test
 	DockerWrapper *docker.Wrapper `optional:"true"`
-	LxdWrapper    *lxd.Wrapper `optional:"true"`
+	LxdWrapper    *lxd.Wrapper    `optional:"true"`
 	Formatter     formatters.Formatter
 	Flags         *CmdlineFlags
 }
@@ -193,10 +200,10 @@ func main() {
 
 	u := usage.NewUsage(
 		usage.WithApplicationName("dart"),
-		usage.WithApplicationVersion("dev"),
-		usage.WithApplicationBuildDate("dev"),
-		usage.WithApplicationCommitHash("dev"),
-		usage.WithApplicationBranch("dev"),
+		usage.WithApplicationVersion(version),
+		usage.WithApplicationBuildDate(date),
+		usage.WithApplicationCommitHash(rev),
+		usage.WithApplicationBranch(branch),
 		usage.WithApplicationDescription("DART is a distributed systems testing framework designed to make it easy to perform automation and integration testing on a wide variety of distributed systems."),
 	)
 

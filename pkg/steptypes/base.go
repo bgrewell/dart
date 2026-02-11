@@ -167,7 +167,7 @@ func CreateSteps(configs []*config.StepConfig, nodes map[string]ifaces.Node) ([]
 func createFileCreateStep(c *config.StepConfig, _ ifaces.Node) (*FileCreateStep, error) {
 	// After expansion, each config has exactly one node
 	nodeName := c.Node[0]
-	
+
 	filePath, _ := c.Step.Options["path"].(string)
 	if filePath == "" {
 		return nil, &config.ConfigError{

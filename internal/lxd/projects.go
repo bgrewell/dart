@@ -139,7 +139,7 @@ func CopyProfileToProject(ctx context.Context, server lxd.InstanceServer, source
 // If it doesn't exist, it copies it from the default project
 func EnsureDefaultProfile(ctx context.Context, server lxd.InstanceServer, projectName string) error {
 	projectServer := server.UseProject(projectName)
-	
+
 	// Check if default profile exists
 	_, _, err := projectServer.GetProfile(DefaultProject)
 	if err == nil {
