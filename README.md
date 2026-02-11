@@ -432,12 +432,45 @@ DART is actively developing additional task types to enhance environment managem
 
 ## Installation
 
-Installation methods vary depending on your environment. Generally, you can:
+### Quick Install
 
-- Clone the DART repository.
-- Build from source or install via any officially supported package distribution.
+Download and install the latest release with a single command:
 
-*(Please refer to the official documentation for detailed installation instructions.)*
+```bash
+curl -sSL https://raw.githubusercontent.com/bgrewell/dart/main/install.sh | bash
+```
+
+By default the binary is installed to `/usr/local/bin/dart`. You can customize the
+install location and version with environment variables:
+
+```bash
+# Install to a custom directory
+DART_INSTALL_DIR=~/.local/bin curl -sSL https://raw.githubusercontent.com/bgrewell/dart/main/install.sh | bash
+
+# Install a specific version
+DART_VERSION=v0.4.0 curl -sSL https://raw.githubusercontent.com/bgrewell/dart/main/install.sh | bash
+```
+
+### Manual Download
+
+Download a binary from the [releases page](https://github.com/bgrewell/dart/releases),
+make it executable, and place it on your `PATH`:
+
+```bash
+chmod +x dart-linux-amd64
+sudo mv dart-linux-amd64 /usr/local/bin/dart
+```
+
+### Build from Source
+
+Requires Go 1.23+:
+
+```bash
+git clone https://github.com/bgrewell/dart.git
+cd dart
+make build
+# Binary is at bin/dart
+```
 
 ---
 
