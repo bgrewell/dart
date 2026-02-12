@@ -273,6 +273,15 @@ func (tc *TestController) Run() error {
 		if err != nil {
 			return err
 		}
+		maxFactWidth := 0
+		for _, nodeFacts := range store {
+			for factName := range nodeFacts {
+				if len(factName) > maxFactWidth {
+					maxFactWidth = len(factName)
+				}
+			}
+		}
+		tc.formatter.SetTaskColumnWidth(maxFactWidth)
 		for nodeName, nodeFacts := range store {
 			for factName, value := range nodeFacts {
 				f := tc.formatter.StartTask(factName, nodeName, "running")

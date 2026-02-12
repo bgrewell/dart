@@ -287,6 +287,9 @@ type BaseCompleter struct {
 }
 
 func padRightWithPeriods(s string, n int) string {
+	if n < 1 {
+		n = 1
+	}
 	return fmt.Sprintf("%s %s ", s, strings.Repeat(".", n))
 }
 
