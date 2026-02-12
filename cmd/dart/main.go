@@ -14,8 +14,6 @@ import (
 	"github.com/bgrewell/dart/internal/lxd"
 	"github.com/bgrewell/dart/pkg/ifaces"
 	"github.com/bgrewell/dart/pkg/nodetypes"
-	"github.com/bgrewell/dart/pkg/steptypes"
-	"github.com/bgrewell/dart/pkg/testtypes"
 	"github.com/bgrewell/usage"
 	"go.uber.org/dig"
 	"go.uber.org/fx"
@@ -44,7 +42,6 @@ type ControllerParams struct {
 	fx.In
 	Cfg           *config.Configuration
 	Nodes         map[string]ifaces.Node
-	Tests         []ifaces.Test
 	DockerWrapper *docker.Wrapper `optional:"true"`
 	LxdWrapper    *lxd.Wrapper    `optional:"true"`
 	Formatter     formatters.Formatter
@@ -81,33 +78,6 @@ func Nodes(cfg *config.Configuration, dockerWrapper *docker.Wrapper, lxdWrapper 
 	return nodes, nil
 }
 
-func Tests(cfg *config.Configuration, nodes map[string]ifaces.Node) (tests []ifaces.Test, err error) {
-	// Create the tests
-	tests, err = testtypes.CreateTests(cfg.Tests, nodes)
-	if err != nil {
-		return nil, err
-	}
-	return tests, nil
-}
-
-func Setup(cfg *config.Configuration, nodes map[string]ifaces.Node) (setup []ifaces.Step, err error) {
-	// Create the steps
-	setup, err = steptypes.CreateSteps(cfg.Setup, nodes)
-	if err != nil {
-		return nil, err
-	}
-	return setup, nil
-}
-
-func Teardown(cfg *config.Configuration, nodes map[string]ifaces.Node) (teardown []ifaces.Step, err error) {
-	// Create the steps
-	teardown, err = steptypes.CreateSteps(cfg.Teardown, nodes)
-	if err != nil {
-		return nil, err
-	}
-	return teardown, nil
-}
-
 func DockerWrapper(cfg *config.Configuration) (*docker.Wrapper, error) {
 	// Create the Docker wrapper
 	dw, err := docker.NewWrapper(cfg)
@@ -133,17 +103,6 @@ func LxdWrapper(cfg *config.Configuration) (*lxd.Wrapper, error) {
 }
 
 func Controller(params ControllerParams) (ctrl *internal.TestController, err error) {
-	// TODO: Setup and Teardown are called here because of an issue passing them in the params (not being called in the proper order)
-	setup, err := Setup(params.Cfg, params.Nodes)
-	if err != nil {
-		return nil, err
-	}
-
-	teardown, err := Teardown(params.Cfg, params.Nodes)
-	if err != nil {
-		return nil, err
-	}
-
 	// Build the list of platform managers
 	var platforms []ifaces.PlatformManager
 	if params.DockerWrapper != nil {
@@ -153,14 +112,16 @@ func Controller(params ControllerParams) (ctrl *internal.TestController, err err
 		platforms = append(platforms, params.LxdWrapper)
 	}
 
-	// Create the test controller
+	// Create the test controller with raw configs; steps/tests are created
+	// inside Run() after nodes are set up and facts are gathered.
 	return internal.NewTestController(
 		params.Cfg.Suite,
 		platforms,
 		params.Nodes,
-		params.Tests,
-		setup,
-		teardown,
+		params.Cfg.Nodes,
+		params.Cfg.Setup,
+		params.Cfg.Teardown,
+		params.Cfg.Tests,
 		*params.Flags.Verbose,
 		*params.Flags.Debug,
 		*params.Flags.StopOnError,
@@ -235,15 +196,6 @@ func main() {
 				return cfgFlags
 			},
 			Nodes,
-			Tests,
-			fx.Annotate(
-				Setup,
-				fx.ResultTags(`group:"setup"`),
-			),
-			fx.Annotate(
-				Teardown,
-				fx.ResultTags(`group:"teardown"`),
-			),
 			DockerWrapper,
 			LxdWrapper,
 			Configuration,

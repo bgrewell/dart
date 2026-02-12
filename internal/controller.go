@@ -5,19 +5,24 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/bgrewell/dart/internal/config"
 	"github.com/bgrewell/dart/internal/eval"
 	"github.com/bgrewell/dart/internal/execution"
+	"github.com/bgrewell/dart/internal/facts"
 	"github.com/bgrewell/dart/internal/formatters"
 	"github.com/bgrewell/dart/pkg/ifaces"
+	"github.com/bgrewell/dart/pkg/steptypes"
+	"github.com/bgrewell/dart/pkg/testtypes"
 )
 
 func NewTestController(
 	suite string,
 	platforms []ifaces.PlatformManager,
 	nodes map[string]ifaces.Node,
-	tests []ifaces.Test,
-	setup []ifaces.Step,
-	teardown []ifaces.Step,
+	nodeConfigs []*config.NodeConfig,
+	setupConfigs []*config.StepConfig,
+	teardownConfigs []*config.StepConfig,
+	testConfigs []*config.TestConfig,
 	verbose bool,
 	debug bool,
 	stopOnFail bool,
@@ -30,36 +35,41 @@ func NewTestController(
 	execution.SetDebugMode(debug)
 
 	return &TestController{
-		Suite:        suite,
-		Nodes:        nodes,
-		Tests:        tests,
-		Setup:        setup,
-		Teardown:     teardown,
-		Platforms:    platforms,
-		formatter:    formatter,
-		verbose:      verbose,
-		debug:        debug,
-		stopOnFail:   stopOnFail,
-		pauseOnFail:  pauseOnFail,
-		setupOnly:    setupOnly,
-		teardownOnly: teardownOnly,
+		Suite:           suite,
+		Nodes:           nodes,
+		NodeConfigs:     nodeConfigs,
+		SetupConfigs:    setupConfigs,
+		TeardownConfigs: teardownConfigs,
+		TestConfigs:     testConfigs,
+		Platforms:       platforms,
+		formatter:       formatter,
+		verbose:         verbose,
+		debug:           debug,
+		stopOnFail:      stopOnFail,
+		pauseOnFail:     pauseOnFail,
+		setupOnly:       setupOnly,
+		teardownOnly:    teardownOnly,
 	}
 }
 
 type TestController struct {
-	Suite        string
-	Nodes        map[string]ifaces.Node
-	Setup        []ifaces.Step
-	Tests        []ifaces.Test
-	Teardown     []ifaces.Step
-	Platforms    []ifaces.PlatformManager
-	formatter    formatters.Formatter
-	verbose      bool
-	debug        bool
-	stopOnFail   bool
-	pauseOnFail  bool
-	setupOnly    bool
-	teardownOnly bool
+	Suite           string
+	Nodes           map[string]ifaces.Node
+	NodeConfigs     []*config.NodeConfig
+	SetupConfigs    []*config.StepConfig
+	TeardownConfigs []*config.StepConfig
+	TestConfigs     []*config.TestConfig
+	Setup           []ifaces.Step
+	Tests           []ifaces.Test
+	Teardown        []ifaces.Step
+	Platforms       []ifaces.PlatformManager
+	formatter       formatters.Formatter
+	verbose         bool
+	debug           bool
+	stopOnFail      bool
+	pauseOnFail     bool
+	setupOnly       bool
+	teardownOnly    bool
 }
 
 // handleSetupError handles errors during setup phases when pauseOnFail is enabled.
@@ -87,6 +97,45 @@ func (tc *TestController) handleSetupError(stepName string, err error) (retry bo
 	default:
 		return false, false
 	}
+}
+
+// createStepsAndTests processes templates through the fact store, then creates
+// the step and test objects from configs. Must be called after nodes are set up
+// and facts are gathered.
+func (tc *TestController) createStepsAndTests(store facts.FactStore) error {
+	var err error
+
+	// Process templates in configs
+	if store != nil {
+		tc.SetupConfigs, err = facts.ProcessStepConfigs(tc.SetupConfigs, store)
+		if err != nil {
+			return fmt.Errorf("processing setup templates: %w", err)
+		}
+		tc.TeardownConfigs, err = facts.ProcessStepConfigs(tc.TeardownConfigs, store)
+		if err != nil {
+			return fmt.Errorf("processing teardown templates: %w", err)
+		}
+		tc.TestConfigs, err = facts.ProcessTestConfigs(tc.TestConfigs, store)
+		if err != nil {
+			return fmt.Errorf("processing test templates: %w", err)
+		}
+	}
+
+	// Create step and test objects
+	tc.Setup, err = steptypes.CreateSteps(tc.SetupConfigs, tc.Nodes)
+	if err != nil {
+		return err
+	}
+	tc.Teardown, err = steptypes.CreateSteps(tc.TeardownConfigs, tc.Nodes)
+	if err != nil {
+		return err
+	}
+	tc.Tests, err = testtypes.CreateTests(tc.TestConfigs, tc.Nodes)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (tc *TestController) Run() error {
@@ -127,27 +176,7 @@ func (tc *TestController) Run() error {
 		}
 	}()
 
-	// Get the max length of the setup/teardown and the tests for formatting
-	longestSetup := len(nodeSetupMsg)
-	if len(nodeTeardownMsg) > longestSetup {
-		longestSetup = len(nodeTeardownMsg)
-	}
-	for _, step := range append(tc.Setup, tc.Teardown...) {
-		if len(step.Title()) > longestSetup {
-			longestSetup = len(step.Title())
-		}
-	}
-	tc.formatter.SetTaskColumnWidth(longestSetup)
-
-	longestTest := 0
-	for _, test := range tc.Tests {
-		if len(test.Name()) > longestTest {
-			longestTest = len(test.Name())
-		}
-	}
-	tc.formatter.SetTestColumnWidth(longestTest)
-
-	// Calculate the longest node name for alignment
+	// Calculate the longest node name for alignment (available from configs)
 	longestNodeName := 0
 	for name := range tc.Nodes {
 		if len(name) > longestNodeName {
@@ -158,6 +187,16 @@ func (tc *TestController) Run() error {
 
 	// If teardown only is set, skip the setup and tests
 	if tc.teardownOnly {
+		// Create teardown steps without template processing (no facts available)
+		var err error
+		tc.Teardown, err = steptypes.CreateSteps(tc.TeardownConfigs, tc.Nodes)
+		if err != nil {
+			return err
+		}
+
+		// Compute formatting widths from configs
+		tc.setFormattingWidths(nodeSetupMsg, nodeTeardownMsg)
+
 		cleanupMsg = "Running teardown only"
 		for name := range tc.Nodes {
 			setupCompletedNodes = append(setupCompletedNodes, name)
@@ -223,6 +262,33 @@ func (tc *TestController) Run() error {
 			break
 		}
 	}
+
+	// Gather facts from nodes (after node setup, before step/test creation)
+	var store facts.FactStore
+	if facts.HasFacts(tc.NodeConfigs) {
+		tc.formatter.PrintEmpty()
+		tc.formatter.PrintHeader("Gathering node facts")
+		var err error
+		store, err = facts.GatherFacts(tc.Nodes, tc.NodeConfigs)
+		if err != nil {
+			return err
+		}
+		for nodeName, nodeFacts := range store {
+			for factName, value := range nodeFacts {
+				f := tc.formatter.StartTask(factName, nodeName, "running")
+				_ = value
+				f.Complete()
+			}
+		}
+	}
+
+	// Process templates and create steps/tests
+	if err := tc.createStepsAndTests(store); err != nil {
+		return err
+	}
+
+	// Now compute formatting widths from the created objects
+	tc.setFormattingWidths(nodeSetupMsg, nodeTeardownMsg)
 
 	if len(tc.Setup) > 0 {
 		for _, step := range tc.Setup {
@@ -359,6 +425,29 @@ func (tc *TestController) Run() error {
 		return fmt.Errorf("%d tests failed", failed)
 	}
 	return nil
+}
+
+// setFormattingWidths computes and sets the column widths for the formatter
+// based on the created step/test objects.
+func (tc *TestController) setFormattingWidths(nodeSetupMsg, nodeTeardownMsg string) {
+	longestSetup := len(nodeSetupMsg)
+	if len(nodeTeardownMsg) > longestSetup {
+		longestSetup = len(nodeTeardownMsg)
+	}
+	for _, step := range append(tc.Setup, tc.Teardown...) {
+		if len(step.Title()) > longestSetup {
+			longestSetup = len(step.Title())
+		}
+	}
+	tc.formatter.SetTaskColumnWidth(longestSetup)
+
+	longestTest := 0
+	for _, test := range tc.Tests {
+		if len(test.Name()) > longestTest {
+			longestTest = len(test.Name())
+		}
+	}
+	tc.formatter.SetTestColumnWidth(longestTest)
 }
 
 func (tc *TestController) Close() error {

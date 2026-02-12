@@ -90,6 +90,7 @@ type NodeConfig struct {
 	Name    string                 `json:"name" yaml:"name"`
 	Type    string                 `json:"type" yaml:"type"`
 	Options map[string]interface{} `json:"options" yaml:"options"`
+	Facts   map[string]string      `json:"facts,omitempty" yaml:"facts,omitempty"`
 	Loc     SourceLocation         `json:"-" yaml:"-"`
 	TypeLoc SourceLocation         `json:"-" yaml:"-"`
 }
