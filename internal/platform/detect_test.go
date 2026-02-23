@@ -29,7 +29,7 @@ func TestTranslateImage(t *testing.T) {
 			name:     "Incus ubuntu image translated",
 			image:    "ubuntu:24.04",
 			runtime:  RuntimeIncus,
-			expected: "images:ubuntu/24.04",
+			expected: "images:ubuntu/24.04/cloud",
 		},
 		{
 			name:     "Incus images remote unchanged",
@@ -41,7 +41,7 @@ func TestTranslateImage(t *testing.T) {
 			name:     "Incus lxc remote translated",
 			image:    "lxc:alpine/3.18",
 			runtime:  RuntimeIncus,
-			expected: "images:lxc/alpine/3.18",
+			expected: "images:lxc/alpine/3.18/cloud",
 		},
 		{
 			name:     "No colon returns unchanged for LXD",
