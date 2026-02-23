@@ -7,13 +7,14 @@ import (
 
 // TranslateImage converts LXD-style image references to runtime-appropriate format.
 // For LXD, images are returned unchanged.
-// For Incus, images are translated: "ubuntu:24.04" becomes "images:ubuntu/24.04"
+// For Incus, images are translated: "ubuntu:24.04" becomes "images:ubuntu/24.04/cloud"
+// to ensure the cloud variant is selected.
 func TranslateImage(ref string, runtime Runtime) string {
 	if runtime == RuntimeLXD {
 		return ref
 	}
 
-	// Incus translation: ubuntu:24.04 → images:ubuntu/24.04
+	// Incus translation: ubuntu:24.04 → images:ubuntu/24.04/cloud
 	parts := strings.SplitN(ref, ":", 2)
 	if len(parts) != 2 {
 		// Can't parse, return as-is
@@ -27,5 +28,5 @@ func TranslateImage(ref string, runtime Runtime) string {
 		return ref
 	}
 
-	return fmt.Sprintf("images:%s/%s", remote, alias)
+	return fmt.Sprintf("images:%s/%s/cloud", remote, alias)
 }
