@@ -153,8 +153,9 @@ func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err err
 			}
 
 			// Authenticate using the trust token
+			// Pass the same certificate that was used for the connection
 			clientName := fmt.Sprintf("dart-%s", name)
-			err = authenticateWithToken(client, nodeopts.TrustToken, clientName)
+			err = authenticateWithToken(client, nodeopts.TrustToken, clientName, certPEM)
 			if err != nil {
 				return nil, fmt.Errorf("failed to authenticate with trust token: %w", err)
 			}
@@ -495,13 +496,8 @@ func generateSelfSignedCert() (certPEM, keyPEM string, err error) {
 }
 
 // authenticateWithToken authenticates with LXD server using a trust token
-func authenticateWithToken(server lxdclient.InstanceServer, token, clientName string) error {
-	// Generate a self-signed certificate for authentication
-	certPEM, _, err := generateSelfSignedCert()
-	if err != nil {
-		return fmt.Errorf("failed to generate client certificate: %w", err)
-	}
-
+// The certPEM parameter should be the same certificate that was used to establish the connection
+func authenticateWithToken(server lxdclient.InstanceServer, token, clientName, certPEM string) error {
 	// Encode certificate to base64
 	certBase64 := base64.StdEncoding.EncodeToString([]byte(certPEM))
 
@@ -514,7 +510,7 @@ func authenticateWithToken(server lxdclient.InstanceServer, token, clientName st
 	}
 
 	// Send certificate to server with trust token
-	err = server.CreateCertificate(certReq)
+	err := server.CreateCertificate(certReq)
 	if err != nil {
 		return fmt.Errorf("failed to authenticate with trust token: %w", err)
 	}
