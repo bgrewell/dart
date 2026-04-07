@@ -432,56 +432,40 @@ DART is actively developing additional task types to enhance environment managem
 
 ## Installation
 
-Installation methods vary depending on your environment. You can:
-
-- **Install from a released version (recommended):**
-  ```bash
-  go install github.com/bgrewell/dart/cmd/dart@latest
-  # Or install a specific version:
-  go install github.com/bgrewell/dart/cmd/dart@v1.0.0
-  ```
-
-- **Clone and build from source:**
-  ```bash
-  git clone https://github.com/bgrewell/dart.git
-  cd dart
-  go build -o dart ./cmd/dart
-  ```
-
-Each release includes:
-- Software Bill of Materials (SBOM) in multiple formats (CycloneDX, SPDX)
-- Vulnerability Scan (VEX) results from Grype security scanning
-- Full release notes
-
-*(Please refer to the [Releases page](https://github.com/bgrewell/dart/releases) for available versions and security information.)*
-### Quick Install
-
-Download and install the latest release with a single command:
+### Quick Install (Recommended)
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/bgrewell/dart/main/install.sh | bash
 ```
 
-By default the binary is installed to `/usr/local/bin/dart`. You can customize the
-install location and version with environment variables:
+This installs the latest release to `/usr/local/bin/dart`. You can customize the install with environment variables:
 
 ```bash
-# Install to a custom directory
+# Custom install directory
 DART_INSTALL_DIR=~/.local/bin curl -sSL https://raw.githubusercontent.com/bgrewell/dart/main/install.sh | bash
 
-# Install a specific version
+# Specific version
 DART_VERSION=v0.4.0 curl -sSL https://raw.githubusercontent.com/bgrewell/dart/main/install.sh | bash
+```
+
+### Go Install
+
+If you have Go installed, you can install directly:
+
+```bash
+go install github.com/bgrewell/dart/cmd/dart@latest
 ```
 
 ### Manual Download
 
-Download a binary from the [releases page](https://github.com/bgrewell/dart/releases),
-make it executable, and place it on your `PATH`:
+Download a binary from the [releases page](https://github.com/bgrewell/dart/releases) and place it on your `PATH`:
 
 ```bash
 chmod +x dart-linux-amd64
 sudo mv dart-linux-amd64 /usr/local/bin/dart
 ```
+
+Each release includes a Software Bill of Materials (SBOM) and Vulnerability Scan (VEX) results.
 
 ### Build from Source
 
@@ -734,58 +718,3 @@ This project is distributed under an open-source or commercial license, as speci
 ---
 
 *Thank you for exploring DART! Your contributions and feedback are welcome as we strive to make testing in distributed environments as seamless as possible.*
-
----
-
-Old todo list that needs to be migrated and cleaned up
-
-## Task Types
-
-- [ ] APT Package Management
-- [ ] SNAP Package Management
-- [ ] git clone
-- [ ] command execution
-
-## Next Tasks
-- [ ] Flags
-  - [ ] Verbose
-  - [ ] Pause on fail
-  - [ ] Stop on fail
-  - [ ] Setup only
-  - [ ] Teardown only
-  - [ ] Skip teardown
-  - [ ] Skip setup
-- [ ] Support multiple nodes for tests
-- [ ] More details on setup/docker steps when verbose is enabled
-  
-[x] - Summary of the test results
-- Verbose output
-- Failed test details
-- General cleanup of formatter and controller
-- Ability to load a series of tests from recursive folders of yaml files
-- Ability to do something like monitor cpu usage over the test then evaluate at the end of the test what the avg cpu usage was
-## Requirements
-
-1. Execute test command/script and get results
-2. Run results against a test function
-3. Setup command(s) to prepare the system(s) for the test
-4. Teardown command(s) to clean up the system(s) after the test
-5. Load all tests from a directory
-6. AI test evaluator
-
-
-### Types of tests
-
-- [x] Command Execution
-- [ ] File Read
-- [ ] File Write
-- [ ] File Exist
-- [ ] TCP Socket
-- [ ] UDP Socket
-- [ ] ICMP Socket
-- [ ] Unix Socket
-- [ ] HTTP Request
-- [ ] HTTPS Request
-- [ ] gRPC Request
-- [ ] DNS Request
-- [ ] (Plugins)
