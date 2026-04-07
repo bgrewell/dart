@@ -93,4 +93,4 @@ fabric.properties
 bin/
 
 # Binary built in root directory
-dart
+/dart

@@ -29,6 +29,8 @@ func NewTestController(
 	pauseOnFail bool,
 	setupOnly bool,
 	teardownOnly bool,
+	until string,
+	untilBehavior string,
 	formatter formatters.Formatter) *TestController {
 
 	// Set global debug mode for streaming output
@@ -49,6 +51,8 @@ func NewTestController(
 		pauseOnFail:     pauseOnFail,
 		setupOnly:       setupOnly,
 		teardownOnly:    teardownOnly,
+		until:           until,
+		untilBehavior:   untilBehavior,
 	}
 }
 
@@ -70,6 +74,8 @@ type TestController struct {
 	pauseOnFail     bool
 	setupOnly       bool
 	teardownOnly    bool
+	until           string
+	untilBehavior   string
 }
 
 // handleSetupError handles errors during setup phases when pauseOnFail is enabled.
@@ -97,6 +103,51 @@ func (tc *TestController) handleSetupError(stepName string, err error) (retry bo
 	default:
 		return false, false
 	}
+}
+
+// validateUntilTarget checks that the --until target matches a setup step name,
+// test name, or test index. Returns an error listing available names if no match is found.
+func (tc *TestController) validateUntilTarget() error {
+	if tc.until == "" {
+		return nil
+	}
+
+	// Check setup step names
+	for _, cfg := range tc.SetupConfigs {
+		if cfg.Name == tc.until {
+			return nil
+		}
+	}
+
+	// Check test names and indices
+	for idx, cfg := range tc.TestConfigs {
+		if cfg.Name == tc.until || strconv.Itoa(idx+1) == tc.until {
+			return nil
+		}
+	}
+
+	// No match — build a helpful error message
+	var names []string
+	for _, cfg := range tc.SetupConfigs {
+		names = append(names, fmt.Sprintf("  setup: %q", cfg.Name))
+	}
+	for idx, cfg := range tc.TestConfigs {
+		names = append(names, fmt.Sprintf("  test %d: %q", idx+1, cfg.Name))
+	}
+	return fmt.Errorf("--until target %q not found. Available steps and tests:\n%s", tc.until, strings.Join(names, "\n"))
+}
+
+// applyUntilBehavior handles the --until stop point. Returns true if execution
+// should stop (exit behavior), false if it should continue (pause behavior).
+func (tc *TestController) applyUntilBehavior() bool {
+	if tc.untilBehavior == "pause" {
+		fmt.Printf("\nReached --until target %q. Press enter to continue execution...\n", tc.until)
+		var input string
+		fmt.Scanln(&input)
+		return false
+	}
+	// Default: exit
+	return true
 }
 
 // createStepsAndTests processes templates through the fact store, then creates
@@ -139,6 +190,11 @@ func (tc *TestController) createStepsAndTests(store facts.FactStore) error {
 }
 
 func (tc *TestController) Run() error {
+
+	// Validate --until target before doing any work
+	if err := tc.validateUntilTarget(); err != nil {
+		return err
+	}
 
 	nodeSetupMsg := "running setup"
 	nodeTeardownMsg := "running teardown"
@@ -294,6 +350,7 @@ func (tc *TestController) Run() error {
 	tc.setFormattingWidths()
 
 	if len(tc.Setup) > 0 {
+		untilReachedInSetup := false
 		for _, step := range tc.Setup {
 		stepRetry:
 			for {
@@ -313,8 +370,18 @@ func (tc *TestController) Run() error {
 				}
 				break
 			}
+			if tc.until != "" && step.Title() == tc.until {
+				untilReachedInSetup = true
+				break
+			}
 		}
 		tc.formatter.PrintEmpty()
+		if untilReachedInSetup {
+			if tc.applyUntilBehavior() {
+				cleanupComplete = true
+				return nil
+			}
+		}
 	}
 
 	// If setup only is set, skip the tests and cleanup
@@ -326,6 +393,7 @@ func (tc *TestController) Run() error {
 	// Run the tests
 	testResults := make(map[string]map[string]*eval.EvaluateResult)
 	tc.formatter.PrintHeader("Running tests")
+	untilReachedInTests := false
 	for idx, test := range tc.Tests {
 		id := idx + 1
 		f := tc.formatter.StartTest(strconv.Itoa(id), test.Name(), test.NodeName())
@@ -357,8 +425,19 @@ func (tc *TestController) Run() error {
 				}
 			}
 		}
+
+		if tc.until != "" && (test.Name() == tc.until || strconv.Itoa(id) == tc.until) {
+			untilReachedInTests = true
+			break
+		}
 	}
 	tc.formatter.PrintEmpty()
+	if untilReachedInTests {
+		if tc.applyUntilBehavior() {
+			cleanupComplete = true
+			return nil
+		}
+	}
 
 	// Run the teardown steps
 	tc.formatter.PrintHeader("Running test teardown")

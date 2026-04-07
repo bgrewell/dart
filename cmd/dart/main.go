@@ -15,6 +15,7 @@ import (
 	"github.com/bgrewell/dart/pkg/ifaces"
 	"github.com/bgrewell/dart/pkg/nodetypes"
 	"github.com/bgrewell/usage"
+	"github.com/fatih/color"
 	"go.uber.org/dig"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
@@ -28,14 +29,16 @@ var (
 )
 
 type CmdlineFlags struct {
-	ConfigFile   *string
-	Verbose      *bool
-	Debug        *bool
-	StopOnError  *bool
-	PauseOnError *bool
-	SetupOnly    *bool
-	TeardownOnly *bool
-	Iterations   *int
+	ConfigFile    *string
+	Verbose       *bool
+	Debug         *bool
+	StopOnError   *bool
+	PauseOnError  *bool
+	SetupOnly     *bool
+	TeardownOnly  *bool
+	Iterations    *int
+	Until         *string
+	UntilBehavior *string
 }
 
 type ControllerParams struct {
@@ -128,8 +131,12 @@ func Controller(params ControllerParams) (ctrl *internal.TestController, err err
 		*params.Flags.PauseOnError,
 		*params.Flags.SetupOnly,
 		*params.Flags.TeardownOnly,
+		*params.Flags.Until,
+		*params.Flags.UntilBehavior,
 		params.Formatter), nil
 }
+
+var errorStyle = color.New(color.FgRed, color.Bold)
 
 func RegisterHooks(params RunParams) {
 	params.LC.Append(fx.Hook{
@@ -146,6 +153,7 @@ func RegisterHooks(params RunParams) {
 				}
 			}
 			if lastErr != nil {
+				fmt.Fprintf(os.Stderr, "\n%s %s\n\n", errorStyle.Sprint("Error:"), lastErr)
 				return params.Shutdowner.Shutdown(fx.ExitCode(1))
 			}
 			return params.Shutdowner.Shutdown()
@@ -177,6 +185,8 @@ func main() {
 	cfgFlags.SetupOnly = u.AddBooleanOption("setup", "setup-only", false, "Only run the setup steps", "", nil)
 	cfgFlags.TeardownOnly = u.AddBooleanOption("teardown", "teardown-only", false, "Only run the teardown steps", "", nil)
 	cfgFlags.Iterations = u.AddIntegerOption("i", "iterations", 1, "Number of iterations to run", "", nil)
+	cfgFlags.Until = u.AddStringOption("u", "until", "", "Run up to and including this step or test, then stop", "", nil)
+	cfgFlags.UntilBehavior = u.AddStringOption("ub", "until-behavior", "exit", "Behavior when --until target is reached: exit (default) or pause", "", nil)
 
 	if !u.Parse() {
 		u.PrintError(fmt.Errorf("Failed to parse command line arguments"))
@@ -212,7 +222,8 @@ func main() {
 			fmt.Fprint(os.Stderr, config.RenderConfigError(cfgErr))
 			os.Exit(1)
 		}
-		log.Fatalf("Failed to start: %v", err)
+		fmt.Fprintf(os.Stderr, "\n%s %s\n\n", errorStyle.Sprint("Error:"), rootErr)
+		os.Exit(1)
 	}
 
 	shutdownSig := <-app.Wait()

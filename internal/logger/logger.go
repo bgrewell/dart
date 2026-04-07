@@ -1,11 +1,7 @@
 package logger
 
 import (
-	"errors"
-
-	"github.com/bgrewell/dart/internal/config"
 	"github.com/sirupsen/logrus"
-	"go.uber.org/dig"
 	"go.uber.org/fx/fxevent"
 )
 
@@ -91,11 +87,9 @@ func (l *LogrusLogger) LogEvent(event fxevent.Event) {
 			"function": e.FunctionName,
 		}).Info("Invoking function")
 	case *fxevent.Invoked:
-		if e.Err != nil && !isConfigError(e.Err) {
-			l.Logger.WithFields(logrus.Fields{
-				"function": e.FunctionName,
-				"error":    e.Err,
-			}).Error("Error invoked")
+		if e.Err != nil {
+			// Errors are rendered by main with user-friendly formatting;
+			// suppress the raw logrus line to avoid duplicate noise.
 		} else if e.Err == nil {
 			l.Logger.WithFields(logrus.Fields{
 				"function": e.FunctionName,
@@ -116,10 +110,3 @@ func (l *LogrusLogger) LogEvent(event fxevent.Event) {
 	}
 }
 
-// isConfigError returns true if the error chain contains a ConfigError,
-// indicating it will be rendered with a pretty YAML snippet by main.
-func isConfigError(err error) bool {
-	rootErr := dig.RootCause(err)
-	var cfgErr *config.ConfigError
-	return errors.As(rootErr, &cfgErr)
-}
