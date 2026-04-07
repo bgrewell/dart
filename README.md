@@ -202,6 +202,38 @@ nodes:
 
 See `examples/lxd/lxd-remote.yaml` for a complete example.
 
+### LXD/Incus Auto-Detection
+
+DART automatically detects whether the host system has LXD or Incus installed and configures the appropriate socket path. This allows test configurations to be portable across systems without modification.
+
+**Detection Priority:**
+1. `/var/lib/incus/unix.socket` (Incus)
+2. `/var/snap/lxd/common/lxd/unix.socket` (LXD snap)
+3. `/var/lib/lxd/unix.socket` (LXD native)
+
+**Image Name Translation:**
+
+When Incus is detected, DART automatically translates LXD-style image references:
+- `ubuntu:24.04` becomes `images:ubuntu/24.04`
+- `images:debian/12` remains unchanged
+
+**Limitations:**
+
+This auto-detection provides basic compatibility but has limitations. For production use or complex scenarios, we recommend configuring your test definitions explicitly for your target virtualization platform:
+
+```yaml
+# Explicit socket configuration (recommended for production)
+lxd:
+  socket: /var/lib/incus/unix.socket
+
+nodes:
+  - name: test-container
+    type: lxd
+    options:
+      image: images:ubuntu/24.04  # Use Incus-native format
+      instance_type: container
+```
+
 ### LXD Project Support
 
 LXD projects provide resource isolation and organization within LXD. DART supports creating and managing LXD projects, automatically copying the default profile, and organizing instances, networks, and profiles within projects.
@@ -422,6 +454,45 @@ Each release includes:
 - Full release notes
 
 *(Please refer to the [Releases page](https://github.com/bgrewell/dart/releases) for available versions and security information.)*
+### Quick Install
+
+Download and install the latest release with a single command:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/bgrewell/dart/main/install.sh | bash
+```
+
+By default the binary is installed to `/usr/local/bin/dart`. You can customize the
+install location and version with environment variables:
+
+```bash
+# Install to a custom directory
+DART_INSTALL_DIR=~/.local/bin curl -sSL https://raw.githubusercontent.com/bgrewell/dart/main/install.sh | bash
+
+# Install a specific version
+DART_VERSION=v0.4.0 curl -sSL https://raw.githubusercontent.com/bgrewell/dart/main/install.sh | bash
+```
+
+### Manual Download
+
+Download a binary from the [releases page](https://github.com/bgrewell/dart/releases),
+make it executable, and place it on your `PATH`:
+
+```bash
+chmod +x dart-linux-amd64
+sudo mv dart-linux-amd64 /usr/local/bin/dart
+```
+
+### Build from Source
+
+Requires Go 1.23+:
+
+```bash
+git clone https://github.com/bgrewell/dart.git
+cd dart
+make build
+# Binary is at bin/dart
+```
 
 ---
 

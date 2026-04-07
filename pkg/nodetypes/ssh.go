@@ -97,6 +97,22 @@ func (s *SshNode) Close() error {
 	return nil
 }
 
+// Execute runs a command on the remote SSH host.
+//
+// TODO: Implement debug streaming output for SSH node.
+//
+// Current Issue: The SSH implementation has a bug where session.StdoutPipe() and
+// session.StderrPipe() return pipes that are consumed by session.Run() before
+// the Execute() method returns. By the time the caller tries to read from the
+// returned readers, the pipes are already closed/empty.
+//
+// Solution: Replace the pipe-based approach with direct writers:
+//  1. Create TeeWriter instances for stdout and stderr
+//  2. Assign them to session.Stdout and session.Stderr (instead of using pipes)
+//  3. Call session.Run() which writes directly to our TeeWriters
+//  4. Return TeeWriter.Reader() for both streams
+//
+// This fix also resolves the existing bug where output is lost even without debug mode.
 func (s *SshNode) Execute(command string, options ...execution.ExecutionOption) (result *execution.ExecutionResult, err error) {
 
 	// Create a new session

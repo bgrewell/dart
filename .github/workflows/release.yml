@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Build binaries
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          DATE="$(date -u +"%Y.%m.%d_%H%M%S")"
+          REV="$(git rev-parse --short HEAD)"
+          BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+          LDFLAGS="-X 'main.version=${VERSION}' -X 'main.date=${DATE}' -X 'main.rev=${REV}' -X 'main.branch=${BRANCH}'"
+
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o dart-linux-amd64 ./cmd/dart
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o dart-linux-arm64 ./cmd/dart
+
+      - name: Generate checksums
+        run: sha256sum dart-linux-amd64 dart-linux-arm64 > checksums.txt
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dart-linux-amd64
+            dart-linux-arm64
+            checksums.txt

@@ -11,7 +11,7 @@ import (
 func TestNewComposeStack(t *testing.T) {
 	cli, _ := client.NewClientWithOpts(client.FromEnv)
 	stack := NewComposeStack(cli, "test-stack", "/path/to/compose.yml", "test-project")
-	
+
 	assert.NotNil(t, stack)
 	assert.Equal(t, "test-stack", stack.Name)
 	assert.Equal(t, "/path/to/compose.yml", stack.ComposeFile)
@@ -23,7 +23,7 @@ func TestNewComposeStack(t *testing.T) {
 func TestNewComposeStackDefaultProjectName(t *testing.T) {
 	cli, _ := client.NewClientWithOpts(client.FromEnv)
 	stack := NewComposeStack(cli, "test-stack", "/path/to/compose.yml", "")
-	
+
 	assert.NotNil(t, stack)
 	assert.Equal(t, "test-stack", stack.ProjectName)
 }
@@ -48,9 +48,9 @@ func TestDiscoverContainers(t *testing.T) {
 			},
 		},
 	}
-	
+
 	mockClient := &MockClient{Containers: mockContainers}
-	
+
 	stack := &ComposeStack{
 		Name:         "test-stack",
 		ComposeFile:  "/path/to/compose.yml",
@@ -58,7 +58,7 @@ func TestDiscoverContainers(t *testing.T) {
 		cli:          mockClient,
 		containerIDs: make(map[string]string),
 	}
-	
+
 	err := stack.discoverContainers()
 	assert.Nil(t, err)
 	assert.Equal(t, 2, len(stack.containerIDs))
@@ -74,15 +74,15 @@ func TestGetServiceContainerID(t *testing.T) {
 			"db":  "container2",
 		},
 	}
-	
+
 	id, err := stack.GetServiceContainerID("web")
 	assert.Nil(t, err)
 	assert.Equal(t, "container1", id)
-	
+
 	id, err = stack.GetServiceContainerID("db")
 	assert.Nil(t, err)
 	assert.Equal(t, "container2", id)
-	
+
 	_, err = stack.GetServiceContainerID("nonexistent")
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "service 'nonexistent' not found")
@@ -96,7 +96,7 @@ func TestListServices(t *testing.T) {
 			"db":  "container2",
 		},
 	}
-	
+
 	services := stack.ListServices()
 	assert.Equal(t, 2, len(services))
 	assert.Contains(t, services, "web")

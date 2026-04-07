@@ -1,11 +1,13 @@
 package testtypes
 
 import (
+	"fmt"
+	"sort"
+
 	"github.com/bgrewell/dart/internal/config"
 	"github.com/bgrewell/dart/internal/eval"
 	"github.com/bgrewell/dart/internal/helpers"
 	"github.com/bgrewell/dart/pkg/ifaces"
-	"sort"
 )
 
 var (
@@ -46,7 +48,10 @@ func CreateTests(configs []*config.TestConfig, nodes map[string]ifaces.Node) (te
 		nodeName := cfg.Node[0]
 		node, ok := nodes[nodeName]
 		if !ok {
-			return nil, helpers.ErrNodeNotFound
+			return nil, &config.ConfigError{
+				Message:  fmt.Sprintf("node %q not found (referenced in test %q)", nodeName, cfg.Name),
+				Location: cfg.NodeLoc,
+			}
 		}
 
 		// Process the type and pass the options to the test type constructor
@@ -81,7 +86,10 @@ func CreateTests(configs []*config.TestConfig, nodes map[string]ifaces.Node) (te
 		case TypeServiceStatus:
 			return nil, helpers.WrapError("Test type not implemented")
 		default:
-			return nil, helpers.ErrUnknownTestType
+			return nil, &config.ConfigError{
+				Message:  fmt.Sprintf("unknown test type %q", cfg.Type),
+				Location: cfg.TypeLoc,
+			}
 		}
 
 		if err != nil {

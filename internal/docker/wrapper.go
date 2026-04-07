@@ -238,3 +238,8 @@ func (w *Wrapper) ExecuteInContainer(containerName, command string) (exitCode in
 	id := w.containerNamesToId[containerName]
 	return RunCommandInContainer(w.cli, id, command)
 }
+
+func (w *Wrapper) ExecuteInContainerStreaming(containerName, command string, debugEnabled bool) (exitCode int, stdout, stderr io.Reader, err error) {
+	id := w.containerNamesToId[containerName]
+	return RunCommandInContainerStreaming(w.cli, id, containerName, command, debugEnabled)
+}

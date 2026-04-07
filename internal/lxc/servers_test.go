@@ -6,11 +6,11 @@ import (
 
 func TestGetUrlAndProtocol(t *testing.T) {
 	tests := []struct {
-		name        string
-		alias       string
-		wantUrl     string
-		wantProto   string
-		wantErr     bool
+		name      string
+		alias     string
+		wantUrl   string
+		wantProto string
+		wantErr   bool
 	}{
 		{
 			name:      "ubuntu alias",
@@ -43,23 +43,23 @@ func TestGetUrlAndProtocol(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			url, proto, err := GetUrlAndProtocol(tt.alias)
-			
+
 			if tt.wantErr {
 				if err == nil {
 					t.Error("Expected error but got nil")
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("Unexpected error: %v", err)
 				return
 			}
-			
+
 			if url != tt.wantUrl {
 				t.Errorf("Got url %s, want %s", url, tt.wantUrl)
 			}
-			
+
 			if proto != tt.wantProto {
 				t.Errorf("Got protocol %s, want %s", proto, tt.wantProto)
 			}

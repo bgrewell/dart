@@ -1,10 +1,10 @@
 package steptypes
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/bgrewell/dart/internal/config"
-	"github.com/bgrewell/dart/internal/helpers"
 	"github.com/bgrewell/dart/pkg/ifaces"
 	"github.com/bgrewell/dart/pkg/nodetypes"
 	"github.com/stretchr/testify/assert"
@@ -95,7 +95,9 @@ func TestCreateStepsExecuteInvalidCommandType(t *testing.T) {
 	steps, err := CreateSteps(configs, nodes)
 
 	assert.Nil(t, steps)
-	assert.ErrorIs(t, err, helpers.ErrInvalidCommandType)
+	var cfgErr *config.ConfigError
+	assert.True(t, errors.As(err, &cfgErr))
+	assert.Contains(t, cfgErr.Message, "command must be a string or array of strings")
 }
 
 // TestCreateStepsExecuteNonStringInArray verifies error handling when array contains non-string values.
@@ -121,7 +123,9 @@ func TestCreateStepsExecuteNonStringInArray(t *testing.T) {
 	steps, err := CreateSteps(configs, nodes)
 
 	assert.Nil(t, steps)
-	assert.ErrorIs(t, err, helpers.ErrCommandNotString)
+	var cfgErr2 *config.ConfigError
+	assert.True(t, errors.As(err, &cfgErr2))
+	assert.Contains(t, cfgErr2.Message, "command entry is not a string")
 }
 
 // TestCreateStepsFileCreate verifies creating a file_create step.
@@ -184,7 +188,9 @@ func TestCreateStepsFileCreateMissingPath(t *testing.T) {
 	steps, err := CreateSteps(configs, nodes)
 
 	assert.Nil(t, steps)
-	assert.ErrorIs(t, err, helpers.ErrMissingFilePath)
+	var cfgErr3 *config.ConfigError
+	assert.True(t, errors.As(err, &cfgErr3))
+	assert.Contains(t, cfgErr3.Message, "file path is required")
 }
 
 // TestCreateStepsFileDelete verifies creating a file_delete step.
@@ -324,7 +330,9 @@ func TestCreateStepsFileEditInvalidOperation(t *testing.T) {
 	steps, err := CreateSteps(configs, nodes)
 
 	assert.Nil(t, steps)
-	assert.ErrorIs(t, err, helpers.ErrInvalidEditOperation)
+	var cfgErr4 *config.ConfigError
+	assert.True(t, errors.As(err, &cfgErr4))
+	assert.Contains(t, cfgErr4.Message, "invalid edit operation")
 }
 
 // TestCreateStepsFileEditMissingMatch verifies error when match is missing.
@@ -354,5 +362,7 @@ func TestCreateStepsFileEditMissingMatch(t *testing.T) {
 	steps, err := CreateSteps(configs, nodes)
 
 	assert.Nil(t, steps)
-	assert.ErrorIs(t, err, helpers.ErrMissingMatch)
+	var cfgErr5 *config.ConfigError
+	assert.True(t, errors.As(err, &cfgErr5))
+	assert.Contains(t, cfgErr5.Message, "match pattern is required")
 }

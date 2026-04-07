@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
+
 	"github.com/bgrewell/dart/internal"
 	"github.com/bgrewell/dart/internal/config"
 	"github.com/bgrewell/dart/internal/docker"
@@ -11,17 +14,23 @@ import (
 	"github.com/bgrewell/dart/internal/lxd"
 	"github.com/bgrewell/dart/pkg/ifaces"
 	"github.com/bgrewell/dart/pkg/nodetypes"
-	"github.com/bgrewell/dart/pkg/steptypes"
-	"github.com/bgrewell/dart/pkg/testtypes"
 	"github.com/bgrewell/usage"
+	"go.uber.org/dig"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
-	"os"
+)
+
+var (
+	version = "dev"
+	date    = "dev"
+	rev     = "dev"
+	branch  = "dev"
 )
 
 type CmdlineFlags struct {
 	ConfigFile   *string
 	Verbose      *bool
+	Debug        *bool
 	StopOnError  *bool
 	PauseOnError *bool
 	SetupOnly    *bool
@@ -33,9 +42,8 @@ type ControllerParams struct {
 	fx.In
 	Cfg           *config.Configuration
 	Nodes         map[string]ifaces.Node
-	Tests         []ifaces.Test
 	DockerWrapper *docker.Wrapper `optional:"true"`
-	LxdWrapper    *lxd.Wrapper `optional:"true"`
+	LxdWrapper    *lxd.Wrapper    `optional:"true"`
 	Formatter     formatters.Formatter
 	Flags         *CmdlineFlags
 }
@@ -70,33 +78,6 @@ func Nodes(cfg *config.Configuration, dockerWrapper *docker.Wrapper, lxdWrapper 
 	return nodes, nil
 }
 
-func Tests(cfg *config.Configuration, nodes map[string]ifaces.Node) (tests []ifaces.Test, err error) {
-	// Create the tests
-	tests, err = testtypes.CreateTests(cfg.Tests, nodes)
-	if err != nil {
-		return nil, err
-	}
-	return tests, nil
-}
-
-func Setup(cfg *config.Configuration, nodes map[string]ifaces.Node) (setup []ifaces.Step, err error) {
-	// Create the steps
-	setup, err = steptypes.CreateSteps(cfg.Setup, nodes)
-	if err != nil {
-		return nil, err
-	}
-	return setup, nil
-}
-
-func Teardown(cfg *config.Configuration, nodes map[string]ifaces.Node) (teardown []ifaces.Step, err error) {
-	// Create the steps
-	teardown, err = steptypes.CreateSteps(cfg.Teardown, nodes)
-	if err != nil {
-		return nil, err
-	}
-	return teardown, nil
-}
-
 func DockerWrapper(cfg *config.Configuration) (*docker.Wrapper, error) {
 	// Create the Docker wrapper
 	dw, err := docker.NewWrapper(cfg)
@@ -122,17 +103,6 @@ func LxdWrapper(cfg *config.Configuration) (*lxd.Wrapper, error) {
 }
 
 func Controller(params ControllerParams) (ctrl *internal.TestController, err error) {
-	// TODO: Setup and Teardown are called here because of an issue passing them in the params (not being called in the proper order)
-	setup, err := Setup(params.Cfg, params.Nodes)
-	if err != nil {
-		return nil, err
-	}
-
-	teardown, err := Teardown(params.Cfg, params.Nodes)
-	if err != nil {
-		return nil, err
-	}
-
 	// Build the list of platform managers
 	var platforms []ifaces.PlatformManager
 	if params.DockerWrapper != nil {
@@ -142,15 +112,18 @@ func Controller(params ControllerParams) (ctrl *internal.TestController, err err
 		platforms = append(platforms, params.LxdWrapper)
 	}
 
-	// Create the test controller
+	// Create the test controller with raw configs; steps/tests are created
+	// inside Run() after nodes are set up and facts are gathered.
 	return internal.NewTestController(
 		params.Cfg.Suite,
 		platforms,
 		params.Nodes,
-		params.Tests,
-		setup,
-		teardown,
+		params.Cfg.Nodes,
+		params.Cfg.Setup,
+		params.Cfg.Teardown,
+		params.Cfg.Tests,
 		*params.Flags.Verbose,
+		*params.Flags.Debug,
 		*params.Flags.StopOnError,
 		*params.Flags.PauseOnError,
 		*params.Flags.SetupOnly,
@@ -188,16 +161,17 @@ func main() {
 
 	u := usage.NewUsage(
 		usage.WithApplicationName("dart"),
-		usage.WithApplicationVersion("dev"),
-		usage.WithApplicationBuildDate("dev"),
-		usage.WithApplicationCommitHash("dev"),
-		usage.WithApplicationBranch("dev"),
+		usage.WithApplicationVersion(version),
+		usage.WithApplicationBuildDate(date),
+		usage.WithApplicationCommitHash(rev),
+		usage.WithApplicationBranch(branch),
 		usage.WithApplicationDescription("DART is a distributed systems testing framework designed to make it easy to perform automation and integration testing on a wide variety of distributed systems."),
 	)
 
 	cfgFlags := &CmdlineFlags{}
 	cfgFlags.ConfigFile = u.AddStringOption("c", "config", "config.yaml", "The path to the configuration file", "", nil)
 	cfgFlags.Verbose = u.AddBooleanOption("v", "verbose", false, "Enable verbose output", "", nil)
+	cfgFlags.Debug = u.AddBooleanOption("d", "debug", false, "Enable real-time streaming of command output", "", nil)
 	cfgFlags.PauseOnError = u.AddBooleanOption("p", "pause-on-error", false, "Pause on error", "", nil)
 	cfgFlags.StopOnError = u.AddBooleanOption("s", "stop-on-error", false, "Stop on error", "", nil)
 	cfgFlags.SetupOnly = u.AddBooleanOption("setup", "setup-only", false, "Only run the setup steps", "", nil)
@@ -222,15 +196,6 @@ func main() {
 				return cfgFlags
 			},
 			Nodes,
-			Tests,
-			fx.Annotate(
-				Setup,
-				fx.ResultTags(`group:"setup"`),
-			),
-			fx.Annotate(
-				Teardown,
-				fx.ResultTags(`group:"teardown"`),
-			),
 			DockerWrapper,
 			LxdWrapper,
 			Configuration,
@@ -241,6 +206,12 @@ func main() {
 	)
 
 	if err := app.Start(ctx); err != nil {
+		rootErr := dig.RootCause(err)
+		var cfgErr *config.ConfigError
+		if errors.As(rootErr, &cfgErr) {
+			fmt.Fprint(os.Stderr, config.RenderConfigError(cfgErr))
+			os.Exit(1)
+		}
 		log.Fatalf("Failed to start: %v", err)
 	}
 
