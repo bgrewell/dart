@@ -185,6 +185,9 @@ func (tc *TestController) Run() error {
 	}
 	tc.formatter.SetNodeNameWidth(longestNodeName)
 
+	// Calculate task column width once, before displaying anything
+	tc.formatter.SetTaskColumnWidth(tc.computeTaskColumnWidth(nodeSetupMsg, nodeTeardownMsg))
+
 	// If teardown only is set, skip the setup and tests
 	if tc.teardownOnly {
 		// Create teardown steps without template processing (no facts available)
@@ -194,8 +197,8 @@ func (tc *TestController) Run() error {
 			return err
 		}
 
-		// Compute formatting widths from configs
-		tc.setFormattingWidths(nodeSetupMsg, nodeTeardownMsg)
+		// Compute test column width
+		tc.setFormattingWidths()
 
 		cleanupMsg = "Running teardown only"
 		for name := range tc.Nodes {
@@ -273,15 +276,6 @@ func (tc *TestController) Run() error {
 		if err != nil {
 			return err
 		}
-		maxFactWidth := 0
-		for _, nodeFacts := range store {
-			for factName := range nodeFacts {
-				if len(factName) > maxFactWidth {
-					maxFactWidth = len(factName)
-				}
-			}
-		}
-		tc.formatter.SetTaskColumnWidth(maxFactWidth)
 		for nodeName, nodeFacts := range store {
 			for factName, value := range nodeFacts {
 				f := tc.formatter.StartTask(factName, nodeName, "running")
@@ -296,8 +290,8 @@ func (tc *TestController) Run() error {
 		return err
 	}
 
-	// Now compute formatting widths from the created objects
-	tc.setFormattingWidths(nodeSetupMsg, nodeTeardownMsg)
+	// Compute test column width from the created test objects
+	tc.setFormattingWidths()
 
 	if len(tc.Setup) > 0 {
 		for _, step := range tc.Setup {
@@ -436,20 +430,56 @@ func (tc *TestController) Run() error {
 	return nil
 }
 
-// setFormattingWidths computes and sets the column widths for the formatter
-// based on the created step/test objects.
-func (tc *TestController) setFormattingWidths(nodeSetupMsg, nodeTeardownMsg string) {
-	longestSetup := len(nodeSetupMsg)
-	if len(nodeTeardownMsg) > longestSetup {
-		longestSetup = len(nodeTeardownMsg)
+// computeTaskColumnWidth calculates the maximum width needed for the task column
+// by considering all items that use StartTask(): fact names, node setup/teardown
+// messages, step titles, and platform messages.
+func (tc *TestController) computeTaskColumnWidth(nodeSetupMsg, nodeTeardownMsg string) int {
+	maxWidth := len(nodeSetupMsg)
+	if len(nodeTeardownMsg) > maxWidth {
+		maxWidth = len(nodeTeardownMsg)
 	}
-	for _, step := range append(tc.Setup, tc.Teardown...) {
-		if len(step.Title()) > longestSetup {
-			longestSetup = len(step.Title())
+
+	// Include fact names
+	for _, cfg := range tc.NodeConfigs {
+		for factName := range cfg.Facts {
+			if len(factName) > maxWidth {
+				maxWidth = len(factName)
+			}
 		}
 	}
-	tc.formatter.SetTaskColumnWidth(longestSetup)
 
+	// Include step titles from configs
+	for _, cfg := range tc.SetupConfigs {
+		if len(cfg.Name) > maxWidth {
+			maxWidth = len(cfg.Name)
+		}
+	}
+	for _, cfg := range tc.TeardownConfigs {
+		if len(cfg.Name) > maxWidth {
+			maxWidth = len(cfg.Name)
+		}
+	}
+
+	// Include platform messages
+	for _, platform := range tc.Platforms {
+		if platform.Configured() {
+			setupMsg := fmt.Sprintf("setting up %s environment", platform.Name())
+			teardownMsg := fmt.Sprintf("tearing down %s environment", platform.Name())
+			if len(setupMsg) > maxWidth {
+				maxWidth = len(setupMsg)
+			}
+			if len(teardownMsg) > maxWidth {
+				maxWidth = len(teardownMsg)
+			}
+		}
+	}
+
+	return maxWidth
+}
+
+// setFormattingWidths sets the test column width based on the created test objects.
+// Task column width should already be set by computeTaskColumnWidth().
+func (tc *TestController) setFormattingWidths() {
 	longestTest := 0
 	for _, test := range tc.Tests {
 		if len(test.Name()) > longestTest {
