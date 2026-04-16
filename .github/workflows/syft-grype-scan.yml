@@ -1,21 +1,21 @@
-name: Release with SBOM and VEX
+name: SBOM and Security Scan
 
 on:
   # Manual trigger
   workflow_dispatch:
-  # Trigger on tagged pushes
-  push:
-    tags:
-      - 'v*'
-      - '*.*.*'
+  # Run after a release is published so the release created by release.yml
+  # is the authoritative one. Attaches SBOM/VEX artifacts to that release
+  # without regenerating release notes.
+  release:
+    types: [published]
 
 permissions:
   contents: write
   security-events: write
 
 jobs:
-  build-and-release:
-    name: Build Release with SBOM & VEX
+  sbom-and-scan:
+    name: Generate SBOM and Run Security Scan
     runs-on: ubuntu-latest
     
     steps:
@@ -158,9 +158,10 @@ jobs:
             SBOM.txt
           retention-days: 90
       
-      # Create GitHub Release and attach SBOM and VEX artifacts
-      - name: Create GitHub Release with SBOM and VEX
-        if: startsWith(github.ref, 'refs/tags/')
+      # Attach SBOM and VEX artifacts to the existing release created by release.yml.
+      # Release notes are owned by release.yml and must not be regenerated here.
+      - name: Attach SBOM and VEX to release
+        if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
           files: |
@@ -170,6 +171,5 @@ jobs:
             grype-results.sarif
             grype-results.json
             VEX.txt
-          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
