@@ -1,13 +1,16 @@
 package nodetypes
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
+	"strings"
+
 	"github.com/bgrewell/dart/internal/docker"
 	"github.com/bgrewell/dart/internal/execution"
 	"github.com/bgrewell/dart/internal/helpers"
 	"github.com/bgrewell/dart/pkg/ifaces"
-	"strings"
 )
 
 var _ ifaces.Node = &DockerComposeNode{}
@@ -141,4 +144,59 @@ func (d *DockerComposeNode) Execute(command string, options ...execution.Executi
 func (d *DockerComposeNode) Close() error {
 	// No specific cleanup needed beyond teardown
 	return nil
+}
+
+// containerID resolves the docker container ID for this node's service.
+func (d *DockerComposeNode) containerID() (string, error) {
+	if d.stack == nil {
+		return "", fmt.Errorf("compose stack not initialized")
+	}
+	if d.options.Service == "" {
+		return "", fmt.Errorf("no service specified (set 'service' in node options)")
+	}
+	return d.stack.GetServiceContainerID(d.options.Service)
+}
+
+func (d *DockerComposeNode) ReadFile(path string) ([]byte, error) {
+	id, err := d.containerID()
+	if err != nil {
+		return nil, err
+	}
+	return docker.CopyFileFromContainer(context.Background(), d.wrapper.GetClient(), id, path)
+}
+
+func (d *DockerComposeNode) WriteFile(path string, data []byte, mode fs.FileMode) error {
+	id, err := d.containerID()
+	if err != nil {
+		return err
+	}
+	return docker.CopyFileToContainer(context.Background(), d.wrapper.GetClient(), id, path, data, mode)
+}
+
+func (d *DockerComposeNode) RemoveFile(path string) error {
+	id, err := d.containerID()
+	if err != nil {
+		return err
+	}
+	return docker.RemoveFileInContainer(d.wrapper.GetClient(), id, path)
+}
+
+func (d *DockerComposeNode) Stat(path string) (ifaces.FileInfo, error) {
+	id, err := d.containerID()
+	if err != nil {
+		return ifaces.FileInfo{}, err
+	}
+	size, mode, isDir, err := docker.StatFileInContainer(context.Background(), d.wrapper.GetClient(), id, path)
+	if err != nil {
+		return ifaces.FileInfo{}, err
+	}
+	return ifaces.FileInfo{Size: size, Mode: mode, IsDir: isDir}, nil
+}
+
+func (d *DockerComposeNode) MkdirAll(path string, mode fs.FileMode) error {
+	id, err := d.containerID()
+	if err != nil {
+		return err
+	}
+	return docker.MkdirAllInContainer(d.wrapper.GetClient(), id, path, mode)
 }

@@ -1,8 +1,9 @@
 package steptypes
 
 import (
+	"errors"
 	"fmt"
-	"os"
+	"io/fs"
 
 	"github.com/bgrewell/dart/internal/formatters"
 	"github.com/bgrewell/dart/pkg/ifaces"
@@ -10,7 +11,7 @@ import (
 
 var _ ifaces.Step = &FileWriteStep{}
 
-// FileWriteStep writes content to a specified file.
+// FileWriteStep writes content to a file on the configured node.
 type FileWriteStep struct {
 	BaseStep
 	node      ifaces.Node
@@ -21,24 +22,19 @@ type FileWriteStep struct {
 
 // Run writes the content to the file.
 func (s *FileWriteStep) Run(updater formatters.TaskCompleter) error {
-	flags := os.O_WRONLY | os.O_CREATE
-	if s.overwrite {
-		flags |= os.O_TRUNC
-	} else {
-		flags |= os.O_EXCL
+	if !s.overwrite {
+		if _, err := s.node.Stat(s.filePath); err == nil {
+			updater.Error()
+			return fmt.Errorf("failed to write file: %s already exists", s.filePath)
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			updater.Error()
+			return fmt.Errorf("failed to stat file: %w", err)
+		}
 	}
 
-	file, err := os.OpenFile(s.filePath, flags, 0644)
-	if err != nil {
+	if err := s.node.WriteFile(s.filePath, []byte(s.contents), 0644); err != nil {
 		updater.Error()
 		return fmt.Errorf("failed to write file: %w", err)
-	}
-	defer file.Close()
-
-	_, err = file.WriteString(s.contents)
-	if err != nil {
-		updater.Error()
-		return fmt.Errorf("failed to write file contents: %w", err)
 	}
 
 	updater.Complete()

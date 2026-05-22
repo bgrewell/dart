@@ -2,7 +2,6 @@ package steptypes
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/bgrewell/dart/internal/formatters"
 	"github.com/bgrewell/dart/pkg/ifaces"
@@ -10,17 +9,17 @@ import (
 
 var _ ifaces.Step = &FileDeleteStep{}
 
-// FileDeleteStep deletes a specified file.
+// FileDeleteStep deletes a specified file on the configured node.
 type FileDeleteStep struct {
 	BaseStep
+	node         ifaces.Node
 	filePath     string
 	ignoreErrors bool
 }
 
 // Run deletes the file at the specified path.
 func (s *FileDeleteStep) Run(updater formatters.TaskCompleter) error {
-	err := os.Remove(s.filePath)
-	if err != nil {
+	if err := s.node.RemoveFile(s.filePath); err != nil {
 		if s.ignoreErrors {
 			updater.Complete()
 			return nil

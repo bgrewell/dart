@@ -152,6 +152,24 @@ func CreateSteps(configs []*config.StepConfig, nodes map[string]ifaces.Node) ([]
 				return nil, err
 			}
 			steps = append(steps, step)
+		case "file_read":
+			step, err := createFileReadStep(c, node)
+			if err != nil {
+				return nil, err
+			}
+			steps = append(steps, step)
+		case "file_write":
+			step, err := createFileWriteStep(c, node)
+			if err != nil {
+				return nil, err
+			}
+			steps = append(steps, step)
+		case "file_exists":
+			step, err := createFileExistsStep(c, node)
+			if err != nil {
+				return nil, err
+			}
+			steps = append(steps, step)
 		default:
 			return nil, &config.ConfigError{
 				Message:  fmt.Sprintf("unknown step type %q", c.Step.Type),
@@ -164,7 +182,7 @@ func CreateSteps(configs []*config.StepConfig, nodes map[string]ifaces.Node) ([]
 }
 
 // createFileCreateStep creates a FileCreateStep from configuration
-func createFileCreateStep(c *config.StepConfig, _ ifaces.Node) (*FileCreateStep, error) {
+func createFileCreateStep(c *config.StepConfig, node ifaces.Node) (*FileCreateStep, error) {
 	// After expansion, each config has exactly one node
 	nodeName := c.Node[0]
 
@@ -187,6 +205,7 @@ func createFileCreateStep(c *config.StepConfig, _ ifaces.Node) (*FileCreateStep,
 
 	return &FileCreateStep{
 		BaseStep:  BaseStep{title: c.Name, nodeName: nodeName},
+		node:      node,
 		filePath:  filePath,
 		contents:  contents,
 		overwrite: overwrite,
@@ -196,7 +215,7 @@ func createFileCreateStep(c *config.StepConfig, _ ifaces.Node) (*FileCreateStep,
 }
 
 // createFileDeleteStep creates a FileDeleteStep from configuration
-func createFileDeleteStep(c *config.StepConfig, _ ifaces.Node) (*FileDeleteStep, error) {
+func createFileDeleteStep(c *config.StepConfig, node ifaces.Node) (*FileDeleteStep, error) {
 	// After expansion, each config has exactly one node
 	nodeName := c.Node[0]
 
@@ -212,13 +231,71 @@ func createFileDeleteStep(c *config.StepConfig, _ ifaces.Node) (*FileDeleteStep,
 
 	return &FileDeleteStep{
 		BaseStep:     BaseStep{title: c.Name, nodeName: nodeName},
+		node:         node,
 		filePath:     filePath,
 		ignoreErrors: ignoreErrors,
 	}, nil
 }
 
+// createFileReadStep creates a FileReadStep from configuration
+func createFileReadStep(c *config.StepConfig, node ifaces.Node) (*FileReadStep, error) {
+	nodeName := c.Node[0]
+	filePath, _ := c.Step.Options["path"].(string)
+	if filePath == "" {
+		return nil, &config.ConfigError{
+			Message:  fmt.Sprintf("file path is required in step %q", c.Name),
+			Location: c.Loc,
+		}
+	}
+	contains, _ := c.Step.Options["contains"].(string)
+	return &FileReadStep{
+		BaseStep: BaseStep{title: c.Name, nodeName: nodeName},
+		node:     node,
+		filePath: filePath,
+		contains: contains,
+	}, nil
+}
+
+// createFileWriteStep creates a FileWriteStep from configuration
+func createFileWriteStep(c *config.StepConfig, node ifaces.Node) (*FileWriteStep, error) {
+	nodeName := c.Node[0]
+	filePath, _ := c.Step.Options["path"].(string)
+	if filePath == "" {
+		return nil, &config.ConfigError{
+			Message:  fmt.Sprintf("file path is required in step %q", c.Name),
+			Location: c.Loc,
+		}
+	}
+	contents, _ := c.Step.Options["contents"].(string)
+	overwrite, _ := c.Step.Options["overwrite"].(bool)
+	return &FileWriteStep{
+		BaseStep:  BaseStep{title: c.Name, nodeName: nodeName},
+		node:      node,
+		filePath:  filePath,
+		contents:  contents,
+		overwrite: overwrite,
+	}, nil
+}
+
+// createFileExistsStep creates a FileExistsStep from configuration
+func createFileExistsStep(c *config.StepConfig, node ifaces.Node) (*FileExistsStep, error) {
+	nodeName := c.Node[0]
+	filePath, _ := c.Step.Options["path"].(string)
+	if filePath == "" {
+		return nil, &config.ConfigError{
+			Message:  fmt.Sprintf("file path is required in step %q", c.Name),
+			Location: c.Loc,
+		}
+	}
+	return &FileExistsStep{
+		BaseStep: BaseStep{title: c.Name, nodeName: nodeName},
+		node:     node,
+		filePath: filePath,
+	}, nil
+}
+
 // createFileEditStep creates a FileEditStep from configuration
-func createFileEditStep(c *config.StepConfig, _ ifaces.Node) (*FileEditStep, error) {
+func createFileEditStep(c *config.StepConfig, node ifaces.Node) (*FileEditStep, error) {
 	// After expansion, each config has exactly one node
 	nodeName := c.Node[0]
 
@@ -299,6 +376,7 @@ func createFileEditStep(c *config.StepConfig, _ ifaces.Node) (*FileEditStep, err
 
 	return &FileEditStep{
 		BaseStep:    BaseStep{title: c.Name, nodeName: nodeName},
+		node:        node,
 		filePath:    filePath,
 		operation:   operation,
 		position:    position,

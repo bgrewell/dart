@@ -1,7 +1,10 @@
 package nodetypes
 
 import (
+	"context"
 	"encoding/json"
+	"io/fs"
+
 	"github.com/bgrewell/dart/internal/docker"
 	"github.com/bgrewell/dart/internal/execution"
 	"github.com/bgrewell/dart/internal/helpers"
@@ -87,4 +90,28 @@ func (d *DockerNode) Execute(command string, options ...execution.ExecutionOptio
 func (d *DockerNode) Close() error {
 	//TODO implement me
 	return helpers.WrapError("not implemented")
+}
+
+func (d *DockerNode) ReadFile(path string) ([]byte, error) {
+	return docker.CopyFileFromContainer(context.Background(), d.wrapper.GetClient(), d.name, path)
+}
+
+func (d *DockerNode) WriteFile(path string, data []byte, mode fs.FileMode) error {
+	return docker.CopyFileToContainer(context.Background(), d.wrapper.GetClient(), d.name, path, data, mode)
+}
+
+func (d *DockerNode) RemoveFile(path string) error {
+	return docker.RemoveFileInContainer(d.wrapper.GetClient(), d.name, path)
+}
+
+func (d *DockerNode) Stat(path string) (ifaces.FileInfo, error) {
+	size, mode, isDir, err := docker.StatFileInContainer(context.Background(), d.wrapper.GetClient(), d.name, path)
+	if err != nil {
+		return ifaces.FileInfo{}, err
+	}
+	return ifaces.FileInfo{Size: size, Mode: mode, IsDir: isDir}, nil
+}
+
+func (d *DockerNode) MkdirAll(path string, mode fs.FileMode) error {
+	return docker.MkdirAllInContainer(d.wrapper.GetClient(), d.name, path, mode)
 }

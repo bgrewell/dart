@@ -1,43 +1,41 @@
 package steptypes
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/bgrewell/dart/internal/formatters"
+	"github.com/bgrewell/dart/pkg/nodetypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TestFileDeleteStep verifies basic file deletion.
+// TestFileDeleteStep verifies basic file deletion on the node.
 func TestFileDeleteStep(t *testing.T) {
-	tempFile := filepath.Join(os.TempDir(), "test_file_delete.txt")
-
-	// Create the file first
-	err := os.WriteFile(tempFile, []byte("Test content"), 0644)
-	require.NoError(t, err)
+	node := nodetypes.NewMockNode()
+	node.SeedFile("/etc/test_file_delete.txt", []byte("Test content"), 0644)
 
 	step := &FileDeleteStep{
 		BaseStep: BaseStep{title: "Delete Test File"},
-		filePath: tempFile,
+		node:     node,
+		filePath: "/etc/test_file_delete.txt",
 	}
 
 	updater := formatters.NewMockTaskCompleter()
-	err = step.Run(updater)
+	require.NoError(t, step.Run(updater))
 
-	assert.NoError(t, err)
-	assert.NoFileExists(t, tempFile)
+	_, ok := node.GetFile("/etc/test_file_delete.txt")
+	assert.False(t, ok, "expected file to be removed from the node")
 	assert.True(t, updater.IsCompleted())
 }
 
 // TestFileDeleteStepNotExists verifies error when file doesn't exist.
 func TestFileDeleteStepNotExists(t *testing.T) {
-	tempFile := filepath.Join(os.TempDir(), "test_file_delete_not_exists.txt")
+	node := nodetypes.NewMockNode()
 
 	step := &FileDeleteStep{
 		BaseStep: BaseStep{title: "Delete Non-existent File"},
-		filePath: tempFile,
+		node:     node,
+		filePath: "/etc/test_file_delete_missing.txt",
 	}
 
 	updater := formatters.NewMockTaskCompleter()
@@ -49,17 +47,16 @@ func TestFileDeleteStepNotExists(t *testing.T) {
 
 // TestFileDeleteStepIgnoreErrors verifies ignore_errors option.
 func TestFileDeleteStepIgnoreErrors(t *testing.T) {
-	tempFile := filepath.Join(os.TempDir(), "test_file_delete_ignore.txt")
+	node := nodetypes.NewMockNode()
 
 	step := &FileDeleteStep{
 		BaseStep:     BaseStep{title: "Delete Non-existent File Ignore"},
-		filePath:     tempFile,
+		node:         node,
+		filePath:     "/etc/test_file_delete_ignore.txt",
 		ignoreErrors: true,
 	}
 
 	updater := formatters.NewMockTaskCompleter()
-	err := step.Run(updater)
-
-	assert.NoError(t, err)
+	require.NoError(t, step.Run(updater))
 	assert.True(t, updater.IsCompleted())
 }

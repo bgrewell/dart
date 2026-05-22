@@ -1,32 +1,45 @@
 package steptypes
 
 import (
-	"os"
 	"testing"
 
 	"github.com/bgrewell/dart/internal/formatters"
+	"github.com/bgrewell/dart/pkg/nodetypes"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-// TestFileReadStep verifies file reading and content validation.
+// TestFileReadStep verifies file reading and contains validation against the node.
 func TestFileReadStep(t *testing.T) {
-	tempFile := "/tmp/test_read.txt"
-	expectedContent := "Hello, DART!"
-	os.WriteFile(tempFile, []byte(expectedContent), 0644)
+	node := nodetypes.NewMockNode()
+	node.SeedFile("/etc/test_read.txt", []byte("Hello, DART!"), 0644)
 
 	step := &FileReadStep{
 		BaseStep: BaseStep{title: "Read File"},
-		filePath: tempFile,
+		node:     node,
+		filePath: "/etc/test_read.txt",
 		contains: "DART",
 	}
 
-	// Run step
+	updater := formatters.NewMockTaskCompleter()
+	require.NoError(t, step.Run(updater))
+	assert.True(t, updater.IsCompleted())
+}
+
+// TestFileReadStepContainsMissing verifies error when expected content is absent.
+func TestFileReadStepContainsMissing(t *testing.T) {
+	node := nodetypes.NewMockNode()
+	node.SeedFile("/etc/test_read.txt", []byte("nothing of interest"), 0644)
+
+	step := &FileReadStep{
+		BaseStep: BaseStep{title: "Read File Contains Missing"},
+		node:     node,
+		filePath: "/etc/test_read.txt",
+		contains: "DART",
+	}
+
 	updater := formatters.NewMockTaskCompleter()
 	err := step.Run(updater)
-
-	// Validate content
-	assert.NoError(t, err)
-
-	// Clean up
-	os.Remove(tempFile)
+	assert.Error(t, err)
+	assert.True(t, updater.IsErrored())
 }

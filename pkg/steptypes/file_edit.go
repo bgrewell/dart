@@ -2,7 +2,7 @@ package steptypes
 
 import (
 	"fmt"
-	"os"
+	"io/fs"
 	"regexp"
 	"strconv"
 	"strings"
@@ -42,6 +42,7 @@ const (
 // FileEditStep edits a file using insert, replace, or remove operations.
 type FileEditStep struct {
 	BaseStep
+	node      ifaces.Node
 	filePath  string
 	operation EditOperation
 	// For insert operations
@@ -58,11 +59,17 @@ type FileEditStep struct {
 
 // Run executes the file edit operation.
 func (s *FileEditStep) Run(updater formatters.TaskCompleter) error {
-	// Read the file
-	data, err := os.ReadFile(s.filePath)
+	// Read the file from the configured node
+	data, err := s.node.ReadFile(s.filePath)
 	if err != nil {
 		updater.Error()
 		return fmt.Errorf("failed to read file: %w", err)
+	}
+
+	// Preserve the file's existing mode so the edit is non-destructive.
+	var mode fs.FileMode = defaultFileMode
+	if info, statErr := s.node.Stat(s.filePath); statErr == nil {
+		mode = info.Mode.Perm()
 	}
 
 	content := string(data)
@@ -85,9 +92,8 @@ func (s *FileEditStep) Run(updater formatters.TaskCompleter) error {
 		return err
 	}
 
-	// Write the modified content back
-	err = os.WriteFile(s.filePath, []byte(result), 0644)
-	if err != nil {
+	// Write the modified content back to the node
+	if err := s.node.WriteFile(s.filePath, []byte(result), mode); err != nil {
 		updater.Error()
 		return fmt.Errorf("failed to write file: %w", err)
 	}
@@ -95,6 +101,9 @@ func (s *FileEditStep) Run(updater formatters.TaskCompleter) error {
 	updater.Complete()
 	return nil
 }
+
+// defaultFileMode is used when Stat is unavailable or the file is new.
+const defaultFileMode fs.FileMode = 0644
 
 // doInsert inserts content before or after a match
 func (s *FileEditStep) doInsert(content string) (string, error) {

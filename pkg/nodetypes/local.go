@@ -2,6 +2,8 @@ package nodetypes
 
 import (
 	"io"
+	"io/fs"
+	"os"
 	"os/exec"
 	"syscall"
 
@@ -87,4 +89,28 @@ func (l *LocalNode) Execute(command string, options ...execution.ExecutionOption
 		Stdout:      stdout,
 		Stderr:      stderr,
 	}, nil
+}
+
+func (l *LocalNode) ReadFile(path string) ([]byte, error) {
+	return os.ReadFile(path)
+}
+
+func (l *LocalNode) WriteFile(path string, data []byte, mode fs.FileMode) error {
+	return os.WriteFile(path, data, mode)
+}
+
+func (l *LocalNode) RemoveFile(path string) error {
+	return os.Remove(path)
+}
+
+func (l *LocalNode) Stat(path string) (ifaces.FileInfo, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return ifaces.FileInfo{}, err
+	}
+	return ifaces.FileInfo{Size: info.Size(), Mode: info.Mode(), IsDir: info.IsDir()}, nil
+}
+
+func (l *LocalNode) MkdirAll(path string, mode fs.FileMode) error {
+	return os.MkdirAll(path, mode)
 }

@@ -11,9 +11,13 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"math/big"
 	"net"
+	"os"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -26,6 +30,7 @@ import (
 	"github.com/bgrewell/dart/pkg/ifaces"
 	lxdclient "github.com/canonical/lxd/client"
 	"github.com/canonical/lxd/shared/api"
+	"github.com/pkg/sftp"
 )
 
 var _ ifaces.Node = &LxdNode{}
@@ -280,6 +285,9 @@ type LxdNode struct {
 	wrapper   *lxd.Wrapper
 	options   LxdNodeOpts
 	addresses []string
+
+	sftpMu sync.Mutex
+	sftp   *sftp.Client
 }
 
 func (d *LxdNode) Setup() error {
@@ -445,8 +453,96 @@ func (d *LxdNode) Execute(command string, options ...execution.ExecutionOption) 
 }
 
 func (d *LxdNode) Close() error {
+	d.sftpMu.Lock()
+	if d.sftp != nil {
+		d.sftp.Close()
+		d.sftp = nil
+	}
+	d.sftpMu.Unlock()
 	// No cleanup needed for the LXD client
 	return nil
+}
+
+// getSftp opens (and caches) an SFTP session to the running instance via the
+// LXD server's instance-file API. Requires the instance to be running.
+func (d *LxdNode) getSftp() (*sftp.Client, error) {
+	d.sftpMu.Lock()
+	defer d.sftpMu.Unlock()
+	if d.sftp != nil {
+		return d.sftp, nil
+	}
+	if d.client == nil {
+		return nil, helpers.WrapError("lxd client not initialized")
+	}
+	c, err := d.client.GetInstanceFileSFTP(d.name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open sftp session to instance %s: %w", d.name, err)
+	}
+	d.sftp = c
+	return c, nil
+}
+
+func (d *LxdNode) ReadFile(path string) ([]byte, error) {
+	c, err := d.getSftp()
+	if err != nil {
+		return nil, err
+	}
+	f, err := c.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
+}
+
+func (d *LxdNode) WriteFile(path string, data []byte, mode fs.FileMode) error {
+	c, err := d.getSftp()
+	if err != nil {
+		return err
+	}
+	f, err := c.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if err := f.Chmod(mode); err != nil {
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (d *LxdNode) RemoveFile(path string) error {
+	c, err := d.getSftp()
+	if err != nil {
+		return err
+	}
+	return c.Remove(path)
+}
+
+func (d *LxdNode) Stat(path string) (ifaces.FileInfo, error) {
+	c, err := d.getSftp()
+	if err != nil {
+		return ifaces.FileInfo{}, err
+	}
+	info, err := c.Stat(path)
+	if err != nil {
+		return ifaces.FileInfo{}, err
+	}
+	return ifaces.FileInfo{Size: info.Size(), Mode: info.Mode(), IsDir: info.IsDir()}, nil
+}
+
+func (d *LxdNode) MkdirAll(path string, mode fs.FileMode) error {
+	c, err := d.getSftp()
+	if err != nil {
+		return err
+	}
+	if err := c.MkdirAll(path); err != nil {
+		return err
+	}
+	return c.Chmod(path, mode)
 }
 
 // generateSelfSignedCert generates a self-signed certificate for LXD client authentication

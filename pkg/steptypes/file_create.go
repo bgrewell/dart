@@ -1,8 +1,9 @@
 package steptypes
 
 import (
+	"errors"
 	"fmt"
-	"os"
+	"io/fs"
 	"path/filepath"
 
 	"github.com/bgrewell/dart/internal/formatters"
@@ -11,32 +12,35 @@ import (
 
 var _ ifaces.Step = &FileCreateStep{}
 
-// FileCreateStep creates a new file with specified content.
+// FileCreateStep creates a new file with specified content on the configured node.
 type FileCreateStep struct {
 	BaseStep
+	node      ifaces.Node
 	filePath  string
 	contents  string
 	overwrite bool
-	mode      os.FileMode
+	mode      fs.FileMode
 	createDir bool
 }
 
 // Run creates the file with the specified content.
 func (s *FileCreateStep) Run(updater formatters.TaskCompleter) error {
-	// Create parent directories if requested
 	if s.createDir {
 		dir := filepath.Dir(s.filePath)
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := s.node.MkdirAll(dir, 0755); err != nil {
 			updater.Error()
 			return fmt.Errorf("failed to create directories: %w", err)
 		}
 	}
 
-	flags := os.O_WRONLY | os.O_CREATE
-	if s.overwrite {
-		flags |= os.O_TRUNC
-	} else {
-		flags |= os.O_EXCL
+	if !s.overwrite {
+		if _, err := s.node.Stat(s.filePath); err == nil {
+			updater.Error()
+			return fmt.Errorf("failed to create file: %s already exists", s.filePath)
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			updater.Error()
+			return fmt.Errorf("failed to stat file: %w", err)
+		}
 	}
 
 	mode := s.mode
@@ -44,17 +48,9 @@ func (s *FileCreateStep) Run(updater formatters.TaskCompleter) error {
 		mode = 0644
 	}
 
-	file, err := os.OpenFile(s.filePath, flags, mode)
-	if err != nil {
+	if err := s.node.WriteFile(s.filePath, []byte(s.contents), mode); err != nil {
 		updater.Error()
 		return fmt.Errorf("failed to create file: %w", err)
-	}
-	defer file.Close()
-
-	_, err = file.WriteString(s.contents)
-	if err != nil {
-		updater.Error()
-		return fmt.Errorf("failed to write file contents: %w", err)
 	}
 
 	updater.Complete()
