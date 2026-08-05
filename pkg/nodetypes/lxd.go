@@ -16,6 +16,8 @@ import (
 	"math/big"
 	"net"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -41,14 +43,29 @@ type LxdNetworkOpts struct {
 	Ip     string `yaml:"ip,omitempty" json:"ip"`
 }
 
+// LxdBootWaitOpts controls how long to wait for an instance to start accepting
+// commands after it has been started. It is intended for instances that boot from an
+// installer ISO, where the instance is unreachable for the duration of the install and
+// only becomes usable once it has rebooted from disk.
+type LxdBootWaitOpts struct {
+	Timeout      int    `yaml:"timeout,omitempty" json:"timeout"`             // Maximum seconds to wait for the instance to become ready
+	Interval     int    `yaml:"interval,omitempty" json:"interval"`           // Seconds between readiness checks
+	InitialDelay int    `yaml:"initial_delay,omitempty" json:"initial_delay"` // Seconds to wait before the first readiness check
+	ReadyCommand string `yaml:"ready_command,omitempty" json:"ready_command"` // Command that must exit zero for the instance to be considered ready
+}
+
 type LxdNodeOpts struct {
-	Image        string                 `yaml:"image,omitempty" json:"image"`
-	Server       string                 `yaml:"server,omitempty" json:"server"`
-	Protocol     string                 `yaml:"protocol,omitempty" json:"protocol"`
-	InstanceType string                 `yaml:"instance_type,omitempty" json:"instance_type"` // "container" or "virtual-machine"
-	Profiles     []string               `yaml:"profiles,omitempty" json:"profiles"`
-	ExecOptions  map[string]interface{} `yaml:"exec_opts,omitempty" json:"exec_opts"`
-	Networks     []LxdNetworkOpts       `yaml:"networks,omitempty" json:"networks"`
+	Image        string                            `yaml:"image,omitempty" json:"image"`
+	Empty        bool                              `yaml:"empty,omitempty" json:"empty"` // Create an instance with no image (boot media is supplied via devices)
+	Server       string                            `yaml:"server,omitempty" json:"server"`
+	Protocol     string                            `yaml:"protocol,omitempty" json:"protocol"`
+	InstanceType string                            `yaml:"instance_type,omitempty" json:"instance_type"` // "container" or "virtual-machine"
+	Profiles     []string                          `yaml:"profiles,omitempty" json:"profiles"`
+	Config       map[string]interface{}            `yaml:"config,omitempty" json:"config"`   // Instance configuration keys (e.g. security.secureboot)
+	Devices      map[string]map[string]interface{} `yaml:"devices,omitempty" json:"devices"` // Arbitrary instance devices (ISO disks, extra disks, ...)
+	BootWait     *LxdBootWaitOpts                  `yaml:"boot_wait,omitempty" json:"boot_wait"`
+	ExecOptions  map[string]interface{}            `yaml:"exec_opts,omitempty" json:"exec_opts"`
+	Networks     []LxdNetworkOpts                  `yaml:"networks,omitempty" json:"networks"`
 	// Socket path for local connections (supports both LXD and Incus)
 	Socket string `yaml:"socket,omitempty" json:"socket"`
 	// Remote connection options (for connecting to remote LXD servers)
@@ -62,6 +79,98 @@ type LxdNodeOpts struct {
 	Project string `yaml:"project,omitempty" json:"project"` // LXD project to use (defaults to lxd.DefaultProject)
 }
 
+// emptyInstance reports whether the instance should be created without an image.
+// An instance is empty when it is explicitly marked as such or when no image was given.
+func (o LxdNodeOpts) emptyInstance() bool {
+	return o.Empty || o.Image == ""
+}
+
+// validate checks the option combinations that cannot be caught by the LXD server
+// until well after the instance has been created.
+func (o LxdNodeOpts) validate() error {
+	if o.Empty && o.Image != "" {
+		return helpers.WrapError("empty instances cannot specify an image; remove either 'empty' or 'image'")
+	}
+	return nil
+}
+
+// readinessConfig converts the boot wait options into a readiness configuration,
+// substituting defaults for any value that was not provided.
+func (b *LxdBootWaitOpts) readinessConfig() *lxd.ReadinessConfig {
+	config := lxd.DefaultReadinessConfig()
+	if b == nil {
+		return config
+	}
+	if b.Timeout > 0 {
+		config.Timeout = time.Duration(b.Timeout) * time.Second
+	}
+	if b.Interval > 0 {
+		config.PollInterval = time.Duration(b.Interval) * time.Second
+	}
+	return config
+}
+
+// readyCommand returns the command used to determine whether the instance is ready,
+// wrapped in the shell configured for the node.
+func (b *LxdBootWaitOpts) readyCommand(shell string) []string {
+	command := "true"
+	if b != nil && b.ReadyCommand != "" {
+		command = b.ReadyCommand
+	}
+	return []string{shell, "-c", command}
+}
+
+// optionValueToString renders a YAML scalar in the string form that the LXD API expects.
+func optionValueToString(value interface{}) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	case bool:
+		return strconv.FormatBool(v)
+	case int:
+		return strconv.Itoa(v)
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	case nil:
+		return ""
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}
+
+// buildDevices converts the configured devices into the string map that LXD expects.
+// Relative disk sources are resolved against the working directory so that test files
+// can reference build artifacts by their path in the repository. Sources are paths on
+// the LXD host, so they are left untouched when the node talks to a remote server.
+func buildDevices(devices map[string]map[string]interface{}, resolvePaths bool) (map[string]map[string]string, error) {
+	built := make(map[string]map[string]string, len(devices))
+	for deviceName, device := range devices {
+		converted := make(map[string]string, len(device))
+		for key, value := range device {
+			converted[key] = optionValueToString(value)
+		}
+
+		if converted["type"] == "" {
+			return nil, helpers.WrapError(fmt.Sprintf("device %q is missing a type", deviceName))
+		}
+
+		// Only plain disks reference a host path; disks backed by a storage pool name a volume
+		if resolvePaths && converted["type"] == "disk" && converted["pool"] == "" && converted["source"] != "" {
+			absolute, err := filepath.Abs(converted["source"])
+			if err != nil {
+				return nil, helpers.WrapError(fmt.Sprintf("device %q: unable to resolve source %q: %v", deviceName, converted["source"], err))
+			}
+			converted["source"] = absolute
+		}
+
+		built[deviceName] = converted
+	}
+
+	return built, nil
+}
+
 // NewLxdNode creates a new LXD node without using the wrapper
 func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err error) {
 
@@ -73,6 +182,10 @@ func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err err
 	var nodeopts LxdNodeOpts
 	err = json.Unmarshal(jsonData, &nodeopts)
 	if err != nil {
+		return nil, err
+	}
+
+	if err = nodeopts.validate(); err != nil {
 		return nil, err
 	}
 
@@ -127,6 +240,22 @@ func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err err
 
 		// Check authentication method priority: trust_token > certificates > skip_verify
 		if nodeopts.TrustToken != "" {
+			clientName := fmt.Sprintf("dart-%s", name)
+
+			// Tokens are usually pasted from the output of 'lxc config trust add', so
+			// tolerate the whitespace that comes along with a copy
+			nodeopts.TrustToken = strings.TrimSpace(nodeopts.TrustToken)
+
+			// Fail fast on tokens we can already tell are unusable
+			token, terr := parseTrustToken(nodeopts.TrustToken)
+			if terr != nil {
+				return nil, fmt.Errorf("invalid trust token: %w; generate a new one with: lxc config trust add %s", terr, clientName)
+			}
+			if trustTokenExpired(token, time.Now()) {
+				return nil, fmt.Errorf("trust token expired at %s; generate a new one with: lxc config trust add %s",
+					token.ExpiresAt.UTC().Format(time.RFC3339), clientName)
+			}
+
 			// Use trust token authentication (modern approach)
 			// Generate temporary certificates for the initial connection
 			certPEM, keyPEM, err := generateSelfSignedCert()
@@ -158,10 +287,8 @@ func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err err
 			}
 
 			// Authenticate using the trust token
-			clientName := fmt.Sprintf("dart-%s", name)
-			err = authenticateWithToken(client, nodeopts.TrustToken, clientName)
-			if err != nil {
-				return nil, fmt.Errorf("failed to authenticate with trust token: %w", err)
+			if err := authenticateWithToken(client, nodeopts.TrustToken, clientName); err != nil {
+				return nil, fmt.Errorf("trust token auth failed for %s: %w", nodeopts.RemoteAddr, err)
 			}
 
 		} else {
@@ -231,6 +358,10 @@ func NewLxdNodeWithWrapper(wrapper *lxd.Wrapper, name string, opts ifaces.NodeOp
 	var nodeopts LxdNodeOpts
 	err = json.Unmarshal(jsonData, &nodeopts)
 	if err != nil {
+		return nil, err
+	}
+
+	if err = nodeopts.validate(); err != nil {
 		return nil, err
 	}
 
@@ -323,18 +454,41 @@ func (d *LxdNode) Setup() error {
 		devices[deviceName] = deviceConfig
 	}
 
+	// Merge in any explicitly configured devices, such as an ISO attached as boot media.
+	// These are applied last so a node can override a generated NIC if it needs to.
+	configuredDevices, err := buildDevices(d.options.Devices, d.options.RemoteAddr == "")
+	if err != nil {
+		return err
+	}
+	for deviceName, deviceConfig := range configuredDevices {
+		devices[deviceName] = deviceConfig
+	}
+
+	// Build the instance configuration keys
+	instanceConfig := make(map[string]string, len(d.options.Config))
+	for key, value := range d.options.Config {
+		instanceConfig[key] = optionValueToString(value)
+	}
+
+	// Empty instances are created without a source so they boot from their devices
+	source := api.InstanceSource{
+		Type:     api.SourceTypeImage,
+		Alias:    d.options.Image,
+		Server:   d.options.Server,
+		Protocol: d.options.Protocol,
+	}
+	if d.options.emptyInstance() {
+		source = api.InstanceSource{Type: api.SourceTypeNone}
+	}
+
 	// Create a request for the instance
 	req := api.InstancesPost{
-		Name: d.name,
-		Source: api.InstanceSource{
-			Type:     "image",
-			Alias:    d.options.Image,
-			Server:   d.options.Server,
-			Protocol: d.options.Protocol,
-		},
-		Type: instanceType,
+		Name:   d.name,
+		Source: source,
+		Type:   instanceType,
 		InstancePut: api.InstancePut{
 			Profiles: d.options.Profiles,
+			Config:   instanceConfig,
 			Devices:  devices,
 		},
 	}
@@ -365,8 +519,34 @@ func (d *LxdNode) Setup() error {
 		return helpers.WrapError(fmt.Sprintf("error starting instance: %v", err))
 	}
 
-	// Wait for the instance to be fully ready (OS booted, networking available)
+	return d.waitForReady()
+}
+
+// waitForReady blocks until the instance can run commands. When boot_wait is configured
+// the default readiness check is replaced by a poll of the configured command, which is
+// what an instance installing from an ISO needs: it is unreachable while the installer
+// runs and only answers once it has rebooted from disk.
+func (d *LxdNode) waitForReady() error {
 	ctx := context.Background()
+
+	if d.options.BootWait != nil {
+		if delay := d.options.BootWait.InitialDelay; delay > 0 {
+			time.Sleep(time.Duration(delay) * time.Second)
+		}
+		command := d.options.BootWait.readyCommand(d.shell())
+		if err := lxd.WaitForInstanceCommand(ctx, d.client, d.name, command, d.options.BootWait.readinessConfig()); err != nil {
+			return helpers.WrapError(fmt.Sprintf("error waiting for instance to be ready: %v", err))
+		}
+		return nil
+	}
+
+	// An empty instance has no guest agent until something is installed into it, so
+	// there is nothing to wait for unless the node asked for it with boot_wait
+	if d.options.emptyInstance() {
+		return nil
+	}
+
+	// Wait for the instance to be fully ready (OS booted, networking available)
 	if err := lxd.WaitForInstanceReady(ctx, d.client, d.name, nil); err != nil {
 		return helpers.WrapError(fmt.Sprintf("error waiting for instance to be ready: %v", err))
 	}
@@ -374,23 +554,41 @@ func (d *LxdNode) Setup() error {
 	return nil
 }
 
+// shell returns the shell used to run commands inside the instance
+func (d *LxdNode) shell() string {
+	if shell, ok := d.options.ExecOptions["shell"].(string); ok && shell != "" {
+		return shell
+	}
+	return "/bin/bash"
+}
+
 func (d *LxdNode) Teardown() error {
 	if d.client == nil {
 		return helpers.WrapError("lxd client not initialized")
 	}
 
-	// Create a stop request
-	req := api.InstanceStatePut{
-		Action:  "stop",
-		Timeout: -1,
-		Force:   true,
-	}
-	op, err := d.client.UpdateInstanceState(d.name, req, "")
+	// An instance may already be stopped, for example a VM that powered itself off at
+	// the end of an unattended install, and stopping it again is an error
+	state, _, err := d.client.GetInstanceState(d.name)
 	if err != nil {
-		return helpers.WrapError(fmt.Sprintf("error stopping instance: %v", err))
+		return helpers.WrapError(fmt.Sprintf("error getting instance state: %v", err))
 	}
-	if err = op.Wait(); err != nil {
-		return helpers.WrapError(fmt.Sprintf("error stopping instance: %v", err))
+
+	var op lxdclient.Operation
+	if state.Status != "Stopped" {
+		// Create a stop request
+		req := api.InstanceStatePut{
+			Action:  "stop",
+			Timeout: -1,
+			Force:   true,
+		}
+		op, err = d.client.UpdateInstanceState(d.name, req, "")
+		if err != nil {
+			return helpers.WrapError(fmt.Sprintf("error stopping instance: %v", err))
+		}
+		if err = op.Wait(); err != nil {
+			return helpers.WrapError(fmt.Sprintf("error stopping instance: %v", err))
+		}
 	}
 
 	// Create a delete request
@@ -422,9 +620,9 @@ func (d *LxdNode) Execute(command string, options ...execution.ExecutionOption) 
 		Stderr: stderrWriter,
 	}
 
-	// Execute the command using bash
+	// Execute the command using the configured shell
 	execPost := api.InstanceExecPost{
-		Command:     []string{"/bin/bash", "-c", command},
+		Command:     []string{d.shell(), "-c", command},
 		WaitForWS:   true,
 		Interactive: false,
 	}
@@ -610,12 +808,46 @@ func authenticateWithToken(server lxdclient.InstanceServer, token, clientName st
 	}
 
 	// Send certificate to server with trust token
-	err = server.CreateCertificate(certReq)
-	if err != nil {
-		return fmt.Errorf("failed to authenticate with trust token: %w", err)
+	if err := server.CreateCertificate(certReq); err != nil {
+		// Trust tokens are single-use server-side; once consumed (or expired) the
+		// matching operation is gone and the server rejects the request. The exact
+		// wording differs between LXD and Incus versions, so match the stable part
+		// of "No matching certificate add operation found".
+		if strings.Contains(strings.ToLower(err.Error()), "certificate add operation") {
+			return fmt.Errorf("trust token rejected — likely already consumed or expired; generate a new one with: lxc config trust add %s (server: %w)", clientName, err)
+		}
+		return err
 	}
 
 	return nil
+}
+
+// trustTokenClockSkew is how far the local clock may run ahead of the server
+// before an unexpired token would be rejected locally.
+const trustTokenClockSkew = 30 * time.Second
+
+// parseTrustToken decodes the base64 JSON payload of a certificate add token
+// without contacting the server, so callers can validate it locally before
+// connecting. This is the same payload `lxc config trust add` prints.
+func parseTrustToken(encoded string) (*api.CertificateAddToken, error) {
+	raw, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return nil, fmt.Errorf("token is not valid base64: %w", err)
+	}
+	var token api.CertificateAddToken
+	if err := json.Unmarshal(raw, &token); err != nil {
+		return nil, fmt.Errorf("token is not valid JSON: %w", err)
+	}
+	return &token, nil
+}
+
+// trustTokenExpired reports whether a token's expiry has passed, allowing for a
+// small amount of clock skew. Tokens without an expiry never expire.
+func trustTokenExpired(token *api.CertificateAddToken, now time.Time) bool {
+	if token == nil || token.ExpiresAt.IsZero() {
+		return false
+	}
+	return now.Add(-trustTokenClockSkew).After(token.ExpiresAt)
 }
 
 func Fields(s string) ([]string, error) {

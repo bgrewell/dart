@@ -202,6 +202,60 @@ nodes:
 
 See `examples/lxd/lxd-remote.yaml` for a complete example.
 
+### Empty VMs and ISO Boot
+
+LXD nodes are normally created from an image. To test an installer instead, create an empty
+virtual machine and attach the ISO as a boot device. DART creates the instance with no source,
+attaches the devices, starts it, and then waits for the install to finish rather than expecting
+the instance to answer right away.
+
+```yaml
+nodes:
+  - name: iso-vm
+    type: lxd
+    options:
+      instance_type: virtual-machine
+
+      # Create the VM with no image; it boots from its devices instead
+      empty: true
+
+      # Instance configuration keys, applied at creation
+      config:
+        security.secureboot: "false"
+
+      # Devices attached to the instance
+      devices:
+        iso:
+          type: disk
+          source: work/output/example-0.1.0-amd64.iso
+          # Rank the ISO above the root disk so the installer boots first
+          boot.priority: 10
+
+      # An installing VM is unreachable until it reboots from disk, so poll for it
+      boot_wait:
+        timeout: 1800          # Maximum seconds to wait (default 300)
+        interval: 15           # Seconds between checks (default 2)
+        initial_delay: 60      # Seconds before the first check (default 0)
+        ready_command: cat /etc/hostname
+```
+
+Notes:
+
+- `empty: true` creates the instance with no source. Omitting `image` has the same effect;
+  setting both `empty: true` and `image` is rejected.
+- `devices` accepts any LXD device configuration and is merged over the NICs generated from
+  `networks`, so a node can override a generated device if it needs to.
+- Relative `source` paths on disk devices are resolved to absolute paths, letting a test file
+  reference build artifacts by their path in the repository. Sources on remote nodes are paths
+  on the remote server and are passed through untouched.
+- `boot_wait` replaces the default readiness check: DART polls `ready_command` through the
+  configured shell until it exits zero or the timeout expires. Without `ready_command`, being
+  able to run any command at all counts as ready.
+- An empty instance with no `boot_wait` is started and left alone, since it has no guest agent
+  to wait for.
+
+See `examples/lxd/lxd-iso-vm.yaml` for a complete example.
+
 ### LXD/Incus Auto-Detection
 
 DART automatically detects whether the host system has LXD or Incus installed and configures the appropriate socket path. This allows test configurations to be portable across systems without modification.
