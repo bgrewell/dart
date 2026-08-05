@@ -58,6 +58,37 @@ nodes:
         shell: /bin/bash
 ```
 
+### lxd-iso-vm.yaml - ISO Boot Example
+
+Demonstrates booting an empty VM from an installer ISO and testing the installed system:
+- Creating a VM with no image using `empty: true`
+- Attaching an ISO with a `disk` device and `boot.priority`
+- Waiting out an unattended install with `boot_wait`
+
+```yaml
+nodes:
+  - name: iso-vm
+    type: lxd
+    options:
+      instance_type: virtual-machine
+      empty: true
+      config:
+        security.secureboot: "false"
+      devices:
+        iso:
+          type: disk
+          source: work/output/example-0.1.0-amd64.iso
+          boot.priority: 10
+      boot_wait:
+        timeout: 1800
+        interval: 15
+        ready_command: cat /etc/hostname
+```
+
+The VM does not answer any commands while the installer runs, so `boot_wait` replaces the
+normal readiness check: DART polls `ready_command` until it exits zero or `timeout` seconds
+have passed. Relative disk sources are resolved against the directory DART runs in.
+
 ### lxd-remote.yaml - Remote LXD Server Example
 
 Demonstrates connecting to remote LXD servers using modern trust token authentication or traditional certificate-based authentication:
@@ -142,8 +173,12 @@ nodes:
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `image` | Image to use (format: `remote:alias`, e.g., `ubuntu:24.04`) | Required |
+| `image` | Image to use (format: `remote:alias`, e.g., `ubuntu:24.04`) | Required unless `empty` |
+| `empty` | Create the instance with no image so it boots from its devices | `false` |
 | `instance_type` | Type of instance: `container` or `virtual-machine` | `container` |
+| `config` | Instance configuration keys (e.g., `security.secureboot`) | - |
+| `devices` | Instance devices, merged over the NICs generated from `networks` | - |
+| `boot_wait` | Readiness poll for instances that install before they answer | - |
 | `server` | Image server URL | Auto-detected from remote |
 | `protocol` | Protocol: `lxd` or `simplestreams` | Auto-detected |
 | `profiles` | List of profiles to apply | `["default"]` |

@@ -1,0 +1,122 @@
+---
+# LXD/Incus ISO Boot Test Suite Example
+# This example demonstrates booting an empty virtual machine from an installer ISO,
+# letting an unattended install run to completion, and then asserting against the
+# installed system.
+#
+# Prerequisites:
+#   - LXD or Incus must be installed and running on the host
+#   - Hardware virtualization must be supported (check: lxc info | grep -i vm)
+#   - The user must have access to the LXD/Incus socket
+#   - An installer ISO built somewhere on the host (see the 'source' path below)
+#
+# How it works:
+#   - No 'image' is given and 'empty: true' is set, so the VM is created with no
+#     source. It has a blank root disk and boots from whatever device has the
+#     highest boot priority.
+#   - The 'devices' map attaches the ISO as a disk with 'boot.priority: 10', which
+#     ranks it above the root disk so the VM boots the installer first.
+#   - 'boot_wait' replaces the normal readiness check. The VM is unreachable for the
+#     whole install, so DART polls 'ready_command' until it succeeds or the timeout
+#     expires. Once the installer finishes and the VM reboots from disk, the guest
+#     agent answers and the tests run.
+
+suite: ISO Boot Test Suite
+
+# Network for the VM under test
+lxd:
+  networks:
+    - name: iso-test-net
+      type: bridge
+      subnet: 10.201.1.0/24
+      gateway: 10.201.1.1
+
+nodes:
+  - name: iso-vm
+    type: lxd
+    options:
+      # ISO installs only make sense for virtual machines
+      instance_type: virtual-machine
+
+      # No 'image' field: create an empty VM rather than one built from an image
+      empty: true
+
+      # Instance configuration keys. Custom ISOs are rarely signed, so secure boot
+      # usually has to be off for the VM to boot the installer at all.
+      config:
+        security.secureboot: "false"
+        limits.cpu: "4"
+        limits.memory: 8GiB
+
+      # Devices attached to the instance. Relative disk sources are resolved against
+      # the directory DART runs in, so build artifacts can be referenced by their
+      # path in the repository.
+      devices:
+        iso:
+          type: disk
+          source: work/output/example-0.1.0-amd64.iso
+          # Rank the ISO above the root disk so the installer boots first
+          boot.priority: 10
+        root:
+          type: disk
+          path: /
+          pool: default
+          size: 40GiB
+
+      # Wait for the install to finish and the VM to reboot from disk. The VM does
+      # not answer at all while the installer runs, so give this plenty of room.
+      boot_wait:
+        # Maximum seconds to wait for the VM to become usable
+        timeout: 1800
+        # Seconds between checks (default 2)
+        interval: 15
+        # Seconds to wait before the first check, useful when a VM briefly answers
+        # early in the boot before the installer takes over (default 0)
+        initial_delay: 60
+        # The VM is ready once this command exits zero
+        ready_command: cat /etc/hostname
+
+      exec_opts:
+        shell: /bin/bash
+
+      networks:
+        - name: iso-test-net
+          ip: 10.201.1.10
+
+# Tests run against the installed system, not the installer
+tests:
+  - name: Installed Hostname
+    node: iso-vm
+    type: execute
+    options:
+      command: cat /etc/hostname
+      evaluate:
+        exit_code: 0
+        match: example-node
+
+  - name: Booted From Disk
+    node: iso-vm
+    type: execute
+    options:
+      # A system still running from the ISO would be on a read-only squashfs
+      command: findmnt -no FSTYPE /
+      evaluate:
+        exit_code: 0
+        contains: btrfs
+
+  - name: Expected User Exists
+    node: iso-vm
+    type: execute
+    options:
+      command: id example
+      evaluate:
+        exit_code: 0
+
+  - name: Services Enabled After Install
+    node: iso-vm
+    type: execute
+    options:
+      command: systemctl is-enabled ssh
+      evaluate:
+        exit_code: 0
+        match: enabled

@@ -8,6 +8,7 @@ DART supports the following types of nodes:
 - **SSH (`ssh`)** – Connects to remote machines via SSH.
 - **Docker (`docker`)** – Runs tests inside Docker containers.
 - **LXD (`lxd`)** – Runs tests in LXD containers.
+- **LXD VM (`lxd-vm`)** – Runs tests in LXD virtual machines.
 
 ### Example Node Configuration
 ```yaml
@@ -24,6 +25,48 @@ nodes:
       user: testuser
       key: ~/.ssh/id_rsa
 ```
+
+---
+
+## Booting a VM From an ISO
+
+LXD nodes are usually created from an image. To test an installer instead, create an empty
+virtual machine and attach the ISO as a boot device:
+
+```yaml
+nodes:
+  - name: iso-vm
+    type: lxd
+    options:
+      instance_type: virtual-machine
+
+      # Create the VM with no image so it boots from its devices
+      empty: true
+
+      # Instance configuration keys, applied at creation
+      config:
+        security.secureboot: "false"
+
+      devices:
+        iso:
+          type: disk
+          source: work/output/example-0.1.0-amd64.iso
+          # Rank the ISO above the root disk so the installer boots first
+          boot.priority: 10
+
+      # The VM is unreachable until the install finishes and it reboots from disk
+      boot_wait:
+        timeout: 1800          # Maximum seconds to wait (default 300)
+        interval: 15           # Seconds between checks (default 2)
+        initial_delay: 60      # Seconds before the first check (default 0)
+        ready_command: cat /etc/hostname
+```
+
+`boot_wait` replaces the default readiness check. DART polls `ready_command` through the
+node's shell until it exits zero or the timeout expires, so the tests that follow run against
+the installed system rather than the installer. Relative `source` paths on disk devices are
+resolved to absolute paths for local nodes; on remote nodes the source is a path on the remote
+server and is passed through unchanged.
 
 ---
 

@@ -238,6 +238,40 @@ func WaitForInstanceReady(ctx context.Context, server lxd.InstanceServer, name s
 	}
 }
 
+// WaitForInstanceCommand waits until the given command exits successfully inside the
+// instance. Unlike WaitForInstanceReady it makes no assumptions about networking or
+// about the instance staying up, which makes it usable for instances that install an
+// operating system from an attached ISO and are unreachable until the install finishes
+// and the instance reboots from disk.
+func WaitForInstanceCommand(ctx context.Context, server lxd.InstanceServer, name string, command []string, config *ReadinessConfig) error {
+	if config == nil {
+		config = DefaultReadinessConfig()
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, config.Timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(config.PollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timeout waiting for instance %s to respond to %v: %w", name, command, ctx.Err())
+		case <-ticker.C:
+			var stdout, stderr bytes.Buffer
+			exitCode, err := ExecInInstance(server, name, command, &stdout, &stderr)
+			if err != nil {
+				// The instance is not accepting commands yet, keep waiting
+				continue
+			}
+			if exitCode == 0 {
+				return nil
+			}
+		}
+	}
+}
+
 // isInstanceReady checks if an instance is fully ready to accept commands
 func isInstanceReady(ctx context.Context, server lxd.InstanceServer, name string) (bool, error) {
 	// Check instance state
