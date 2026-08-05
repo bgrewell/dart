@@ -418,6 +418,60 @@ Add controlled delays in the setup/teardown process. Useful for:
       time: 5  # Wait for 5 seconds before proceeding
 ```
 
+#### File Operations (`file_create`, `file_write`, `file_edit`, `file_read`, `file_exists`, `file_delete`)
+
+Manage files on the node the step is attached to. These act on the filesystem of that node, not on the
+machine running DART, so a step on an `ssh`, `docker`, `docker-compose`, or `lxd` node reads and writes
+files inside that node.
+
+| Type | Purpose | Options |
+|------|---------|---------|
+| `file_create` | Create a file, optionally creating its parent directories | `path` (required), `contents`, `overwrite`, `create_dir`, `mode` |
+| `file_write` | Write a file in a directory that already exists | `path` (required), `contents`, `overwrite` |
+| `file_edit` | Insert, replace, or remove content in an existing file | `path`, `operation` (required), `match_type`, `match`, `position`, `line_number`, `content`, `use_captures` |
+| `file_read` | Read a file and optionally assert on its content | `path` (required), `contains` |
+| `file_exists` | Fail unless the path exists | `path` (required) |
+| `file_delete` | Delete a file | `path` (required), `ignore_errors` |
+
+```yaml
+- name: write inventory on the remote host
+  node: remote-server
+  step:
+    type: file_write
+    options:
+      path: /etc/ansible/hosts.ini
+      contents: |
+        [core]
+        node1
+      overwrite: true
+
+- name: verify it landed
+  node: remote-server
+  step:
+    type: file_read
+    options:
+      path: /etc/ansible/hosts.ini
+      contains: "[core]"
+```
+
+**Node requirements.** Each node type reaches its filesystem differently:
+
+- `local` uses the `os` package directly and has no requirements.
+- `ssh` uses SFTP over the existing connection, so the remote host must run an SFTP subsystem — the
+  default on most distributions.
+- `lxd` and `lxd-vm` use the LXD instance file API. The instance must be running, and **virtual
+  machines additionally need the LXD guest agent**. A VM without it — including one still running an
+  unattended install from an ISO, before `boot_wait` completes — fails these steps even when `execute`
+  steps work. Containers do not need the agent.
+- `docker` and `docker-compose` stream tar archives over the Docker copy API for reads and writes, but
+  shell out to `rm`, `mkdir`, and `chmod` inside the container for deletes and `create_dir`. Distroless
+  and `scratch` images fail those steps.
+
+Note that the `overwrite: false` guard checks for an existing file and then writes, so it is not atomic
+against a concurrent creation.
+
+See `examples/file-operations/` for a complete example.
+
 ### Best Practices
 
 1. **Environment Isolation**

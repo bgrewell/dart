@@ -1,7 +1,13 @@
 ---
 # File Operations Example Test Suite
-# This example demonstrates the file_create, file_edit, and file_delete step types
-# for managing files during test setup and teardown phases.
+# This example demonstrates the file_create, file_write, file_edit, file_read,
+# file_exists, and file_delete step types for managing files during test setup
+# and teardown phases.
+#
+# File steps act on the filesystem of the node named in the step. This example
+# uses a local node for portability, but pointing these same steps at an ssh,
+# docker, docker-compose, or lxd node reads and writes files inside that node.
+# See README.md for what each node type requires.
 
 suite: File Operations Example
 
@@ -112,6 +118,38 @@ setup:
         match_type: plain
         match: "environment=testing\n"
 
+  # Example 8: Write a file into a directory that already exists
+  - name: write inventory file
+    node: local
+    step:
+      type: file_write
+      options:
+        path: /tmp/dart-example/hosts.ini
+        contents: |
+          [core]
+          node1
+
+          [edge]
+          node2
+        overwrite: true
+
+  # Example 9: Confirm a file is present before the tests run
+  - name: confirm config was created
+    node: local
+    step:
+      type: file_exists
+      options:
+        path: /tmp/dart-example/config.txt
+
+  # Example 10: Read a file back and assert on its content
+  - name: verify inventory contents
+    node: local
+    step:
+      type: file_read
+      options:
+        path: /tmp/dart-example/hosts.ini
+        contains: "[edge]"
+
 tests:
   # Verify the configuration file was modified correctly
   - name: verify config file exists
@@ -147,7 +185,7 @@ tests:
         exit_code: 0
 
 teardown:
-  # Example 8: Delete files during teardown
+  # Example 11: Delete files during teardown
   - name: cleanup config file
     node: local
     step:
@@ -162,6 +200,14 @@ teardown:
       type: file_delete
       options:
         path: /tmp/dart-example/settings.json
+        ignore_errors: true
+
+  - name: cleanup inventory file
+    node: local
+    step:
+      type: file_delete
+      options:
+        path: /tmp/dart-example/hosts.ini
         ignore_errors: true
 
   # Clean up the example directory
