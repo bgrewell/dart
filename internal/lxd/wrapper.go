@@ -188,7 +188,9 @@ func (w *Wrapper) Setup() error {
 
 	// Create the networks
 	for _, net := range w.cfg.Networks {
-		if err := w.CreateNetwork(net.Name, net.Subnet, net.Gateway); err != nil {
+		// NAT defaults to true; nat: false yields an air-gapped bridge
+		nat := net.Nat == nil || *net.Nat
+		if err := w.CreateNetwork(net.Name, net.Subnet, net.Gateway, nat); err != nil {
 			return err
 		}
 	}
@@ -313,10 +315,11 @@ func (w *Wrapper) RemoveInstance(name string) error {
 	return nil
 }
 
-// CreateNetwork creates a new network
-func (w *Wrapper) CreateNetwork(name string, subnet string, gateway string) error {
+// CreateNetwork creates a new network. nat controls ipv4.nat on the bridge;
+// pass false for air-gapped networks.
+func (w *Wrapper) CreateNetwork(name string, subnet string, gateway string, nat bool) error {
 	ctx := context.Background()
-	if err := CreateBridgeNetwork(ctx, w.server, name, subnet, gateway); err != nil {
+	if err := CreateBridgeNetwork(ctx, w.server, name, subnet, gateway, nat); err != nil {
 		return fmt.Errorf("could not create network: %w", err)
 	}
 	w.networkNamesToId[name] = name

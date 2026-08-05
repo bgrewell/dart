@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strconv"
 
 	lxd "github.com/canonical/lxd/client"
 	"github.com/canonical/lxd/shared/api"
@@ -49,11 +50,13 @@ func CreateNetwork(ctx context.Context, server lxd.InstanceServer, name, network
 	return nil
 }
 
-// CreateBridgeNetwork creates a bridge network with specific subnet and gateway
-func CreateBridgeNetwork(ctx context.Context, server lxd.InstanceServer, name, subnet, gateway string) error {
+// CreateBridgeNetwork creates a bridge network with specific subnet and gateway.
+// nat controls ipv4.nat; disabling it yields an isolated (air-gapped) bridge
+// where instances get DHCP addresses but no route to the outside world.
+func CreateBridgeNetwork(ctx context.Context, server lxd.InstanceServer, name, subnet, gateway string, nat bool) error {
 	config := map[string]string{
 		"ipv4.address": gateway + "/" + getSubnetMask(subnet),
-		"ipv4.nat":     "true",
+		"ipv4.nat":     strconv.FormatBool(nat),
 	}
 
 	return CreateNetwork(ctx, server, name, "bridge", config)
