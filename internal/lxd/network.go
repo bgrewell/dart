@@ -51,12 +51,15 @@ func CreateNetwork(ctx context.Context, server lxd.InstanceServer, name, network
 }
 
 // CreateBridgeNetwork creates a bridge network with specific subnet and gateway.
-// nat controls ipv4.nat; disabling it yields an isolated (air-gapped) bridge
-// where instances get DHCP addresses but no route to the outside world.
+// nat controls NAT for both address families; disabling it yields an isolated
+// (air-gapped) bridge where instances get DHCP addresses but no route to the
+// outside world. ipv6.nat must be set explicitly — LXD auto-assigns an IPv6
+// subnet with NAT enabled by default, which would leak internet access.
 func CreateBridgeNetwork(ctx context.Context, server lxd.InstanceServer, name, subnet, gateway string, nat bool) error {
 	config := map[string]string{
 		"ipv4.address": gateway + "/" + getSubnetMask(subnet),
 		"ipv4.nat":     strconv.FormatBool(nat),
+		"ipv6.nat":     strconv.FormatBool(nat),
 	}
 
 	return CreateNetwork(ctx, server, name, "bridge", config)
