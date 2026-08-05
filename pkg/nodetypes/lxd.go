@@ -235,6 +235,22 @@ func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err err
 
 		// Check authentication method priority: trust_token > certificates > skip_verify
 		if nodeopts.TrustToken != "" {
+			clientName := fmt.Sprintf("dart-%s", name)
+
+			// Tokens are usually pasted from the output of 'lxc config trust add', so
+			// tolerate the whitespace that comes along with a copy
+			nodeopts.TrustToken = strings.TrimSpace(nodeopts.TrustToken)
+
+			// Fail fast on tokens we can already tell are unusable
+			token, terr := parseTrustToken(nodeopts.TrustToken)
+			if terr != nil {
+				return nil, fmt.Errorf("invalid trust token: %w; generate a new one with: lxc config trust add %s", terr, clientName)
+			}
+			if trustTokenExpired(token, time.Now()) {
+				return nil, fmt.Errorf("trust token expired at %s; generate a new one with: lxc config trust add %s",
+					token.ExpiresAt.UTC().Format(time.RFC3339), clientName)
+			}
+
 			// Use trust token authentication (modern approach)
 			// Generate temporary certificates for the initial connection
 			certPEM, keyPEM, err := generateSelfSignedCert()
@@ -266,10 +282,8 @@ func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err err
 			}
 
 			// Authenticate using the trust token
-			clientName := fmt.Sprintf("dart-%s", name)
-			err = authenticateWithToken(client, nodeopts.TrustToken, clientName)
-			if err != nil {
-				return nil, fmt.Errorf("failed to authenticate with trust token: %w", err)
+			if err := authenticateWithToken(client, nodeopts.TrustToken, clientName); err != nil {
+				return nil, fmt.Errorf("trust token auth failed for %s: %w", nodeopts.RemoteAddr, err)
 			}
 
 		} else {
@@ -698,12 +712,46 @@ func authenticateWithToken(server lxdclient.InstanceServer, token, clientName st
 	}
 
 	// Send certificate to server with trust token
-	err = server.CreateCertificate(certReq)
-	if err != nil {
-		return fmt.Errorf("failed to authenticate with trust token: %w", err)
+	if err := server.CreateCertificate(certReq); err != nil {
+		// Trust tokens are single-use server-side; once consumed (or expired) the
+		// matching operation is gone and the server rejects the request. The exact
+		// wording differs between LXD and Incus versions, so match the stable part
+		// of "No matching certificate add operation found".
+		if strings.Contains(strings.ToLower(err.Error()), "certificate add operation") {
+			return fmt.Errorf("trust token rejected — likely already consumed or expired; generate a new one with: lxc config trust add %s (server: %w)", clientName, err)
+		}
+		return err
 	}
 
 	return nil
+}
+
+// trustTokenClockSkew is how far the local clock may run ahead of the server
+// before an unexpired token would be rejected locally.
+const trustTokenClockSkew = 30 * time.Second
+
+// parseTrustToken decodes the base64 JSON payload of a certificate add token
+// without contacting the server, so callers can validate it locally before
+// connecting. This is the same payload `lxc config trust add` prints.
+func parseTrustToken(encoded string) (*api.CertificateAddToken, error) {
+	raw, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return nil, fmt.Errorf("token is not valid base64: %w", err)
+	}
+	var token api.CertificateAddToken
+	if err := json.Unmarshal(raw, &token); err != nil {
+		return nil, fmt.Errorf("token is not valid JSON: %w", err)
+	}
+	return &token, nil
+}
+
+// trustTokenExpired reports whether a token's expiry has passed, allowing for a
+// small amount of clock skew. Tokens without an expiry never expire.
+func trustTokenExpired(token *api.CertificateAddToken, now time.Time) bool {
+	if token == nil || token.ExpiresAt.IsZero() {
+		return false
+	}
+	return now.Add(-trustTokenClockSkew).After(token.ExpiresAt)
 }
 
 func Fields(s string) ([]string, error) {
