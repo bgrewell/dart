@@ -18,7 +18,12 @@ func NewLocalNode(name string, opts ifaces.NodeOptions) ifaces.Node {
 
 	var options []execution.ExecutionOption
 	if opts != nil {
-		options = execution.OptionsToExecutionOptions(*opts)
+		o := *opts
+		if execOpts, ok := o["exec_opts"].(map[string]interface{}); ok {
+			options = execution.OptionsToExecutionOptions(execOpts)
+		} else {
+			options = execution.OptionsToExecutionOptions(o)
+		}
 	}
 
 	return &LocalNode{
