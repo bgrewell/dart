@@ -90,14 +90,16 @@ func (sf *StandardFormatter) PrintEmpty() {
 	fmt.Println()
 }
 
-func (sf *StandardFormatter) PrintResults(pass, fail, ran int) {
+func (sf *StandardFormatter) PrintResults(pass, fail, skipped, ran int) {
 
 	p := 5 - (len(strconv.Itoa(pass)))
 	f := 5 - (len(strconv.Itoa(fail)))
+	s := 5 - (len(strconv.Itoa(skipped)))
 	r := 5 - (len(strconv.Itoa(ran)))
 
 	passVal := strconv.Itoa(pass)
 	failVal := strconv.Itoa(fail)
+	skipVal := strconv.Itoa(skipped)
 	ranVal := strconv.Itoa(ran)
 
 	if pass == 0 {
@@ -111,16 +113,26 @@ func (sf *StandardFormatter) PrintResults(pass, fail, ran int) {
 
 	passPad := strings.Repeat("0", p)
 	failPad := strings.Repeat("0", f)
+	skipPad := strings.Repeat("0", s)
 	ranPad := strings.Repeat("0", r)
 
 	indent := strings.Repeat(" ", sf.indent)
 	sf.PrintHeader("Results")
 	fmt.Printf("%sPass: %s%s\n", indent, numberPaddingColor.Sprintf(passPad), valuePassColor.Sprintf(passVal))
 	fmt.Printf("%sFail: %s%s\n", indent, numberPaddingColor.Sprintf(failPad), valueFailColor.Sprintf(failVal))
+	if skipped > 0 {
+		fmt.Printf("%sSkip: %s%s\n", indent, numberPaddingColor.Sprintf(skipPad), valueRanColor.Sprintf(skipVal))
+	}
 	if ran > 0 {
 		fmt.Printf("%sRan:  %s%s\n", indent, numberPaddingColor.Sprintf(ranPad), valueRanColor.Sprintf(ranVal))
 
 	}
+}
+
+// PrintSkip reports a skipped test with the reason its condition triggered.
+func (sf *StandardFormatter) PrintSkip(name string, reason string) {
+	fmt.Printf("%s~%s:\n", strings.Repeat(" ", sf.detailIndent-sf.indent), valueRanColor.Sprintf(name))
+	fmt.Printf("%s%s\n", strings.Repeat(" ", sf.detailIndent), valueColor.Sprintf(reason))
 }
 
 func (sf *StandardFormatter) PrintHeader(header string) {
@@ -268,6 +280,13 @@ func (s StandardTestCompleter) Complete(passed []bool) {
 
 func (s StandardTestCompleter) Passed() {
 	stream.GetCoordinator().ClearActiveSpinner()
+	s.spinner.Stop()
+}
+
+func (s StandardTestCompleter) Skip() {
+	stream.GetCoordinator().ClearActiveSpinner()
+	s.spinner.StopColors("fgHiYellow")
+	s.spinner.StopCharacter("skipped")
 	s.spinner.Stop()
 }
 

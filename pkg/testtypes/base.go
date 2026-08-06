@@ -47,6 +47,8 @@ type BaseTest struct {
 	testType    string
 	setup       []string
 	teardown    []string
+	skipIf      string
+	skipUnless  string
 	evaluations map[string]eval.Evaluate
 }
 
@@ -56,6 +58,33 @@ func (t *BaseTest) Name() string {
 
 func (t *BaseTest) NodeName() string {
 	return t.nodeName
+}
+
+// ShouldSkip evaluates the test's skip conditions on its node: skip_if
+// skips when its command succeeds, skip_unless skips when its command
+// fails. An error running a condition command is an error, not a skip —
+// a broken condition must never silently pass as green or vanish as
+// skipped.
+func (t *BaseTest) ShouldSkip() (skip bool, reason string, err error) {
+	if t.skipIf != "" {
+		result, err := t.node.Execute(t.skipIf)
+		if err != nil {
+			return false, "", fmt.Errorf("skip_if command failed to run: %w", err)
+		}
+		if result.ExitCode == 0 {
+			return true, fmt.Sprintf("skip_if condition met: %s", t.skipIf), nil
+		}
+	}
+	if t.skipUnless != "" {
+		result, err := t.node.Execute(t.skipUnless)
+		if err != nil {
+			return false, "", fmt.Errorf("skip_unless command failed to run: %w", err)
+		}
+		if result.ExitCode != 0 {
+			return true, fmt.Sprintf("skip_unless condition not met: %s", t.skipUnless), nil
+		}
+	}
+	return false, "", nil
 }
 
 // runProducer is the shared test flow: run setup commands on the node,
@@ -177,12 +206,14 @@ func CreateTests(configs []*config.TestConfig, nodes map[string]ifaces.Node) (te
 		}
 
 		base := BaseTest{
-			name:     cfg.Name,
-			nodeName: nodeName,
-			node:     node,
-			testType: cfg.Type,
-			setup:    cfg.Setup,
-			teardown: cfg.Teardown,
+			name:       cfg.Name,
+			nodeName:   nodeName,
+			node:       node,
+			testType:   cfg.Type,
+			setup:      cfg.Setup,
+			teardown:   cfg.Teardown,
+			skipIf:     cfg.SkipIf,
+			skipUnless: cfg.SkipUnless,
 		}
 
 		test, err := factory(base, cfg.Options)

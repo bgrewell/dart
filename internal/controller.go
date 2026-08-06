@@ -394,11 +394,35 @@ func (tc *TestController) Run() error {
 
 	// Run the tests
 	testResults := make(map[string]map[string]*eval.EvaluateResult)
+	skippedTests := 0
 	tc.formatter.PrintHeader("Running tests")
 	untilReachedInTests := false
 	for idx, test := range tc.Tests {
 		id := idx + 1
 		f := tc.formatter.StartTest(strconv.Itoa(id), test.Name(), test.NodeName())
+
+		// Skip conditions are evaluated before the test runs; a skipped
+		// test is reported distinctly so it can never read as a pass. An
+		// error in the condition itself fails the run.
+		skip, skipReason, skipErr := test.ShouldSkip()
+		if skipErr != nil {
+			f.Error()
+			tc.formatter.PrintFail(test.Name(), skipErr.Error())
+			return skipErr
+		}
+		if skip {
+			f.Skip()
+			skippedTests++
+			if tc.verbose {
+				tc.formatter.PrintSkip(test.Name(), skipReason)
+			}
+			if tc.until != "" && (test.Name() == tc.until || strconv.Itoa(id) == tc.until) {
+				untilReachedInTests = true
+				break
+			}
+			continue
+		}
+
 		results, runErr := test.Run(f)
 
 		// Results may be present alongside an error (teardown failure after
@@ -519,7 +543,7 @@ func (tc *TestController) Run() error {
 			failed++
 		}
 	}
-	tc.formatter.PrintResults(passed, failed, ran)
+	tc.formatter.PrintResults(passed, failed, skippedTests, ran)
 	cleanupComplete = true
 
 	if failed > 0 {
