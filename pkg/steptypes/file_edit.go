@@ -2,11 +2,11 @@ package steptypes
 
 import (
 	"fmt"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
 
+	"github.com/bgrewell/dart/internal/config"
 	"github.com/bgrewell/dart/internal/formatters"
 	"github.com/bgrewell/dart/pkg/ifaces"
 )
@@ -39,9 +39,11 @@ const (
 	MatchLine  MatchType = "line"
 )
 
-// FileEditStep edits a file using insert, replace, or remove operations.
+// FileEditStep edits a file on the step's target node using insert,
+// replace, or remove operations.
 type FileEditStep struct {
 	BaseStep
+	node      ifaces.Node
 	filePath  string
 	operation EditOperation
 	// For insert operations
@@ -56,18 +58,116 @@ type FileEditStep struct {
 	useCaptures bool
 }
 
-// Run executes the file edit operation.
+// newFileEditStep parses and validates the edit configuration.
+func newFileEditStep(c *config.StepConfig, node ifaces.Node) (ifaces.Step, error) {
+	filePath, err := requiredString(c, "path", "file path is required")
+	if err != nil {
+		return nil, err
+	}
+
+	operationStr, _, err := optString(c, "operation")
+	if err != nil {
+		return nil, err
+	}
+	var operation EditOperation
+	switch operationStr {
+	case "insert":
+		operation = EditInsert
+	case "replace":
+		operation = EditReplace
+	case "remove":
+		operation = EditRemove
+	default:
+		return nil, optionError(c, "invalid edit operation %q in step %q", operationStr, c.Name)
+	}
+
+	positionStr, _, err := optString(c, "position")
+	if err != nil {
+		return nil, err
+	}
+	var position InsertPosition
+	switch positionStr {
+	case "before":
+		position = InsertBefore
+	case "after", "":
+		position = InsertAfter
+	default:
+		return nil, optionError(c, "invalid insert position %q in step %q", positionStr, c.Name)
+	}
+
+	matchTypeStr, _, err := optString(c, "match_type")
+	if err != nil {
+		return nil, err
+	}
+	var matchType MatchType
+	switch matchTypeStr {
+	case "plain", "":
+		matchType = MatchPlain
+	case "regex":
+		matchType = MatchRegex
+	case "line":
+		matchType = MatchLine
+	default:
+		return nil, optionError(c, "invalid match type %q in step %q", matchTypeStr, c.Name)
+	}
+
+	match, _, err := optString(c, "match")
+	if err != nil {
+		return nil, err
+	}
+	content, _, err := optString(c, "content")
+	if err != nil {
+		return nil, err
+	}
+	useCaptures, err := optBool(c, "use_captures")
+	if err != nil {
+		return nil, err
+	}
+	lineNumber, err := optInt(c, "line_number", 0)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate required fields based on match type
+	if matchType != MatchLine && match == "" {
+		return nil, optionError(c, "match pattern is required in step %q", c.Name)
+	}
+	if matchType == MatchLine && lineNumber < 1 {
+		return nil, optionError(c, "line_number is required for line match in step %q", c.Name)
+	}
+
+	return &FileEditStep{
+		BaseStep:    baseFor(c),
+		node:        node,
+		filePath:    filePath,
+		operation:   operation,
+		position:    position,
+		matchType:   matchType,
+		match:       match,
+		lineNumber:  lineNumber,
+		content:     content,
+		useCaptures: useCaptures,
+	}, nil
+}
+
+// Run executes the file edit operation on the target node.
 func (s *FileEditStep) Run(updater formatters.TaskCompleter) error {
-	// Read the file
-	data, err := os.ReadFile(s.filePath)
+	ops := fileOpsFor(s.node)
+
+	content, err := ops.ReadFile(s.filePath)
 	if err != nil {
 		updater.Error()
 		return fmt.Errorf("failed to read file: %w", err)
 	}
 
-	content := string(data)
-	var result string
+	// Capture the original permissions so the rewrite preserves them;
+	// best-effort with a 0644 fallback.
+	mode, modeErr := ops.FileMode(s.filePath)
+	if modeErr != nil || mode == 0 {
+		mode = 0644
+	}
 
+	var result string
 	switch s.operation {
 	case EditInsert:
 		result, err = s.doInsert(content)
@@ -86,7 +186,7 @@ func (s *FileEditStep) Run(updater formatters.TaskCompleter) error {
 	}
 
 	// Write the modified content back
-	err = os.WriteFile(s.filePath, []byte(result), 0644)
+	err = ops.WriteFile(s.filePath, result, mode, true, false)
 	if err != nil {
 		updater.Error()
 		return fmt.Errorf("failed to write file: %w", err)

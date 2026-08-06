@@ -22,3 +22,4 @@ without re-deriving the analysis.
 | Document | Area | Started |
 |---|---|---|
 | [internal-eval.md](internal-eval.md) | `internal/eval/`, `pkg/testtypes/`, result handling in `internal/controller.go` | 2026-08-06 |
+| [pkg-steptypes.md](pkg-steptypes.md) | `pkg/steptypes/`, `MockNode` in `pkg/nodetypes/` | 2026-08-06 |

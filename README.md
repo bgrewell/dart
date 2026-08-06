@@ -416,7 +416,102 @@ Add controlled delays in the setup/teardown process. Useful for:
   step:
     type: simulated
     options:
-      time: 5  # Wait for 5 seconds before proceeding
+      time: 5  # Seconds; fractional values like 0.5 are allowed
+```
+
+#### File Operations (`file_create`, `file_edit`, `file_delete`, `file_exists`, `file_read`)
+Create, modify, verify, and remove files **on the step's target node** —
+local nodes use the native filesystem, container/SSH nodes are driven
+through their shell (requires standard POSIX tools on the node).
+`file_write` is an alias for `file_create`.
+
+```yaml
+- name: write app config
+  node: test-container
+  step:
+    type: file_create
+    options:
+      path: /etc/myapp/config.ini
+      contents: |
+        [server]
+        port = 8080
+      create_dir: true       # mkdir -p the parent directory
+      overwrite: true        # without this, an existing file is an error
+      mode: "0640"           # octal; quote it or use a leading zero
+
+- name: point app at test database
+  node: test-container
+  step:
+    type: file_edit
+    options:
+      path: /etc/myapp/config.ini
+      operation: replace     # insert | replace | remove
+      match_type: plain      # plain | regex | line
+      match: "port = 8080"
+      content: "port = 9090"
+      # insert also takes position: before|after; line takes line_number;
+      # regex replace supports use_captures with $1 / ${name} references
+
+- name: verify config content
+  node: test-container
+  step:
+    type: file_read
+    options:
+      path: /etc/myapp/config.ini
+      contains: "port = 9090"
+
+- name: cleanup
+  node: test-container
+  step:
+    type: file_delete
+    options:
+      path: /etc/myapp/config.ini
+      ignore_errors: true    # missing file is not a failure
+```
+
+#### Service Check (`service_check`)
+Verify a systemd service is active on the target node.
+
+```yaml
+- name: ensure nginx is running
+  node: web-server
+  step:
+    type: service_check
+    options:
+      service: nginx
+```
+
+#### HTTP Request (`http_request`)
+Perform an HTTP request and validate the response. The request is made from
+the host running DART (verifying reachability from the controller), not from
+the node.
+
+```yaml
+- name: check API health endpoint
+  node: local
+  step:
+    type: http_request
+    options:
+      url: http://localhost:8080/health
+      method: GET              # default GET
+      expected_status: 200     # default 200
+      expected_body: healthy   # optional substring check
+      timeout: 5               # seconds, default 30
+```
+
+#### DNS Request (`dns_request`)
+Resolve a hostname (using the DART host's resolver) and optionally verify
+expected addresses appear in the answers.
+
+```yaml
+- name: verify service DNS
+  node: local
+  step:
+    type: dns_request
+    options:
+      hostname: db.test.internal
+      expected_ips:
+        - 10.0.0.5
 ```
 
 ### Best Practices
@@ -467,11 +562,6 @@ DART is actively developing additional task types to enhance environment managem
   - Clone repositories
   - Checkout specific branches/tags
   - Apply patches
-
-- **File System Operations**
-  - Create/modify configuration files
-  - Set up directory structures
-  - Manage permissions
 
 - **Network Configuration**
   - Configure network interfaces

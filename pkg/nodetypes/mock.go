@@ -1,30 +1,38 @@
 package nodetypes
 
 import (
-	"bytes"
-	"errors"
-	"github.com/bgrewell/dart/pkg/ifaces"
-	"io"
+	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/bgrewell/dart/internal/execution"
-	"github.com/stretchr/testify/mock"
+	"github.com/bgrewell/dart/pkg/ifaces"
 )
 
 var _ ifaces.Node = &MockNode{}
 
-// MockNode is a mock implementation of the ifaces.Node interface for unit testing.
+// mockResponse holds the canned output for a command as strings, so each
+// Execute call can mint fresh readers; the streams in an ExecutionResult are
+// one-shot and must not be shared between calls.
+type mockResponse struct {
+	exitCode int
+	stdout   string
+	stderr   string
+}
+
+// MockNode is a mock implementation of the ifaces.Node interface for unit
+// testing. Configure it with SetResponse/SetError; unconfigured commands
+// return an error naming the command.
 type MockNode struct {
-	mock.Mock
 	mu        sync.Mutex
-	responses map[string]*execution.ExecutionResult
+	responses map[string]mockResponse
 	errors    map[string]error
 }
 
 // NewMockNode creates a new instance of MockNode.
 func NewMockNode() *MockNode {
 	return &MockNode{
-		responses: make(map[string]*execution.ExecutionResult),
+		responses: make(map[string]mockResponse),
 		errors:    make(map[string]error),
 	}
 }
@@ -53,11 +61,16 @@ func (m *MockNode) Execute(command string, options ...execution.ExecutionOption)
 		return nil, err
 	}
 
-	if result, exists := m.responses[command]; exists {
-		return result, nil
+	if response, exists := m.responses[command]; exists {
+		return &execution.ExecutionResult{
+			ExecutionId: "mock-id",
+			ExitCode:    response.exitCode,
+			Stdout:      strings.NewReader(response.stdout),
+			Stderr:      strings.NewReader(response.stderr),
+		}, nil
 	}
 
-	return nil, errors.New("mock node has no response for command")
+	return nil, fmt.Errorf("mock node has no response for command %q", command)
 }
 
 // SetResponse configures a mock response for a given command.
@@ -65,11 +78,10 @@ func (m *MockNode) SetResponse(command string, exitCode int, stdout, stderr stri
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.responses[command] = &execution.ExecutionResult{
-		ExecutionId: "mock-id",
-		ExitCode:    exitCode,
-		Stdout:      io.NopCloser(bytes.NewBufferString(stdout)),
-		Stderr:      io.NopCloser(bytes.NewBufferString(stderr)),
+	m.responses[command] = mockResponse{
+		exitCode: exitCode,
+		stdout:   stdout,
+		stderr:   stderr,
 	}
 }
 

@@ -3,17 +3,19 @@ package steptypes
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
+	"github.com/bgrewell/dart/internal/config"
 	"github.com/bgrewell/dart/internal/formatters"
 	"github.com/bgrewell/dart/pkg/ifaces"
 )
 
 var _ ifaces.Step = &FileCreateStep{}
 
-// FileCreateStep creates a new file with specified content.
+// FileCreateStep creates a new file with specified content on the step's
+// target node. Also registered as file_write.
 type FileCreateStep struct {
 	BaseStep
+	node      ifaces.Node
 	filePath  string
 	contents  string
 	overwrite bool
@@ -21,40 +23,45 @@ type FileCreateStep struct {
 	createDir bool
 }
 
-// Run creates the file with the specified content.
-func (s *FileCreateStep) Run(updater formatters.TaskCompleter) error {
-	// Create parent directories if requested
-	if s.createDir {
-		dir := filepath.Dir(s.filePath)
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			updater.Error()
-			return fmt.Errorf("failed to create directories: %w", err)
-		}
-	}
-
-	flags := os.O_WRONLY | os.O_CREATE
-	if s.overwrite {
-		flags |= os.O_TRUNC
-	} else {
-		flags |= os.O_EXCL
-	}
-
-	mode := s.mode
-	if mode == 0 {
-		mode = 0644
-	}
-
-	file, err := os.OpenFile(s.filePath, flags, mode)
+func newFileCreateStep(c *config.StepConfig, node ifaces.Node) (ifaces.Step, error) {
+	filePath, err := requiredString(c, "path", "file path is required")
 	if err != nil {
+		return nil, err
+	}
+	contents, _, err := optString(c, "contents")
+	if err != nil {
+		return nil, err
+	}
+	overwrite, err := optBool(c, "overwrite")
+	if err != nil {
+		return nil, err
+	}
+	createDir, err := optBool(c, "create_dir")
+	if err != nil {
+		return nil, err
+	}
+	mode, err := optFileMode(c, "mode")
+	if err != nil {
+		return nil, err
+	}
+
+	return &FileCreateStep{
+		BaseStep:  baseFor(c),
+		node:      node,
+		filePath:  filePath,
+		contents:  contents,
+		overwrite: overwrite,
+		mode:      mode,
+		createDir: createDir,
+	}, nil
+}
+
+// Run creates the file with the specified content on the target node.
+func (s *FileCreateStep) Run(updater formatters.TaskCompleter) error {
+	ops := fileOpsFor(s.node)
+	if err := ops.WriteFile(s.filePath, s.contents, s.mode, s.overwrite, s.createDir); err != nil {
 		updater.Error()
 		return fmt.Errorf("failed to create file: %w", err)
-	}
-	defer file.Close()
-
-	_, err = file.WriteString(s.contents)
-	if err != nil {
-		updater.Error()
-		return fmt.Errorf("failed to write file contents: %w", err)
 	}
 
 	updater.Complete()
