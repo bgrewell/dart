@@ -22,6 +22,7 @@ const (
 	TypePing          = "ping"
 	TypePortCheck     = "port_check"
 	TypeServiceStatus = "service_status"
+	TypeReboot        = "reboot"
 )
 
 // testFactory constructs a test from its base and raw options. Invalid
@@ -39,6 +40,7 @@ var testFactories = map[string]testFactory{
 	TypePing:          newPingTest,
 	TypePortCheck:     newPortCheckTest,
 	TypeServiceStatus: newServiceStatusTest,
+	TypeReboot:        newRebootTest,
 }
 
 type BaseTest struct {

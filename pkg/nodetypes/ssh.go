@@ -3,11 +3,13 @@ package nodetypes
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"time"
+
 	"github.com/bgrewell/dart/internal/execution"
 	"github.com/bgrewell/dart/internal/helpers"
 	"github.com/bgrewell/dart/pkg/ifaces"
 	"golang.org/x/crypto/ssh"
-	"os"
 )
 
 var _ ifaces.Node = &SshNode{}
@@ -68,9 +70,63 @@ func NewSshNode(opts ifaces.NodeOptions) (node ifaces.Node, err error) {
 
 	// Return the new ssh node
 	return &SshNode{
-		config: config,
-		client: client,
+		config:  config,
+		client:  client,
+		address: addr,
 	}, nil
+}
+
+var _ ifaces.Rebooter = &SshNode{}
+
+// Reboot issues a reboot on the remote host and reconnects until it accepts
+// commands again. The reboot command tries passwordless sudo first and
+// falls back to a direct reboot for root sessions; force adds -f (no clean
+// shutdown). A zero timeout waits up to five minutes.
+func (s *SshNode) Reboot(force bool, readyCommand string, timeout time.Duration) error {
+	command := "sudo -n reboot || reboot"
+	if force {
+		command = "sudo -n reboot -f || reboot -f"
+	}
+	// Best-effort: the connection usually drops before the command returns
+	_, _ = s.Execute(command)
+	if s.client != nil {
+		s.client.Close()
+		s.client = nil
+	}
+
+	if timeout <= 0 {
+		timeout = 5 * time.Minute
+	}
+	if readyCommand == "" {
+		readyCommand = "true"
+	}
+
+	// Give the host a moment to actually go down so the poll below can't
+	// succeed against the pre-reboot system
+	time.Sleep(5 * time.Second)
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if s.client == nil {
+			client, err := ssh.Dial("tcp", s.address, s.config)
+			if err != nil {
+				time.Sleep(3 * time.Second)
+				continue
+			}
+			s.client = client
+		}
+		result, err := s.Execute(readyCommand)
+		if err == nil && result.ExitCode == 0 {
+			return nil
+		}
+		if err != nil {
+			// Connection died again (host still shutting down); redial
+			s.client.Close()
+			s.client = nil
+		}
+		time.Sleep(3 * time.Second)
+	}
+	return fmt.Errorf("timeout waiting for %s to accept commands after reboot", s.address)
 }
 
 type SshNode struct {
