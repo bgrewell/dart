@@ -104,9 +104,14 @@ type TestConfig struct {
 	Teardown []string               `json:"teardown" yaml:"teardown"`
 	Type     string                 `json:"type" yaml:"type"`
 	Options  map[string]interface{} `json:"options" yaml:"options"`
-	Loc      SourceLocation         `json:"-" yaml:"-"`
-	NodeLoc  SourceLocation         `json:"-" yaml:"-"`
-	TypeLoc  SourceLocation         `json:"-" yaml:"-"`
+	// SkipIf/SkipUnless are commands run on the test's node before the
+	// test; SkipIf skips when the command succeeds, SkipUnless skips when
+	// it fails. Skipped tests report a distinct Skip status.
+	SkipIf     string         `json:"skip_if" yaml:"skip_if"`
+	SkipUnless string         `json:"skip_unless" yaml:"skip_unless"`
+	Loc        SourceLocation `json:"-" yaml:"-"`
+	NodeLoc    SourceLocation `json:"-" yaml:"-"`
+	TypeLoc    SourceLocation `json:"-" yaml:"-"`
 }
 
 // NetworkConfig is the configuration for a single network
@@ -323,16 +328,18 @@ func expandTestConfigs(configs []*TestConfig) []*TestConfig {
 			for _, nodeName := range cfg.Node {
 				// Create a copy of the config
 				newCfg := &TestConfig{
-					Order:    cfg.Order,
-					Name:     cfg.Name,
-					Node:     NodeReference{nodeName},
-					Setup:    cfg.Setup,
-					Teardown: cfg.Teardown,
-					Type:     cfg.Type,
-					Options:  cfg.Options,
-					Loc:      cfg.Loc,
-					NodeLoc:  cfg.NodeLoc,
-					TypeLoc:  cfg.TypeLoc,
+					Order:      cfg.Order,
+					Name:       cfg.Name,
+					Node:       NodeReference{nodeName},
+					Setup:      cfg.Setup,
+					Teardown:   cfg.Teardown,
+					Type:       cfg.Type,
+					Options:    cfg.Options,
+					SkipIf:     cfg.SkipIf,
+					SkipUnless: cfg.SkipUnless,
+					Loc:        cfg.Loc,
+					NodeLoc:    cfg.NodeLoc,
+					TypeLoc:    cfg.TypeLoc,
 				}
 				expanded = append(expanded, newCfg)
 			}

@@ -911,6 +911,36 @@ run commands on the target node (POSIX tools assumed); `http_request` and
 `port_check` act from the host running DART and verify reachability from
 the controller's viewpoint.
 
+### Conditional Skips
+
+Any test can declare a skip condition — a command run on the test's node
+before the test executes:
+
+```yaml
+tests:
+  - name: RKE2 server is running
+    node: iso-vm
+    type: service_status
+    skip_unless: which aether-ops-bootstrap   # nonzero exit → skip
+    options:
+      service: rke2-server
+
+  - name: legacy migration check
+    node: iso-vm
+    type: execute
+    skip_if: test -f /etc/new-style-config    # zero exit → skip
+    options:
+      command: legacy-migrate --verify
+      evaluate:
+        exit_code: 0
+```
+
+Skipped tests render with a distinct yellow `skipped` status and are
+counted separately in the results (`Pass / Fail / Skip`), so a suite that
+quietly skips assertions can never read as fully green. Skips do not
+affect the exit code. An error running the condition command itself fails
+the run — a broken condition never silently passes or skips.
+
 ---
 
 ## Test Evaluation Reference

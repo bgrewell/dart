@@ -9,6 +9,7 @@ type MockTestCompleter struct {
 	status    string
 	completed bool
 	passed    []bool
+	skipped   bool
 	failed    bool
 	errored   bool
 }
@@ -38,6 +39,20 @@ func (m *MockTestCompleter) Passed() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.completed = true
+}
+
+// Skip marks the test as skipped.
+func (m *MockTestCompleter) Skip() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.skipped = true
+}
+
+// IsSkipped returns whether the test was skipped.
+func (m *MockTestCompleter) IsSkipped() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.skipped
 }
 
 // Fail marks the test as failed.
