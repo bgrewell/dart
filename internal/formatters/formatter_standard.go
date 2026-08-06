@@ -51,38 +51,38 @@ type StandardFormatter struct {
 }
 
 func (sf *StandardFormatter) PrintError(err error) {
-	fmt.Printf("%s%s\n", strings.Repeat(" ", sf.detailIndent-sf.indent), valueFailColor.Sprintf(err.Error()))
+	fmt.Printf("%s%s\n", strings.Repeat(" ", sf.detailIndent-sf.indent), valueFailColor.Sprint(err.Error()))
 }
 
 func (sf *StandardFormatter) PrintPass(name string, details interface{}) {
-	fmt.Printf("%s+%s:\n", strings.Repeat(" ", sf.detailIndent-sf.indent), headerPassColor.Sprintf(name))
+	fmt.Printf("%s+%s:\n", strings.Repeat(" ", sf.detailIndent-sf.indent), headerPassColor.Sprint(name))
 	switch details.(type) {
 	case string:
 		lines := strings.Split(details.(string), "\n")
 		for _, line := range lines {
-			fmt.Printf("%s%s\n", strings.Repeat(" ", sf.detailIndent), valueColor.Sprintf(line))
+			fmt.Printf("%s%s\n", strings.Repeat(" ", sf.detailIndent), valueColor.Sprint(line))
 		}
 	case int:
-		fmt.Printf("%s%s\n", strings.Repeat(" ", sf.detailIndent), valueColor.Sprintf(strconv.Itoa(details.(int))))
+		fmt.Printf("%s%s\n", strings.Repeat(" ", sf.detailIndent), valueColor.Sprint(strconv.Itoa(details.(int))))
 	}
 }
 
 func (sf *StandardFormatter) PrintFail(name string, details interface{}) {
-	fmt.Printf("%s-%s:\n", strings.Repeat(" ", sf.detailIndent-sf.indent), headerFailColor.Sprintf(name))
+	fmt.Printf("%s-%s:\n", strings.Repeat(" ", sf.detailIndent-sf.indent), headerFailColor.Sprint(name))
 	switch details.(type) {
 	case string:
 		lines := strings.Split(details.(string), "\n")
 		for _, line := range lines {
-			fmt.Printf("%s%s\n", strings.Repeat(" ", sf.detailIndent), valueColor.Sprintf(line))
+			fmt.Printf("%s%s\n", strings.Repeat(" ", sf.detailIndent), valueColor.Sprint(line))
 		}
 	case int:
-		fmt.Printf("%s%s\n", strings.Repeat(" ", sf.detailIndent), valueColor.Sprintf(strconv.Itoa(details.(int))))
+		fmt.Printf("%s%s\n", strings.Repeat(" ", sf.detailIndent), valueColor.Sprint(strconv.Itoa(details.(int))))
 	case *results.ResultStringMatchFail:
-		fmt.Printf("%s%s: %s\n", strings.Repeat(" ", sf.detailIndent), labelFailColor.Sprintf("Expected"), details.(*results.ResultStringMatchFail).Expected)
-		fmt.Printf("%s%s: %s\n", strings.Repeat(" ", sf.detailIndent), labelFailColor.Sprintf("Actual"), details.(*results.ResultStringMatchFail).Actual)
+		fmt.Printf("%s%s: %s\n", strings.Repeat(" ", sf.detailIndent), labelFailColor.Sprint("Expected"), details.(*results.ResultStringMatchFail).Expected)
+		fmt.Printf("%s%s: %s\n", strings.Repeat(" ", sf.detailIndent), labelFailColor.Sprint("Actual"), details.(*results.ResultStringMatchFail).Actual)
 	case *results.ResultIntMatchFail:
-		fmt.Printf("%s%s: %d\n", strings.Repeat(" ", sf.detailIndent), labelFailColor.Sprintf("Expected"), details.(*results.ResultIntMatchFail).Expected)
-		fmt.Printf("%s%s: %d\n", strings.Repeat(" ", sf.detailIndent), labelFailColor.Sprintf("Actual"), details.(*results.ResultIntMatchFail).Actual)
+		fmt.Printf("%s%s: %d\n", strings.Repeat(" ", sf.detailIndent), labelFailColor.Sprint("Expected"), details.(*results.ResultIntMatchFail).Expected)
+		fmt.Printf("%s%s: %d\n", strings.Repeat(" ", sf.detailIndent), labelFailColor.Sprint("Actual"), details.(*results.ResultIntMatchFail).Actual)
 	}
 }
 
@@ -118,21 +118,21 @@ func (sf *StandardFormatter) PrintResults(pass, fail, skipped, ran int) {
 
 	indent := strings.Repeat(" ", sf.indent)
 	sf.PrintHeader("Results")
-	fmt.Printf("%sPass: %s%s\n", indent, numberPaddingColor.Sprintf(passPad), valuePassColor.Sprintf(passVal))
-	fmt.Printf("%sFail: %s%s\n", indent, numberPaddingColor.Sprintf(failPad), valueFailColor.Sprintf(failVal))
+	fmt.Printf("%sPass: %s%s\n", indent, numberPaddingColor.Sprint(passPad), valuePassColor.Sprint(passVal))
+	fmt.Printf("%sFail: %s%s\n", indent, numberPaddingColor.Sprint(failPad), valueFailColor.Sprint(failVal))
 	if skipped > 0 {
-		fmt.Printf("%sSkip: %s%s\n", indent, numberPaddingColor.Sprintf(skipPad), valueRanColor.Sprintf(skipVal))
+		fmt.Printf("%sSkip: %s%s\n", indent, numberPaddingColor.Sprint(skipPad), valueRanColor.Sprint(skipVal))
 	}
 	if ran > 0 {
-		fmt.Printf("%sRan:  %s%s\n", indent, numberPaddingColor.Sprintf(ranPad), valueRanColor.Sprintf(ranVal))
+		fmt.Printf("%sRan:  %s%s\n", indent, numberPaddingColor.Sprint(ranPad), valueRanColor.Sprint(ranVal))
 
 	}
 }
 
 // PrintSkip reports a skipped test with the reason its condition triggered.
 func (sf *StandardFormatter) PrintSkip(name string, reason string) {
-	fmt.Printf("%s~%s:\n", strings.Repeat(" ", sf.detailIndent-sf.indent), valueRanColor.Sprintf(name))
-	fmt.Printf("%s%s\n", strings.Repeat(" ", sf.detailIndent), valueColor.Sprintf(reason))
+	fmt.Printf("%s~%s:\n", strings.Repeat(" ", sf.detailIndent-sf.indent), valueRanColor.Sprint(name))
+	fmt.Printf("%s%s\n", strings.Repeat(" ", sf.detailIndent), valueColor.Sprint(reason))
 }
 
 func (sf *StandardFormatter) PrintHeader(header string) {
@@ -211,7 +211,7 @@ func (sf *StandardFormatter) StartTest(id, name, nodeName string) TestCompleter 
 	pad := strings.Repeat("0", 5-len(id))
 	indent := strings.Repeat(" ", sf.indent)
 	nodeBox := sf.formatNodeBox(nodeName)
-	message := fmt.Sprintf("%s%s%s: %s%s", indent, numberPaddingColor.Sprintf(pad), numberColor.Sprintf(c.TestId), nodeBox, c.TestName)
+	message := fmt.Sprintf("%s%s%s: %s%s", indent, numberPaddingColor.Sprint(pad), numberColor.Sprint(c.TestId), nodeBox, c.TestName)
 	messages := []func(string){c.spinner.Message, c.spinner.StopMessage, c.spinner.StopFailMessage}
 	c.spinner.Start()
 	for _, m := range messages {

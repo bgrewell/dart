@@ -24,9 +24,18 @@ clean:
 	$(GOCLEAN)
 	rm -rf bin
 
+# Downloads the dependencies pinned in go.mod. Upgrading dependencies is an
+# explicit action (make deps-upgrade), not a side effect of every build —
+# `go get -u` here made builds non-reproducible and broke them whenever an
+# upstream module shipped a breaking change.
 deps:
 	export GOPRIVATE=github.com/bengrewell
+	$(GOCMD) mod download
+
+deps-upgrade:
+	export GOPRIVATE=github.com/bengrewell
 	$(GOGET) -u ./...
+	$(GOCMD) mod tidy
 
 install-tools:
 	go install google.golang.org/protobuf/cmd/protoc-gen-go
