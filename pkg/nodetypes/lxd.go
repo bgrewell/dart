@@ -47,6 +47,13 @@ type LxdBootWaitOpts struct {
 	Interval     int    `yaml:"interval,omitempty" json:"interval"`           // Seconds between readiness checks
 	InitialDelay int    `yaml:"initial_delay,omitempty" json:"initial_delay"` // Seconds to wait before the first readiness check
 	ReadyCommand string `yaml:"ready_command,omitempty" json:"ready_command"` // Command that must exit zero for the instance to be considered ready
+	// Devices to detach when the instance powers itself off during boot wait,
+	// after which the instance is started again and the wait continues. This
+	// models installer media that must be ejected after an unattended install
+	// (e.g. autoinstall `shutdown: poweroff`): with the media still attached
+	// and a higher boot priority than the disk, every reboot would start the
+	// installer again.
+	EjectOnPoweroff []string `yaml:"eject_on_poweroff,omitempty" json:"eject_on_poweroff"`
 }
 
 type LxdNodeOpts struct {
@@ -511,6 +518,13 @@ func (d *LxdNode) waitForReady() error {
 		if delay := d.options.BootWait.InitialDelay; delay > 0 {
 			time.Sleep(time.Duration(delay) * time.Second)
 		}
+		// An unattended install that ends with poweroff signals that its
+		// media should be ejected before the first boot from disk
+		if len(d.options.BootWait.EjectOnPoweroff) > 0 {
+			if err := d.ejectAfterPoweroff(ctx); err != nil {
+				return err
+			}
+		}
 		command := d.options.BootWait.readyCommand(d.shell())
 		if err := lxd.WaitForInstanceCommand(ctx, d.client, d.name, command, d.options.BootWait.readinessConfig()); err != nil {
 			return helpers.WrapError(fmt.Sprintf("error waiting for instance to be ready: %v", err))
@@ -530,6 +544,66 @@ func (d *LxdNode) waitForReady() error {
 	}
 
 	return nil
+}
+
+// ejectAfterPoweroff waits for the instance to power itself off (the end of an
+// unattended install), detaches the devices listed in eject_on_poweroff, and
+// starts the instance again so it boots from the installed disk. The wait is
+// bounded by the boot_wait timeout.
+func (d *LxdNode) ejectAfterPoweroff(ctx context.Context) error {
+	cfg := d.options.BootWait.readinessConfig()
+	waitCtx, cancel := context.WithTimeout(ctx, cfg.Timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(cfg.PollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-waitCtx.Done():
+			return helpers.WrapError(fmt.Sprintf(
+				"timeout waiting for instance %s to power off before ejecting %v: %v",
+				d.name, d.options.BootWait.EjectOnPoweroff, waitCtx.Err()))
+		case <-ticker.C:
+			state, _, err := d.client.GetInstanceState(d.name)
+			if err != nil {
+				continue
+			}
+			if state.Status != "Stopped" {
+				continue
+			}
+
+			// Detach the install media
+			inst, etag, err := d.client.GetInstance(d.name)
+			if err != nil {
+				return helpers.WrapError(fmt.Sprintf("error getting instance %s to eject devices: %v", d.name, err))
+			}
+			for _, dev := range d.options.BootWait.EjectOnPoweroff {
+				if _, ok := inst.Devices[dev]; !ok {
+					return helpers.WrapError(fmt.Sprintf(
+						"device %q in eject_on_poweroff not found on instance %s", dev, d.name))
+				}
+				delete(inst.Devices, dev)
+			}
+			op, err := d.client.UpdateInstance(d.name, inst.Writable(), etag)
+			if err != nil {
+				return helpers.WrapError(fmt.Sprintf("error ejecting devices from instance %s: %v", d.name, err))
+			}
+			if err := op.Wait(); err != nil {
+				return helpers.WrapError(fmt.Sprintf("error ejecting devices from instance %s: %v", d.name, err))
+			}
+
+			// Boot from the installed disk
+			op, err = d.client.UpdateInstanceState(d.name, api.InstanceStatePut{Action: "start", Timeout: -1}, "")
+			if err != nil {
+				return helpers.WrapError(fmt.Sprintf("error restarting instance %s after eject: %v", d.name, err))
+			}
+			if err := op.Wait(); err != nil {
+				return helpers.WrapError(fmt.Sprintf("error restarting instance %s after eject: %v", d.name, err))
+			}
+			return nil
+		}
+	}
 }
 
 // shell returns the shell used to run commands inside the instance
