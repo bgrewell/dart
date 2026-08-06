@@ -1,8 +1,13 @@
 package nodetypes
 
 import (
+	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"runtime"
+	"slices"
+	"strings"
 	"syscall"
 
 	"github.com/bgrewell/dart/internal/execution"
@@ -14,21 +19,60 @@ import (
 
 var _ ifaces.Node = &LocalNode{}
 
+// NewLocalNode accepts exec options either at the top level of the node's
+// options (shell, env, sudo) or nested under exec_opts, matching the shape
+// the container node types use. Without a configured shell, commands run
+// through the platform default shell — every other node type runs commands
+// through a shell (docker `sh -c`, lxd `bash -c`, ssh's remote shell), and
+// a shell-less local node made pipes, conditionals, and multi-line
+// commands fail with a confusing exec error.
 func NewLocalNode(name string, opts ifaces.NodeOptions) ifaces.Node {
 
 	var options []execution.ExecutionOption
+	shellConfigured := false
 	if opts != nil {
 		o := *opts
+		execSrc := o
 		if execOpts, ok := o["exec_opts"].(map[string]interface{}); ok {
-			options = execution.OptionsToExecutionOptions(execOpts)
-		} else {
-			options = execution.OptionsToExecutionOptions(o)
+			execSrc = execOpts
+			// With exec_opts present, top-level exec keys are ignored by
+			// the option parser; misplaced ones deserve a warning, not a
+			// silent no-op
+			warnIgnoredOptions(name, o, "exec_opts")
 		}
+		warnIgnoredOptions(name, execSrc, "env", "shell", "sudo", "exec_opts")
+		if _, ok := execSrc["shell"]; ok {
+			shellConfigured = true
+		}
+		options = execution.OptionsToExecutionOptions(execSrc)
+	}
+	if !shellConfigured {
+		options = append(options, execution.WithShell(defaultLocalShell()))
 	}
 
 	return &LocalNode{
 		name:           name,
 		defaultOptions: options,
+	}
+}
+
+// defaultLocalShell returns the platform's standard shell.
+func defaultLocalShell() string {
+	if runtime.GOOS == "windows" {
+		return "cmd"
+	}
+	return "/bin/sh"
+}
+
+// warnIgnoredOptions reports option keys that nothing consumes. A
+// misspelled or misplaced key (e.g. shell at the top level next to
+// exec_opts) previously no-opd silently.
+func warnIgnoredOptions(nodeName string, options map[string]interface{}, known ...string) {
+	for key := range options {
+		if !slices.Contains(known, key) {
+			fmt.Fprintf(os.Stderr, "Warning: node %q: option %q is not recognized and was ignored (known options: %s)\n",
+				nodeName, key, strings.Join(known, ", "))
+		}
 	}
 }
 
