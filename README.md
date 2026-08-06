@@ -18,7 +18,8 @@ DART is a testing framework built to simplify the creation of complex, repeatabl
    - [Exit Codes](#exit-codes)  
 7. [Example Test Execution](#example-test-execution)  
 8. [Example Test Definition](#example-test-definition)  
-9. [Test Evaluation Reference](#test-evaluation-reference)  
+9. [Test Types](#test-types)  
+10. [Test Evaluation Reference](#test-evaluation-reference)  
 10. [License](#license)  
 
 ---
@@ -853,6 +854,62 @@ tests:
         match: test
         exit_code: 0
 ```
+
+---
+
+## Test Types
+
+Tests run against a node and evaluate the outcome. `execute` is the
+general-purpose type; the others are shorthand for common checks and accept
+the same `evaluate` keys where noted.
+
+| Type | What it does | Key options |
+|------|--------------|-------------|
+| `execute` | Run a command on the node, evaluate its result | `command`, `evaluate` (full reference below) |
+| `exists` | Check a path exists on the node (`test -e`) | `path`; `evaluate.exists: true\|false` |
+| `file_content` | Read a file on the node, evaluate its content | `filename`; standard `evaluate` keys apply to the content |
+| `file_hash` | Verify file checksums on the node | `filename`; `evaluate.md5/sha1/sha256` hex digests |
+| `service_status` | Check a systemd unit state on the node | `service`; `evaluate.status` (default `active`) |
+| `ping` | Ping a target from the node | `target`, `count`; `evaluate.packet_loss` (max %), `rtt_min/rtt_avg/rtt_max` (ms) |
+| `http_request` | HTTP request from the DART host | `url`, `method`, `headers`, `timeout`; `evaluate.status_code` plus standard keys against the body |
+| `port_check` | TCP connect from the DART host | `host`, `port`, `timeout`; `evaluate.status: open\|closed` |
+
+```yaml
+tests:
+  - name: API serves healthy status
+    node: app-server
+    type: http_request
+    options:
+      url: http://localhost:8080/health
+      evaluate:
+        status_code: 200
+        json_path:
+          path: status
+          equals: healthy
+
+  - name: config deployed with right hash
+    node: app-server
+    type: file_hash
+    options:
+      filename: /etc/myapp/config.ini
+      evaluate:
+        sha256: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+
+  - name: database reachable with low latency
+    node: app-server
+    type: ping
+    options:
+      target: db.internal
+      count: 5
+      evaluate:
+        packet_loss: 0
+        rtt_max: 10
+```
+
+Note: `ping`, `exists`, `file_content`, `file_hash`, and `service_status`
+run commands on the target node (POSIX tools assumed); `http_request` and
+`port_check` act from the host running DART and verify reachability from
+the controller's viewpoint.
 
 ---
 
