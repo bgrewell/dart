@@ -136,6 +136,10 @@ type LxdNetworkConfig struct {
 	Type    string `json:"type" yaml:"type"` // "bridge", "ovn", etc.
 	Subnet  string `json:"subnet" yaml:"subnet"`
 	Gateway string `json:"gateway" yaml:"gateway"`
+	// Nat controls ipv4.nat on the bridge. Defaults to true when omitted;
+	// set to false for air-gapped networks where instances must not reach
+	// the internet from the moment they boot.
+	Nat *bool `json:"nat,omitempty" yaml:"nat,omitempty"`
 }
 
 // LxdProfileConfig is the configuration for an LXD profile
