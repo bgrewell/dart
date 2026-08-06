@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"net/http"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -637,6 +638,11 @@ func (d *LxdNode) Teardown() error {
 	// the end of an unattended install, and stopping it again is an error
 	state, _, err := d.client.GetInstanceState(d.name)
 	if err != nil {
+		// Already-removed instances (e.g. a suite teardown step deleted it as a
+		// safety net) leave nothing to tear down
+		if api.StatusErrorCheck(err, http.StatusNotFound) || strings.Contains(err.Error(), "not found") {
+			return nil
+		}
 		return helpers.WrapError(fmt.Sprintf("error getting instance state: %v", err))
 	}
 
