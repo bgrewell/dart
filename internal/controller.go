@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -218,7 +219,8 @@ func (tc *TestController) Run() error {
 				err := node.Teardown()
 				if err != nil {
 					c.Error()
-					fmt.Sprintf("Error cleaning up node %s: %s", name, err)
+					fmt.Printf("Error cleaning up node %s: %s\n", name, err)
+					continue
 				}
 				c.Complete()
 			}
@@ -397,33 +399,50 @@ func (tc *TestController) Run() error {
 	for idx, test := range tc.Tests {
 		id := idx + 1
 		f := tc.formatter.StartTest(strconv.Itoa(id), test.Name(), test.NodeName())
-		results, err := test.Run(f)
-		if err != nil {
+		results, runErr := test.Run(f)
+
+		// Results may be present alongside an error (teardown failure after
+		// the test ran); record and report them before acting on the error
+		if results != nil {
+			testResults[test.Name()] = results
+
+			names := make([]string, 0, len(results))
+			for name := range results {
+				names = append(names, name)
+			}
+			sort.Strings(names)
+
+			for _, name := range names {
+				result := results[name]
+				if result.Err != nil {
+					tc.formatter.PrintFail(name, fmt.Sprintf("evaluation error: %v", result.Err))
+				} else if result.Passed && tc.verbose {
+					tc.formatter.PrintPass(name, result.Details)
+				} else if !result.Passed {
+					tc.formatter.PrintFail(name, result.Details)
+				}
+				if !result.Passed {
+					if tc.stopOnFail {
+						return fmt.Errorf("test %s failed", test.Name())
+					}
+					if tc.pauseOnFail {
+						fmt.Println("Press enter to continue")
+						var input string
+						fmt.Scanln(&input)
+					}
+				}
+			}
+		}
+
+		if runErr != nil {
 			// TODO: This is an error not a fail, there should be a distinction since they are handled differently
-			tc.formatter.PrintFail(test.Name(), err.Error())
+			tc.formatter.PrintFail(test.Name(), runErr.Error())
 			if tc.pauseOnFail {
 				fmt.Println("Press enter to continue")
 				var input string
 				fmt.Scanln(&input)
 			}
-			return err
-		}
-		testResults[test.Name()] = results
-
-		for name, result := range results {
-			if result.Passed && tc.verbose {
-				tc.formatter.PrintPass(name, result.Details)
-			} else if !result.Passed {
-				tc.formatter.PrintFail(name, result.Details)
-				if tc.stopOnFail {
-					return fmt.Errorf("test %s failed", test.Name())
-				}
-				if tc.pauseOnFail {
-					fmt.Println("Press enter to continue")
-					var input string
-					fmt.Scanln(&input)
-				}
-			}
+			return runErr
 		}
 
 		if tc.until != "" && (test.Name() == tc.until || strconv.Itoa(id) == tc.until) {

@@ -29,15 +29,16 @@ type BaseTest struct {
 	testType    string
 	setup       []string
 	teardown    []string
-	evaluations *map[string]eval.Evaluate
+	evaluations map[string]eval.Evaluate
 }
 
 // CreateTests creates a slice of Test objects from a slice of TestConfig objects
 func CreateTests(configs []*config.TestConfig, nodes map[string]ifaces.Node) (tests []ifaces.Test, err error) {
 	tests = make([]ifaces.Test, 0)
 
-	// Sort tests by order
-	sort.Slice(configs, func(i, j int) bool {
+	// Sort tests by order; a stable sort preserves config-file order for
+	// tests that share an Order value
+	sort.SliceStable(configs, func(i, j int) bool {
 		return configs[i].Order < configs[j].Order
 	})
 

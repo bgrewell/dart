@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/bgrewell/go-execute/v2"
 )
@@ -101,8 +102,41 @@ func WithSudo(pass string) ExecutionOption {
 
 // ExecutionResult is a struct that contains the results of an execution
 type ExecutionResult struct {
-	ExecutionId string    `json:"execution_id"`
-	ExitCode    int       `json:"exit_code"`
-	Stdout      io.Reader `json:"stdout"`
-	Stderr      io.Reader `json:"stderr"`
+	ExecutionId string        `json:"execution_id"`
+	ExitCode    int           `json:"exit_code"`
+	Stdout      io.Reader     `json:"stdout"`
+	Stderr      io.Reader     `json:"stderr"`
+	Duration    time.Duration `json:"duration"`
+
+	stdoutOnce sync.Once
+	stdoutData []byte
+	stdoutErr  error
+	stderrOnce sync.Once
+	stderrData []byte
+	stderrErr  error
+}
+
+// StdoutBytes drains Stdout once and caches the result, so multiple
+// consumers (e.g. several evaluators on one test) all see the full output.
+// Stdout is a one-shot stream; reading it directly and calling StdoutBytes
+// on the same result must not be mixed.
+func (r *ExecutionResult) StdoutBytes() ([]byte, error) {
+	r.stdoutOnce.Do(func() {
+		if r.Stdout == nil {
+			return
+		}
+		r.stdoutData, r.stdoutErr = io.ReadAll(r.Stdout)
+	})
+	return r.stdoutData, r.stdoutErr
+}
+
+// StderrBytes drains Stderr once and caches the result. See StdoutBytes.
+func (r *ExecutionResult) StderrBytes() ([]byte, error) {
+	r.stderrOnce.Do(func() {
+		if r.Stderr == nil {
+			return
+		}
+		r.stderrData, r.stderrErr = io.ReadAll(r.Stderr)
+	})
+	return r.stderrData, r.stderrErr
 }

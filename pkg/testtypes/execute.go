@@ -2,10 +2,11 @@ package testtypes
 
 import (
 	"encoding/json"
-	"fmt"
+	"sort"
+	"time"
+
 	"github.com/bgrewell/dart/internal/eval"
 	"github.com/bgrewell/dart/internal/formatters"
-	"github.com/bgrewell/dart/internal/helpers"
 	"github.com/bgrewell/dart/pkg/ifaces"
 )
 
@@ -29,41 +30,12 @@ func NewExecuteTest(base BaseTest, opts *map[string]interface{}) (test ifaces.Te
 		return nil, err
 	}
 
-	evaluations := make(map[string]eval.Evaluate)
-	for k, v := range testCfg.Evaluate {
-		switch k {
-		case "exit_code":
-			switch v := v.(type) {
-			case int:
-				chk := &eval.EvaluateExitCode{
-					Expected: v,
-				}
-				evaluations[k] = chk
-			case float64:
-				chk := &eval.EvaluateExitCode{
-					Expected: int(v),
-				}
-				evaluations[k] = chk
-			default:
-				return nil, fmt.Errorf("invalid type for exit_code: %T", v)
-			}
-		case "match":
-			chk := &eval.EvaluateMatch{
-				Trim:     true,
-				Expected: v.(string),
-			}
-			evaluations[k] = chk
-		case "contains":
-			chk := &eval.EvaluateContains{
-				Expected: v.(string),
-			}
-			evaluations[k] = chk
-		default:
-			return nil, helpers.ErrUnknownCheckType
-		}
+	evaluations, err := eval.Parse(testCfg.Evaluate)
+	if err != nil {
+		return nil, err
 	}
 
-	base.evaluations = &evaluations
+	base.evaluations = evaluations
 
 	test = &ExecutionTest{
 		BaseTest: base,
@@ -87,15 +59,7 @@ func (t *ExecutionTest) NodeName() string {
 
 func (t *ExecutionTest) Run(updater formatters.TestCompleter) (results map[string]*eval.EvaluateResult, err error) {
 
-	// TODO: Should have an error channel to returns errors in.
-	//   1. Failures during pre-execute should fail the test
-	//   2. Failures during tests should fail the test
-	//   3. Post-execute should always run even with a previous failure as it's part of the cleanup
-	//   4. Failure in post-execute should stop tests as system will be in an unknown state at that point.
-
-	results = make(map[string]*eval.EvaluateResult)
-
-	// Run pre-execute commands
+	// Run pre-execute commands; a failure here fails the test before it runs
 	updater.Update("preparing")
 	for _, cmd := range t.setup {
 		_, err = t.node.Execute(cmd)
@@ -108,15 +72,20 @@ func (t *ExecutionTest) Run(updater formatters.TestCompleter) (results map[strin
 
 	// Run the test command
 	updater.Update("running")
+	start := time.Now()
 	testResult, testErr := t.node.Execute(t.execute)
+	if testResult != nil {
+		testResult.Duration = time.Since(start)
+	}
 
-	// Run post-execute commands
+	// Post-execute commands always run, even after a test failure, since
+	// they are part of cleanup
 	updater.Update("cleanup")
+	var teardownErr error
 	for _, cmd := range t.teardown {
-		_, err = t.node.Execute(cmd)
-		if err != nil {
-			updater.Error()
-			return nil, err
+		if _, cmdErr := t.node.Execute(cmd); cmdErr != nil {
+			teardownErr = cmdErr
+			break
 		}
 	}
 
@@ -125,15 +94,33 @@ func (t *ExecutionTest) Run(updater formatters.TestCompleter) (results map[strin
 		return nil, testErr
 	}
 
-	passed := []bool{}
-	for name, check := range *t.evaluations {
-		result := check.Verify(testResult)
-		if result.Passed == true {
-			passed = append(passed, true)
-		} else {
-			passed = append(passed, false)
-		}
+	// Drain both streams up front so buffered output is captured even when
+	// no output-based evaluations are configured
+	_, _ = testResult.StdoutBytes()
+	_, _ = testResult.StderrBytes()
+
+	// Evaluations run in sorted-name order so reported results are
+	// deterministic
+	names := make([]string, 0, len(t.evaluations))
+	for name := range t.evaluations {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	results = make(map[string]*eval.EvaluateResult, len(names))
+	passed := make([]bool, 0, len(names))
+	for _, name := range names {
+		result := t.evaluations[name].Verify(testResult)
+		passed = append(passed, result.Passed)
 		results[name] = result
+	}
+
+	// A teardown failure is surfaced after evaluation so the test outcome
+	// isn't lost, but it still aborts the run since the system state is
+	// unknown at that point
+	if teardownErr != nil {
+		updater.Error()
+		return results, teardownErr
 	}
 
 	updater.Complete(passed)
