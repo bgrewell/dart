@@ -873,6 +873,25 @@ the same `evaluate` keys where noted.
 | `ping` | Ping a target from the node | `target`, `count`; `evaluate.packet_loss` (max %), `rtt_min/rtt_avg/rtt_max` (ms) |
 | `http_request` | HTTP request from the DART host | `url`, `method`, `headers`, `timeout`; `evaluate.status_code` plus standard keys against the body |
 | `port_check` | TCP connect from the DART host | `host`, `port`, `timeout`; `evaluate.status: open\|closed` |
+| `reboot` | Restart the node mid-suite and wait until it accepts commands | `mode: graceful\|force`, `ready_command`, `timeout` (lxd and ssh nodes) |
+
+```yaml
+tests:
+  - name: reboot to apply rollback
+    node: iso-vm
+    type: reboot
+    options:
+      mode: force            # model a power cut; graceful is the default
+      ready_command: cat /etc/hostname
+      timeout: 600
+```
+
+`reboot` is also available as a setup/teardown step with the same
+options. On LXD nodes the readiness wait reuses the node's `boot_wait`
+configuration; `mode: force` kills the instance without a clean shutdown,
+which is what crash-safety suites need. On SSH nodes the reboot is issued
+over the session (passwordless sudo or root) and DART reconnects until the
+host answers again.
 
 ```yaml
 tests:

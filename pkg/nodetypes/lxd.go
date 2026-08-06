@@ -522,6 +522,39 @@ func (d *LxdNode) Setup() error {
 	return d.waitForReady()
 }
 
+var _ ifaces.Rebooter = &LxdNode{}
+
+// Reboot restarts the instance and blocks until it accepts commands again.
+// With force set the restart is uncleanly killed (modeling a power cut),
+// which matters for crash-safety testing. The readiness wait reuses the
+// node's boot_wait configuration; readyCommand and timeout override it.
+func (d *LxdNode) Reboot(force bool, readyCommand string, timeout time.Duration) error {
+	op, err := d.client.UpdateInstanceState(d.name, api.InstanceStatePut{
+		Action:  "restart",
+		Timeout: -1,
+		Force:   force,
+	}, "")
+	if err != nil {
+		return helpers.WrapError(fmt.Sprintf("error restarting instance %s: %v", d.name, err))
+	}
+	if err := op.Wait(); err != nil {
+		return helpers.WrapError(fmt.Sprintf("error restarting instance %s: %v", d.name, err))
+	}
+
+	cfg := d.options.BootWait.readinessConfig()
+	if timeout > 0 {
+		cfg.Timeout = timeout
+	}
+	command := d.options.BootWait.readyCommand(d.shell())
+	if readyCommand != "" {
+		command = []string{d.shell(), "-c", readyCommand}
+	}
+	if err := lxd.WaitForInstanceCommand(context.Background(), d.client, d.name, command, cfg); err != nil {
+		return helpers.WrapError(fmt.Sprintf("instance %s did not become ready after reboot: %v", d.name, err))
+	}
+	return nil
+}
+
 // waitForReady blocks until the instance can run commands. When boot_wait is configured
 // the default readiness check is replaced by a poll of the configured command, which is
 // what an instance installing from an ISO needs: it is unreachable while the installer

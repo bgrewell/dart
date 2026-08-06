@@ -23,6 +23,7 @@ const (
 	TypeHTTPRequest  = "http_request"
 	TypeDNSRequest   = "dns_request"
 	TypeServiceCheck = "service_check"
+	TypeReboot       = "reboot"
 )
 
 // BaseStep provides a common structure for all step types.
@@ -69,6 +70,7 @@ var stepFactories = map[string]stepFactory{
 	TypeHTTPRequest:  newHTTPRequestStep,
 	TypeDNSRequest:   newDNSRequestStep,
 	TypeServiceCheck: newServiceCheckStep,
+	TypeReboot:       newRebootStep,
 }
 
 // CreateSteps constructs a slice of executable Steps based on provided configuration.
