@@ -1,38 +1,19 @@
 package steptypes
 
 import (
-	"bytes"
 	"errors"
-	"github.com/bgrewell/dart/internal/execution"
-	"github.com/bgrewell/dart/pkg/nodetypes"
-	"io"
 	"testing"
+
+	"github.com/bgrewell/dart/pkg/nodetypes"
 
 	"github.com/bgrewell/dart/internal/formatters"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
-
-// MockNode is a mock implementation of the ifaces.Node interface.
-type MockNode struct {
-	mock.Mock
-}
-
-// Execute simulates command execution.
-func (m *MockNode) Execute(command string) (*execution.ExecutionResult, error) {
-	args := m.Called(command)
-	stdout := args.Get(0).(io.Reader)
-	return &execution.ExecutionResult{
-		Stdout:   stdout,
-		Stderr:   new(bytes.Buffer),
-		ExitCode: args.Int(1),
-	}, args.Error(2)
-}
 
 // TestServiceCheckStep verifies service status checking.
 func TestServiceCheckStep(t *testing.T) {
-	mockNode := &nodetypes.MockNode{}
-	mockNode.On("Execute", "systemctl is-active nginx").Return(io.NopCloser(bytes.NewBufferString("active\n")), 0, nil)
+	mockNode := nodetypes.NewMockNode()
+	mockNode.SetResponse("systemctl is-active 'nginx'", 0, "active\n", "")
 
 	step := &ServiceCheckStep{
 		BaseStep: BaseStep{title: "Service Check"},
@@ -40,18 +21,17 @@ func TestServiceCheckStep(t *testing.T) {
 		service:  "nginx",
 	}
 
-	// Run step
 	updater := formatters.NewMockTaskCompleter()
 	err := step.Run(updater)
 
-	// Validate service status check
 	assert.NoError(t, err)
+	assert.True(t, updater.IsCompleted())
 }
 
 // TestServiceCheckStepFailure verifies handling when service is inactive.
 func TestServiceCheckStepFailure(t *testing.T) {
-	mockNode := &nodetypes.MockNode{}
-	mockNode.On("Execute", "systemctl is-active nginx").Return(io.NopCloser(bytes.NewBufferString("inactive\n")), 3, nil)
+	mockNode := nodetypes.NewMockNode()
+	mockNode.SetResponse("systemctl is-active 'nginx'", 3, "inactive\n", "")
 
 	step := &ServiceCheckStep{
 		BaseStep: BaseStep{title: "Service Check"},
@@ -59,19 +39,18 @@ func TestServiceCheckStepFailure(t *testing.T) {
 		service:  "nginx",
 	}
 
-	// Run step
 	updater := formatters.NewMockTaskCompleter()
 	err := step.Run(updater)
 
-	// Expect failure
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "service nginx is not active")
+	assert.Contains(t, err.Error(), "inactive")
 }
 
 // TestServiceCheckStepError verifies error handling.
 func TestServiceCheckStepError(t *testing.T) {
-	mockNode := &nodetypes.MockNode{}
-	mockNode.On("Execute", "systemctl is-active nginx").Return(io.NopCloser(bytes.NewBufferString("")), 1, errors.New("execution error"))
+	mockNode := nodetypes.NewMockNode()
+	mockNode.SetError("systemctl is-active 'nginx'", errors.New("execution error"))
 
 	step := &ServiceCheckStep{
 		BaseStep: BaseStep{title: "Service Check"},
@@ -79,11 +58,9 @@ func TestServiceCheckStepError(t *testing.T) {
 		service:  "nginx",
 	}
 
-	// Run step
 	updater := formatters.NewMockTaskCompleter()
 	err := step.Run(updater)
 
-	// Expect failure
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to check service")
 }

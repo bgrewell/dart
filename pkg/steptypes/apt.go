@@ -2,11 +2,13 @@ package steptypes
 
 import (
 	"fmt"
-	"github.com/bgrewell/dart/internal/formatters"
-	"github.com/bgrewell/dart/pkg/ifaces"
-	"io"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/bgrewell/dart/internal/config"
+	"github.com/bgrewell/dart/internal/formatters"
+	"github.com/bgrewell/dart/pkg/ifaces"
 )
 
 var _ ifaces.Step = &AptStep{}
@@ -16,6 +18,22 @@ type AptStep struct {
 	BaseStep
 	node     ifaces.Node
 	packages []string
+}
+
+func newAptStep(c *config.StepConfig, node ifaces.Node) (ifaces.Step, error) {
+	packages, present, err := optStringList(c, "packages")
+	if err != nil {
+		return nil, err
+	}
+	if !present || len(packages) == 0 {
+		return nil, optionError(c, "packages field is required in step %q", c.Name)
+	}
+
+	return &AptStep{
+		BaseStep: baseFor(c),
+		node:     node,
+		packages: packages,
+	}, nil
 }
 
 // Run installs required packages using APT.
@@ -28,7 +46,7 @@ func (s *AptStep) Run(updater formatters.TaskCompleter) error {
 		}
 		if result.ExitCode != 0 {
 			updater.Error()
-			errorDetails, _ := io.ReadAll(result.Stderr)
+			errorDetails, _ := result.StderrBytes()
 			return fmt.Errorf("apt-get update failed: %s", errorDetails)
 		}
 	}
@@ -41,39 +59,33 @@ func (s *AptStep) Run(updater formatters.TaskCompleter) error {
 	}
 	if result.ExitCode != 0 {
 		updater.Error()
-		errorDetails, _ := io.ReadAll(result.Stderr)
+		errorDetails, _ := result.StderrBytes()
 		return fmt.Errorf("apt-get install failed: %s", errorDetails)
 	}
 	updater.Complete()
 	return nil
 }
 
-// AptUpdateNeeded checks if apt-get update is necessary.
+// AptUpdateNeeded reports whether the package index is older than 24 hours,
+// based on the epoch mtime of apt's update-success stamp. Any failure to
+// read the stamp counts as stale.
 func (s *AptStep) AptUpdateNeeded() bool {
-	const filePath = "/var/lib/apt/periodic/update-success-stamp"
+	const stampPath = "/var/lib/apt/periodic/update-success-stamp"
 
-	result, err := s.node.Execute(fmt.Sprintf("stat %s", filePath))
+	result, err := s.node.Execute(fmt.Sprintf("stat -c %%Y %s", stampPath))
 	if err != nil || result.ExitCode != 0 {
 		return true
 	}
 
-	output, err := io.ReadAll(result.Stdout)
+	output, err := result.StdoutBytes()
 	if err != nil {
 		return true
 	}
-	lines := strings.Split(string(output), "\n")
-	var modTime time.Time
-	for _, line := range lines {
-		if strings.HasPrefix(line, "Modify:") {
-			parts := strings.Split(line, " ")
-			if len(parts) >= 2 {
-				modTime, err = time.Parse("2006-01-02 15:04:05", parts[1])
-				if err != nil {
-					return true
-				}
-			}
-		}
+
+	epoch, err := strconv.ParseInt(strings.TrimSpace(string(output)), 10, 64)
+	if err != nil {
+		return true
 	}
 
-	return time.Since(modTime) > 24*time.Hour
+	return time.Since(time.Unix(epoch, 0)) > 24*time.Hour
 }
