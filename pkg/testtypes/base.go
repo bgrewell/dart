@@ -3,6 +3,7 @@ package testtypes
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/bgrewell/dart/internal/config"
@@ -41,15 +42,17 @@ var testFactories = map[string]testFactory{
 }
 
 type BaseTest struct {
-	name        string
-	nodeName    string
-	node        ifaces.Node
-	testType    string
-	setup       []string
-	teardown    []string
-	skipIf      string
-	skipUnless  string
-	evaluations map[string]eval.Evaluate
+	name         string
+	nodeName     string
+	node         ifaces.Node
+	testType     string
+	setup        []string
+	teardown     []string
+	skipIf       string
+	skipUnless   string
+	evaluations  map[string]eval.Evaluate
+	captures     *captureStore
+	captureSpecs []captureSpec
 }
 
 func (t *BaseTest) Name() string {
@@ -67,21 +70,29 @@ func (t *BaseTest) NodeName() string {
 // skipped.
 func (t *BaseTest) ShouldSkip() (skip bool, reason string, err error) {
 	if t.skipIf != "" {
-		result, err := t.node.Execute(t.skipIf)
+		cmd, err := t.interpolateCaptures(t.skipIf)
+		if err != nil {
+			return false, "", err
+		}
+		result, err := t.node.Execute(cmd)
 		if err != nil {
 			return false, "", fmt.Errorf("skip_if command failed to run: %w", err)
 		}
 		if result.ExitCode == 0 {
-			return true, fmt.Sprintf("skip_if condition met: %s", t.skipIf), nil
+			return true, fmt.Sprintf("skip_if condition met: %s", cmd), nil
 		}
 	}
 	if t.skipUnless != "" {
-		result, err := t.node.Execute(t.skipUnless)
+		cmd, err := t.interpolateCaptures(t.skipUnless)
+		if err != nil {
+			return false, "", err
+		}
+		result, err := t.node.Execute(cmd)
 		if err != nil {
 			return false, "", fmt.Errorf("skip_unless command failed to run: %w", err)
 		}
 		if result.ExitCode != 0 {
-			return true, fmt.Sprintf("skip_unless condition not met: %s", t.skipUnless), nil
+			return true, fmt.Sprintf("skip_unless condition not met: %s", cmd), nil
 		}
 	}
 	return false, "", nil
@@ -132,6 +143,24 @@ func (t *BaseTest) runProducer(produce func() (*execution.ExecutionResult, error
 	_, _ = testResult.StdoutBytes()
 	_, _ = testResult.StderrBytes()
 
+	// Record captured values for later tests. A capture that cannot be
+	// extracted is an error: downstream tests depend on it.
+	if len(t.captureSpecs) > 0 {
+		stdout, _ := testResult.StdoutBytes()
+		for _, spec := range t.captureSpecs {
+			value := strings.TrimSpace(string(stdout))
+			if spec.ext != nil {
+				var extractErr error
+				value, extractErr = spec.ext.extract(string(stdout))
+				if extractErr != nil {
+					updater.Error()
+					return nil, fmt.Errorf("capture %q in test %q: %w", spec.name, t.name, extractErr)
+				}
+			}
+			t.captures.set(spec.name, value)
+		}
+	}
+
 	names := make([]string, 0, len(t.evaluations))
 	for name := range t.evaluations {
 		names = append(names, name)
@@ -156,7 +185,14 @@ func (t *BaseTest) runProducer(produce func() (*execution.ExecutionResult, error
 }
 
 // runCommand is runProducer for the common case of a single node command.
+// Capture references ({{capture.name}}) in the command resolve against
+// values recorded by earlier tests.
 func (t *BaseTest) runCommand(command string, updater formatters.TestCompleter) (map[string]*eval.EvaluateResult, error) {
+	command, err := t.interpolateCaptures(command)
+	if err != nil {
+		updater.Error()
+		return nil, err
+	}
 	return t.runProducer(func() (*execution.ExecutionResult, error) {
 		return t.node.Execute(command)
 	}, updater)
@@ -184,6 +220,10 @@ func CreateTests(configs []*config.TestConfig, nodes map[string]ifaces.Node) (te
 	sort.SliceStable(configs, func(i, j int) bool {
 		return configs[i].Order < configs[j].Order
 	})
+
+	// One capture store per suite: values recorded by earlier tests are
+	// available to later ones
+	captures := newCaptureStore()
 
 	for _, cfg := range configs {
 
@@ -214,6 +254,7 @@ func CreateTests(configs []*config.TestConfig, nodes map[string]ifaces.Node) (te
 			teardown:   cfg.Teardown,
 			skipIf:     cfg.SkipIf,
 			skipUnless: cfg.SkipUnless,
+			captures:   captures,
 		}
 
 		test, err := factory(base, cfg.Options)
