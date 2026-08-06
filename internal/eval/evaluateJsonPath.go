@@ -96,6 +96,28 @@ func (j *EvaluateJSONPath) Verify(execResult *execution.ExecutionResult) (result
 	}
 }
 
+// ExtractJSONPath decodes the first JSON value in jsonText (tool output
+// often mixes a JSON document with plain-text lines after it) and returns
+// the value at the dot-path (e.g. "summary.throughput_mbps",
+// "items[0].name"). A leading "$." or "$" (JSONPath style) is accepted
+// and ignored.
+func ExtractJSONPath(jsonText, path string) (interface{}, error) {
+	path = strings.TrimPrefix(strings.TrimPrefix(path, "$."), "$")
+	var doc interface{}
+	decoder := json.NewDecoder(strings.NewReader(jsonText))
+	if err := decoder.Decode(&doc); err != nil {
+		return nil, fmt.Errorf("output is not valid JSON: %w", err)
+	}
+	return resolveJSONPath(doc, path)
+}
+
+// ValidateJSONPath reports whether path parses, for config-time validation.
+func ValidateJSONPath(path string) error {
+	path = strings.TrimPrefix(strings.TrimPrefix(path, "$."), "$")
+	_, err := parseJSONPath(path)
+	return err
+}
+
 // jsonPathSegment is one dot-separated element of a path: an object key
 // (possibly empty for a root array) followed by zero or more array indices.
 type jsonPathSegment struct {

@@ -911,6 +911,67 @@ run commands on the target node (POSIX tools assumed); `http_request` and
 `port_check` act from the host running DART and verify reachability from
 the controller's viewpoint.
 
+### Value Extraction and Numeric Assertions
+
+`execute` tests can pull named values out of their output and assert on
+them numerically — the building block for performance and regression
+gating:
+
+```yaml
+tests:
+  - name: throughput within baseline
+    node: testbed
+    type: execute
+    options:
+      command: loom run --json tcp-100g.yaml
+      extract:
+        throughput_mbps: { jsonpath: "$.summary.throughput_mbps" }
+        p99_us:          { regex: "p99=([0-9.]+)us" }   # capture group 1
+      evaluate:
+        exit_code: 0
+        throughput_mbps: { gte: 11852, within: 12476, tolerance_pct: 5 }
+        p99_us:          { lte: 49 }
+```
+
+An `evaluate` entry whose name matches an `extract` entry takes a
+comparator map instead of a standard evaluation type: `gt`/`gte`/`lt`/`lte`
+(`ge`/`le` accepted), `eq`/`ne` (numeric when both sides are numbers,
+string otherwise), and `within` with `tolerance_pct` or absolute
+`tolerance` for baseline gating. All conditions in the map must hold.
+JSON extraction reads the first JSON document in the output, so tools
+that mix JSON with log lines work.
+
+### Cross-Test Capture
+
+Tests can record values for later tests — for assertions that compare
+across a state transition (before/after a reboot, upgrade, or rollback):
+
+```yaml
+tests:
+  - name: record root subvolume id
+    node: iso-vm
+    type: execute
+    options:
+      command: btrfs subvolume show / | awk '/Subvolume ID:/{print $3}'
+      capture: pre_rollback_root_id     # stores trimmed stdout
+
+  - name: rollback recreated the root subvolume
+    node: iso-vm
+    type: execute
+    options:
+      command: |
+        [ "$(btrfs subvolume show / | awk '/Subvolume ID:/{print $3}')" -gt "{{capture.pre_rollback_root_id}}" ]
+      evaluate:
+        exit_code: 0
+```
+
+`capture:` takes a bare name (whole trimmed stdout) or a map of names to
+`{jsonpath}`/`{regex}` extractors. Later tests reference values as
+`{{capture.name}}` in `command`, `skip_if`, and `skip_unless`; a
+reference to a value nothing captured fails the test rather than running
+a mangled command. Values persist across `-i` iterations and are
+overwritten by each run.
+
 ### Conditional Skips
 
 Any test can declare a skip condition — a command run on the test's node
