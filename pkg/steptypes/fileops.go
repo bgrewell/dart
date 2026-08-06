@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/bgrewell/dart/internal/execution"
+	"github.com/bgrewell/dart/internal/helpers"
 	"github.com/bgrewell/dart/pkg/ifaces"
 	"github.com/bgrewell/dart/pkg/nodetypes"
 )
@@ -122,7 +123,7 @@ type execFileOps struct {
 // shellQuote wraps s in single quotes, escaping embedded single quotes, so
 // arbitrary paths survive shell interpolation.
 func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+	return helpers.ShellQuote(s)
 }
 
 // execChecked runs a command on a node and converts a non-zero exit code
