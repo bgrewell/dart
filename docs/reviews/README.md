@@ -25,3 +25,4 @@ without re-deriving the analysis.
 | [pkg-steptypes.md](pkg-steptypes.md) | `pkg/steptypes/`, `MockNode` in `pkg/nodetypes/` | 2026-08-06 |
 | [internal-controller.md](internal-controller.md) | `internal/controller.go`, `internal/errors.go` | 2026-08-07 |
 | [internal-config.md](internal-config.md) | `internal/config/` | 2026-08-07 |
+| [internal-formatters-stream.md](internal-formatters-stream.md) | `internal/formatters/`, `internal/stream/` | 2026-08-07 |
