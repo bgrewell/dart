@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"math/big"
 	"net"
-	"net/http"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -673,7 +672,7 @@ func (d *LxdNode) Teardown() error {
 	if err != nil {
 		// Already-removed instances (e.g. a suite teardown step deleted it as a
 		// safety net) leave nothing to tear down
-		if api.StatusErrorCheck(err, http.StatusNotFound) || strings.Contains(err.Error(), "not found") {
+		if lxd.IsNotFound(err) {
 			return nil
 		}
 		return helpers.WrapError(fmt.Sprintf("error getting instance state: %v", err))

@@ -55,7 +55,16 @@ func CreateNetwork(ctx context.Context, server lxd.InstanceServer, name, network
 // (air-gapped) bridge where instances get DHCP addresses but no route to the
 // outside world. ipv6.nat must be set explicitly — LXD auto-assigns an IPv6
 // subnet with NAT enabled by default, which would leak internet access.
+// The subnet and gateway are validated here so a malformed config fails with
+// a clear message instead of an obscure server-side error.
 func CreateBridgeNetwork(ctx context.Context, server lxd.InstanceServer, name, subnet, gateway string, nat bool) error {
+	if _, _, err := net.ParseCIDR(subnet); err != nil {
+		return fmt.Errorf("network %s: subnet %q is not valid CIDR notation: %w", name, subnet, err)
+	}
+	if net.ParseIP(gateway) == nil {
+		return fmt.Errorf("network %s: gateway %q is not a valid IP address", name, gateway)
+	}
+
 	config := map[string]string{
 		"ipv4.address": gateway + "/" + getSubnetMask(subnet),
 		"ipv4.nat":     strconv.FormatBool(nat),

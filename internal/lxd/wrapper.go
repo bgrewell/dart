@@ -206,7 +206,10 @@ func (w *Wrapper) Setup() error {
 	return nil
 }
 
-// Teardown removes the networks and profiles created by the wrapper
+// Teardown removes the profiles and networks created by the wrapper, in
+// reverse creation order (profiles may reference networks). Resources that
+// no longer exist — a partial setup, or a previous run's cleanup — count
+// as already removed rather than failing the remaining teardown.
 func (w *Wrapper) Teardown() error {
 	if w.cfg == nil {
 		return nil
@@ -214,19 +217,19 @@ func (w *Wrapper) Teardown() error {
 
 	ctx := context.Background()
 
-	// Remove the networks
-	for _, net := range w.cfg.Networks {
-		if err := w.RemoveNetwork(net.Name); err != nil {
-			return err
+	// Remove the profiles first (skip default profiles)
+	for _, profile := range w.cfg.Profiles {
+		if profile.Name != "default" {
+			if err := DeleteProfile(ctx, w.server, profile.Name); err != nil && !IsNotFound(err) {
+				return err
+			}
 		}
 	}
 
-	// Remove the profiles (skip default profiles)
-	for _, profile := range w.cfg.Profiles {
-		if profile.Name != "default" {
-			if err := DeleteProfile(ctx, w.server, profile.Name); err != nil {
-				return err
-			}
+	// Remove the networks
+	for _, net := range w.cfg.Networks {
+		if err := w.RemoveNetwork(net.Name); err != nil && !IsNotFound(err) {
+			return err
 		}
 	}
 
