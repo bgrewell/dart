@@ -109,9 +109,18 @@ type TestConfig struct {
 	// it fails. Skipped tests report a distinct Skip status.
 	SkipIf     string         `json:"skip_if" yaml:"skip_if"`
 	SkipUnless string         `json:"skip_unless" yaml:"skip_unless"`
+	// Retry reruns the test (command + evaluations) until it passes or the
+	// timeout elapses — for eventually-consistent assertions.
+	Retry *RetryConfig `json:"retry,omitempty" yaml:"retry,omitempty"`
 	Loc        SourceLocation `json:"-" yaml:"-"`
 	NodeLoc    SourceLocation `json:"-" yaml:"-"`
 	TypeLoc    SourceLocation `json:"-" yaml:"-"`
+}
+
+// RetryConfig configures eventually-consistent retry for a test.
+type RetryConfig struct {
+	Timeout  float64 `json:"timeout" yaml:"timeout"`   // Seconds to keep retrying (required, > 0)
+	Interval float64 `json:"interval" yaml:"interval"` // Seconds between attempts (default 2)
 }
 
 // NetworkConfig is the configuration for a single network

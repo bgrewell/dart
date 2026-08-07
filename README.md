@@ -875,6 +875,9 @@ the same `evaluate` keys where noted.
 | `port_check` | TCP connect from the DART host | `host`, `port`, `timeout`; `evaluate.status: open\|closed` |
 | `reboot` | Restart the node mid-suite and wait until it accepts commands | `mode: graceful\|force`, `ready_command`, `timeout` (lxd and ssh nodes) |
 
+Any test also accepts test-level `retry:` (see Timeouts and Retries) and
+`skip_if`/`skip_unless` (see Conditional Skips).
+
 ```yaml
 tests:
   - name: reboot to apply rollback
@@ -990,6 +993,52 @@ tests:
 reference to a value nothing captured fails the test rather than running
 a mangled command. Values persist across `-i` iterations and are
 overwritten by each run.
+
+### Timeouts and Retries
+
+Any `execute` test or step accepts `timeout:` (seconds; `0`/omitted means
+unbounded) — a hung command fails the test with a clear `timeout` check
+failure instead of hanging the suite, and teardown still runs. Note: the
+remote process may keep running; the timeout bounds the suite's wait, and
+a retried timeout re-awaits the same in-flight command rather than
+launching another. `wait_for` differs: its `timeout` is required and must
+be positive, since the step's whole purpose is to give up eventually.
+`retry` is rejected on `reboot` tests — retrying one would power-cycle
+the target on every failed evaluation.
+
+Eventually-consistent assertions retry until they pass or time out:
+
+```yaml
+tests:
+  - name: cluster elects a leader
+    node: n1
+    type: execute
+    retry:
+      timeout: 60      # keep retrying up to 60s
+      interval: 5      # between attempts (default 2)
+    options:
+      command: cluster-status --leader
+      timeout: 10      # per-attempt command bound
+      evaluate:
+        exit_code: 0
+        regex: "leader=node[0-9]+"
+```
+
+`retry` reruns the test command and its evaluations (setup/teardown
+commands run once); it works on every test type. The matching `wait_for`
+step covers setup:
+
+```yaml
+setup:
+  - name: wait for the API to answer
+    node: app
+    step:
+      type: wait_for
+      options:
+        command: curl -sf http://localhost:8080/health
+        timeout: 120
+        interval: 3
+```
 
 ### Conditional Skips
 

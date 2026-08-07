@@ -1,6 +1,7 @@
 package testtypes
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -55,6 +56,10 @@ type BaseTest struct {
 	evaluations  map[string]eval.Evaluate
 	captures     *captureStore
 	captureSpecs []captureSpec
+	// Retry: rerun produce+evaluate until pass or retryTimeout elapses.
+	// Zero retryTimeout disables retrying.
+	retryTimeout  time.Duration
+	retryInterval time.Duration
 }
 
 func (t *BaseTest) Name() string {
@@ -117,11 +122,29 @@ func (t *BaseTest) runProducer(produce func() (*execution.ExecutionResult, error
 		}
 	}
 
-	updater.Update("running")
-	start := time.Now()
-	testResult, testErr := produce()
-	if testResult != nil && testResult.Duration == 0 {
-		testResult.Duration = time.Since(start)
+	// The attempt loop reruns produce+evaluate for eventually-consistent
+	// tests: a produce error, capture failure, or failing evaluation all
+	// count as a retryable attempt until the retry timeout elapses. Setup
+	// and teardown commands run once, outside the loop.
+	var passed []bool
+	var attemptErr error
+	deadline := time.Now().Add(t.retryTimeout)
+	attempt := 0
+	for {
+		attempt++
+		if attempt == 1 {
+			updater.Update("running")
+		} else {
+			updater.Update(fmt.Sprintf("retrying (attempt %d)", attempt))
+		}
+		results, passed, attemptErr = t.attempt(produce)
+		if attemptErr == nil && allChecksPassed(passed) {
+			break
+		}
+		if t.retryTimeout <= 0 || !time.Now().Add(t.retryInterval).Before(deadline) {
+			break
+		}
+		time.Sleep(t.retryInterval)
 	}
 
 	// Post-execute commands always run, even after a test failure, since
@@ -135,9 +158,37 @@ func (t *BaseTest) runProducer(produce func() (*execution.ExecutionResult, error
 		}
 	}
 
-	if testErr != nil {
+	if attemptErr != nil {
+		// A timeout is a test failure, not an infrastructure error: it must
+		// respect stop-on-error and never skip the suite's teardown
+		if errors.Is(attemptErr, ifaces.ErrCommandTimeout) {
+			updater.Fail()
+			return map[string]*eval.EvaluateResult{
+				"timeout": {Passed: false, Details: attemptErr.Error()},
+			}, nil
+		}
 		updater.Error()
-		return nil, testErr
+		return nil, attemptErr
+	}
+
+	if teardownErr != nil {
+		updater.Error()
+		return results, teardownErr
+	}
+
+	updater.Complete(passed)
+	return results, nil
+}
+
+// attempt runs the producer once and applies captures and evaluations.
+func (t *BaseTest) attempt(produce func() (*execution.ExecutionResult, error)) (map[string]*eval.EvaluateResult, []bool, error) {
+	start := time.Now()
+	testResult, err := produce()
+	if err != nil {
+		return nil, nil, err
+	}
+	if testResult.Duration == 0 {
+		testResult.Duration = time.Since(start)
 	}
 
 	// Drain both streams up front so buffered output is captured even when
@@ -155,8 +206,7 @@ func (t *BaseTest) runProducer(produce func() (*execution.ExecutionResult, error
 				var extractErr error
 				value, extractErr = spec.ext.extract(string(stdout))
 				if extractErr != nil {
-					updater.Error()
-					return nil, fmt.Errorf("capture %q in test %q: %w", spec.name, t.name, extractErr)
+					return nil, nil, fmt.Errorf("capture %q in test %q: %w", spec.name, t.name, extractErr)
 				}
 			}
 			t.captures.set(spec.name, value)
@@ -169,35 +219,37 @@ func (t *BaseTest) runProducer(produce func() (*execution.ExecutionResult, error
 	}
 	sort.Strings(names)
 
-	results = make(map[string]*eval.EvaluateResult, len(names))
+	results := make(map[string]*eval.EvaluateResult, len(names))
 	passed := make([]bool, 0, len(names))
 	for _, name := range names {
 		result := t.evaluations[name].Verify(testResult)
 		passed = append(passed, result.Passed)
 		results[name] = result
 	}
+	return results, passed, nil
+}
 
-	if teardownErr != nil {
-		updater.Error()
-		return results, teardownErr
+func allChecksPassed(passed []bool) bool {
+	for _, p := range passed {
+		if !p {
+			return false
+		}
 	}
-
-	updater.Complete(passed)
-	return results, nil
+	return true
 }
 
 // runCommand is runProducer for the common case of a single node command.
 // Capture references ({{capture.name}}) in the command resolve against
 // values recorded by earlier tests.
-func (t *BaseTest) runCommand(command string, updater formatters.TestCompleter) (map[string]*eval.EvaluateResult, error) {
+func (t *BaseTest) runCommand(command string, timeout time.Duration, updater formatters.TestCompleter) (map[string]*eval.EvaluateResult, error) {
 	command, err := t.interpolateCaptures(command)
 	if err != nil {
 		updater.Error()
 		return nil, err
 	}
-	return t.runProducer(func() (*execution.ExecutionResult, error) {
-		return t.node.Execute(command)
-	}, updater)
+	// Single-flight: a timed-out attempt's invocation is re-awaited by the
+	// next retry attempt rather than overlapped by a new one
+	return t.runProducer(ifaces.BoundedCommand(t.node, command, timeout), updater)
 }
 
 var _ ifaces.Test = &commandTest{}
@@ -207,10 +259,11 @@ var _ ifaces.Test = &commandTest{}
 type commandTest struct {
 	BaseTest
 	command string
+	timeout time.Duration
 }
 
 func (t *commandTest) Run(updater formatters.TestCompleter) (map[string]*eval.EvaluateResult, error) {
-	return t.runCommand(t.command, updater)
+	return t.runCommand(t.command, t.timeout, updater)
 }
 
 // CreateTests creates a slice of Test objects from a slice of TestConfig objects
@@ -257,6 +310,32 @@ func CreateTests(configs []*config.TestConfig, nodes map[string]ifaces.Node) (te
 			skipIf:     cfg.SkipIf,
 			skipUnless: cfg.SkipUnless,
 			captures:   captures,
+		}
+		if cfg.Retry != nil {
+			if cfg.Retry.Timeout <= 0 {
+				return nil, &config.ConfigError{
+					Message:  fmt.Sprintf("retry.timeout must be positive in test %q", cfg.Name),
+					Location: cfg.Loc,
+				}
+			}
+			if cfg.Retry.Interval < 0 {
+				return nil, &config.ConfigError{
+					Message:  fmt.Sprintf("retry.interval must not be negative in test %q", cfg.Name),
+					Location: cfg.Loc,
+				}
+			}
+			interval := cfg.Retry.Interval
+			if interval == 0 {
+				interval = 2
+			}
+			if interval >= cfg.Retry.Timeout {
+				return nil, &config.ConfigError{
+					Message:  fmt.Sprintf("retry.interval (%vs) must be smaller than retry.timeout (%vs) in test %q or retry can never engage", interval, cfg.Retry.Timeout, cfg.Name),
+					Location: cfg.Loc,
+				}
+			}
+			base.retryTimeout = time.Duration(cfg.Retry.Timeout * float64(time.Second))
+			base.retryInterval = time.Duration(interval * float64(time.Second))
 		}
 
 		test, err := factory(base, cfg.Options)

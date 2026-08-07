@@ -1,6 +1,8 @@
 package testtypes
 
 import (
+	"time"
+
 	"fmt"
 
 	"github.com/bgrewell/dart/internal/eval"
@@ -22,6 +24,13 @@ func newExecuteTest(base BaseTest, opts map[string]interface{}) (ifaces.Test, er
 	command, err := requiredString(base.name, opts, "command")
 	if err != nil {
 		return nil, err
+	}
+	timeoutSeconds, err := optFloat(base.name, opts, "timeout", 0)
+	if err != nil {
+		return nil, err
+	}
+	if timeoutSeconds < 0 {
+		return nil, fmt.Errorf("timeout must be non-negative in test %q", base.name)
 	}
 
 	extractors := map[string]extractor{}
@@ -71,5 +80,6 @@ func newExecuteTest(base BaseTest, opts map[string]interface{}) (ifaces.Test, er
 	return &commandTest{
 		BaseTest: base,
 		command:  command,
+		timeout:  time.Duration(timeoutSeconds * float64(time.Second)),
 	}, nil
 }

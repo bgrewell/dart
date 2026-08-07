@@ -1,6 +1,8 @@
 package steptypes
 
 import (
+	"time"
+
 	"fmt"
 	"strings"
 
@@ -16,6 +18,7 @@ type ExecuteStep struct {
 	BaseStep
 	node     ifaces.Node
 	commands []string
+	timeout  time.Duration
 }
 
 // newExecuteStep accepts a single command string or an array of commands.
@@ -37,17 +40,26 @@ func newExecuteStep(c *config.StepConfig, node ifaces.Node) (ifaces.Step, error)
 		return nil, optionError(c, "command must be a string or array of strings in step %q", c.Name)
 	}
 
+	timeoutSeconds, err := optFloat(c, "timeout", 0)
+	if err != nil {
+		return nil, err
+	}
+	if timeoutSeconds < 0 {
+		return nil, optionError(c, "timeout must be non-negative in step %q", c.Name)
+	}
+
 	return &ExecuteStep{
 		BaseStep: baseFor(c),
 		node:     node,
 		commands: commands,
+		timeout:  time.Duration(timeoutSeconds * float64(time.Second)),
 	}, nil
 }
 
 // Run executes the commands sequentially and evaluates success.
 func (s *ExecuteStep) Run(updater formatters.TaskCompleter) error {
 	for _, command := range s.commands {
-		result, err := s.node.Execute(command)
+		result, err := ifaces.ExecuteWithTimeout(s.node, command, s.timeout)
 		if err != nil {
 			updater.Error()
 			return err

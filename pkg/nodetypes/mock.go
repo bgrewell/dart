@@ -26,6 +26,7 @@ type mockResponse struct {
 type MockNode struct {
 	mu        sync.Mutex
 	responses map[string]mockResponse
+	queued    map[string][]mockResponse
 	errors    map[string]error
 }
 
@@ -61,6 +62,19 @@ func (m *MockNode) Execute(command string, options ...execution.ExecutionOption)
 		return nil, err
 	}
 
+	// Queued one-shot responses are consumed in order before the persistent
+	// mapping applies — for testing retry/poll flows
+	if queue, exists := m.queued[command]; exists && len(queue) > 0 {
+		response := queue[0]
+		m.queued[command] = queue[1:]
+		return &execution.ExecutionResult{
+			ExecutionId: "mock-id",
+			ExitCode:    response.exitCode,
+			Stdout:      strings.NewReader(response.stdout),
+			Stderr:      strings.NewReader(response.stderr),
+		}, nil
+	}
+
 	if response, exists := m.responses[command]; exists {
 		return &execution.ExecutionResult{
 			ExecutionId: "mock-id",
@@ -83,6 +97,22 @@ func (m *MockNode) SetResponse(command string, exitCode int, stdout, stderr stri
 		stdout:   stdout,
 		stderr:   stderr,
 	}
+}
+
+// QueueResponse appends a one-shot response for a command, consumed in
+// order before the persistent SetResponse mapping applies.
+func (m *MockNode) QueueResponse(command string, exitCode int, stdout, stderr string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.queued == nil {
+		m.queued = make(map[string][]mockResponse)
+	}
+	m.queued[command] = append(m.queued[command], mockResponse{
+		exitCode: exitCode,
+		stdout:   stdout,
+		stderr:   stderr,
+	})
 }
 
 // SetError configures a mock error for a given command.
