@@ -159,7 +159,11 @@ func RegisterHooks(params RunParams) {
 			return params.Shutdowner.Shutdown()
 		},
 		OnStop: func(context context.Context) error {
-			go params.Ctrl.Close()
+			// Synchronous: a goroutine here raced process exit, so node
+			// connections could die unflushed
+			if err := params.Ctrl.Close(); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: error closing nodes: %v\n", err)
+			}
 			return nil
 		},
 	})
@@ -190,6 +194,18 @@ func main() {
 
 	if !u.Parse() {
 		u.PrintError(fmt.Errorf("Failed to parse command line arguments"))
+	}
+
+	// Validate flag values that would otherwise fail silently: zero
+	// iterations would exit green having run nothing, and a typo'd
+	// until-behavior would silently mean "exit"
+	if *cfgFlags.Iterations < 1 {
+		fmt.Fprintf(os.Stderr, "\n%s iterations must be at least 1 (got %d)\n\n", errorStyle.Sprint("Error:"), *cfgFlags.Iterations)
+		os.Exit(1)
+	}
+	if *cfgFlags.UntilBehavior != "exit" && *cfgFlags.UntilBehavior != "pause" {
+		fmt.Fprintf(os.Stderr, "\n%s until-behavior must be \"exit\" or \"pause\" (got %q)\n\n", errorStyle.Sprint("Error:"), *cfgFlags.UntilBehavior)
+		os.Exit(1)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

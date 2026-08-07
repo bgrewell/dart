@@ -30,3 +30,4 @@ without re-deriving the analysis.
 | [pkg-nodetypes.md](pkg-nodetypes.md) | `pkg/nodetypes/` | 2026-08-07 |
 | [internal-platform-managers.md](internal-platform-managers.md) | `internal/lxd/`, `internal/lxc/`, `internal/platform/` | 2026-08-07 |
 | [internal-docker.md](internal-docker.md) | `internal/docker/` | 2026-08-07 |
+| [helpers-logger-cmd.md](helpers-logger-cmd.md) | `internal/helpers/`, `internal/logger/`, `cmd/dart/` | 2026-08-07 |

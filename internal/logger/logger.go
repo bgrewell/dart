@@ -109,4 +109,3 @@ func (l *LogrusLogger) LogEvent(event fxevent.Event) {
 		}
 	}
 }
-
