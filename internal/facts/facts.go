@@ -3,6 +3,8 @@ package facts
 import (
 	"bytes"
 	"fmt"
+	"regexp"
+	"sort"
 	"strings"
 	"text/template"
 
@@ -29,29 +31,30 @@ func GatherFacts(nodes map[string]ifaces.Node, configs []*config.NodeConfig) (Fa
 			return nil, fmt.Errorf("node %q not found while gathering facts", cfg.Name)
 		}
 
+		// Sorted fact names keep the command execution order deterministic
+		names := make([]string, 0, len(cfg.Facts))
+		for name := range cfg.Facts {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+
 		nodeFacts := make(map[string]string, len(cfg.Facts))
-		for name, command := range cfg.Facts {
+		for _, name := range names {
+			command := cfg.Facts[name]
 			result, err := node.Execute(command)
 			if err != nil {
 				return nil, fmt.Errorf("fact %q on node %q failed: %w", name, cfg.Name, err)
 			}
 			if result.ExitCode != 0 {
-				var stderr string
-				if result.Stderr != nil {
-					buf := new(bytes.Buffer)
-					buf.ReadFrom(result.Stderr)
-					stderr = buf.String()
-				}
-				return nil, fmt.Errorf("fact %q on node %q exited with code %d: %s", name, cfg.Name, result.ExitCode, strings.TrimSpace(stderr))
+				stderr, _ := result.StderrBytes()
+				return nil, fmt.Errorf("fact %q on node %q exited with code %d: %s", name, cfg.Name, result.ExitCode, strings.TrimSpace(string(stderr)))
 			}
 
-			var stdout string
-			if result.Stdout != nil {
-				buf := new(bytes.Buffer)
-				buf.ReadFrom(result.Stdout)
-				stdout = buf.String()
+			stdout, err := result.StdoutBytes()
+			if err != nil {
+				return nil, fmt.Errorf("fact %q on node %q: reading output: %w", name, cfg.Name, err)
 			}
-			nodeFacts[name] = strings.TrimRight(stdout, " \t\r\n")
+			nodeFacts[name] = strings.TrimRight(string(stdout), " \t\r\n")
 		}
 		store[cfg.Name] = nodeFacts
 	}
@@ -59,12 +62,33 @@ func GatherFacts(nodes map[string]ifaces.Node, configs []*config.NodeConfig) (Fa
 	return store, nil
 }
 
+// captureRefRe matches {{capture.name}} references, which belong to the
+// runtime capture mechanism (testtypes), not to fact templating. They must
+// survive template rendering untouched: captures resolve when the test
+// runs, long after facts render, and text/template would reject them.
+var captureRefRe = regexp.MustCompile(`\{\{\s*capture\.[A-Za-z_][A-Za-z0-9_]*\s*\}\}`)
+
+const capturePlaceholder = "\x00dart-capture-ref\x00"
+
 // RenderTemplate processes a single string through text/template with a
 // fact(nodeName, factName) function. If the string contains no template
-// delimiters it is returned unchanged.
+// delimiters it is returned unchanged. Capture references
+// ({{capture.name}}) pass through unrendered for the capture store to
+// resolve at run time.
 func RenderTemplate(text string, store FactStore, currentNode string) (string, error) {
 	if !strings.Contains(text, "{{") {
 		return text, nil
+	}
+
+	// Shield capture references from the template engine
+	var captureRefs []string
+	shielded := captureRefRe.ReplaceAllStringFunc(text, func(ref string) string {
+		captureRefs = append(captureRefs, ref)
+		return capturePlaceholder
+	})
+	if !strings.Contains(shielded, "{{") {
+		// Nothing left to template; restore and return
+		return restoreCaptureRefs(shielded, captureRefs), nil
 	}
 
 	funcMap := template.FuncMap{
@@ -84,7 +108,7 @@ func RenderTemplate(text string, store FactStore, currentNode string) (string, e
 		},
 	}
 
-	tmpl, err := template.New("").Funcs(funcMap).Parse(text)
+	tmpl, err := template.New("").Funcs(funcMap).Parse(shielded)
 	if err != nil {
 		return "", fmt.Errorf("template parse error: %w", err)
 	}
@@ -94,7 +118,15 @@ func RenderTemplate(text string, store FactStore, currentNode string) (string, e
 		return "", fmt.Errorf("template execution error: %w", err)
 	}
 
-	return buf.String(), nil
+	return restoreCaptureRefs(buf.String(), captureRefs), nil
+}
+
+// restoreCaptureRefs puts shielded capture references back in order.
+func restoreCaptureRefs(text string, refs []string) string {
+	for _, ref := range refs {
+		text = strings.Replace(text, capturePlaceholder, ref, 1)
+	}
+	return text
 }
 
 // ProcessConfigOptions recursively walks a map[string]interface{} and renders

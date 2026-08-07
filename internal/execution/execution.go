@@ -1,6 +1,7 @@
 package execution
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"sync"
@@ -54,26 +55,80 @@ func ToExecuteOptions(options []ExecutionOption) []execute.Option {
 	return opts
 }
 
-// OptionsToExecutionOptions is a helper function that converts a map of options to a list of ExecutionOptions
+// OptionsToExecutionOptions is a helper function that converts a map of
+// options to a list of ExecutionOptions. Values arrive from YAML, so lists
+// are []interface{} and every assertion is checked — a wrong-typed option
+// warns and is skipped rather than panicking.
 func OptionsToExecutionOptions(options map[string]interface{}) []ExecutionOption {
 	opts := make([]ExecutionOption, 0)
 	for k, v := range options {
 		switch k {
 		case "env":
-			opts = append(opts, WithEnvironment(v.([]string)))
+			env, ok := toStringSlice(v)
+			if !ok {
+				optionWarning("env", "a list of KEY=VALUE strings", v)
+				continue
+			}
+			opts = append(opts, WithEnvironment(env))
 		case "shell":
-			opts = append(opts, WithShell(v.(string)))
+			shell, ok := v.(string)
+			if !ok {
+				optionWarning("shell", "a string", v)
+				continue
+			}
+			opts = append(opts, WithShell(shell))
 		case "sudo":
-			sudo := v.(map[string]interface{})
+			sudo, ok := v.(map[string]interface{})
+			if !ok {
+				optionWarning("sudo", "a map with env_var or password", v)
+				continue
+			}
 			if value, ok := sudo["env_var"]; ok {
-				pass := os.Getenv(value.(string))
+				name, ok := value.(string)
+				if !ok {
+					optionWarning("sudo.env_var", "a string", value)
+					continue
+				}
+				pass := os.Getenv(name)
+				if pass == "" {
+					fmt.Fprintf(os.Stderr, "Warning: sudo env_var %q is empty or unset\n", name)
+				}
 				opts = append(opts, WithSudo(pass))
-			} else if value, ok = sudo["password"]; ok {
-				opts = append(opts, WithSudo(value.(string)))
+			} else if value, ok := sudo["password"]; ok {
+				pass, ok := value.(string)
+				if !ok {
+					optionWarning("sudo.password", "a string", value)
+					continue
+				}
+				opts = append(opts, WithSudo(pass))
 			}
 		}
 	}
 	return opts
+}
+
+// toStringSlice accepts []string directly or a YAML-shaped []interface{} of
+// strings.
+func toStringSlice(v interface{}) ([]string, bool) {
+	switch list := v.(type) {
+	case []string:
+		return list, true
+	case []interface{}:
+		result := make([]string, len(list))
+		for i, item := range list {
+			s, ok := item.(string)
+			if !ok {
+				return nil, false
+			}
+			result[i] = s
+		}
+		return result, true
+	}
+	return nil, false
+}
+
+func optionWarning(key, expected string, got interface{}) {
+	fmt.Fprintf(os.Stderr, "Warning: exec option %q must be %s (got %T); ignored\n", key, expected, got)
 }
 
 func WithEnvironment(env []string) ExecutionOption {
