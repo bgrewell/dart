@@ -440,3 +440,38 @@ func TestControllerIterationReportPaths(t *testing.T) {
 	assert.FileExists(t, filepath.Join(dir, "results-2.json"))
 	assert.NoFileExists(t, base)
 }
+
+func taggedTest(name, node string, tags ...string) *config.TestConfig {
+	cfg := execTest(name, node, "echo ok", map[string]interface{}{"exit_code": 0})
+	cfg.Tags = tags
+	return cfg
+}
+
+func TestControllerTagFiltering(t *testing.T) {
+	f := newFixture("n1")
+	tc := f.controller([]*config.TestConfig{
+		taggedTest("net test", "n1", "network"),
+		taggedTest("smoke test", "n1", "smoke"),
+		taggedTest("slow net", "n1", "network", "slow"),
+		taggedTest("untagged", "n1"),
+	})
+	tc.SetTagFilters([]string{"network"}, []string{"slow"})
+	require.NoError(t, tc.Run())
+
+	// Only "net test": network-tagged but not slow
+	assert.Len(t, f.formatter.tests, 1)
+	assert.Contains(t, f.formatter.tests[0], "net test")
+	assert.Equal(t, 1, f.formatter.results.pass)
+}
+
+func TestControllerSkipTagsOnly(t *testing.T) {
+	f := newFixture("n1")
+	tc := f.controller([]*config.TestConfig{
+		taggedTest("fast", "n1", "smoke"),
+		taggedTest("slow", "n1", "slow"),
+		taggedTest("untagged", "n1"),
+	})
+	tc.SetTagFilters(nil, []string{"slow"})
+	require.NoError(t, tc.Run())
+	assert.Len(t, f.formatter.tests, 2, "untagged and non-slow tests run")
+}
