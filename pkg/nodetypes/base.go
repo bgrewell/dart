@@ -48,7 +48,7 @@ func CreateNodesWithWrappers(configs []*config.NodeConfig, dockerWrapper *docker
 		case "docker-compose":
 			node, err = NewDockerComposeNode(dockerWrapper, cfg.Name, &cfg.Options)
 		case "ssh":
-			node, err = NewSshNode(&cfg.Options)
+			node, err = NewSshNode(cfg.Name, &cfg.Options)
 		case "lxd":
 			if lxdWrapper != nil {
 				node, err = NewLxdNodeWithWrapper(lxdWrapper, cfg.Name, &cfg.Options)
@@ -56,10 +56,11 @@ func CreateNodesWithWrappers(configs []*config.NodeConfig, dockerWrapper *docker
 				node, err = NewLxdNode(cfg.Name, &cfg.Options)
 			}
 		case "lxd-vm":
-			// Alias for LXD virtual machine type
-			opts := cfg.Options
-			if opts == nil {
-				opts = make(map[string]interface{})
+			// Alias for LXD virtual machine type. The options map is copied
+			// rather than mutated: cfg.Options belongs to the configuration.
+			opts := make(map[string]interface{}, len(cfg.Options)+1)
+			for k, v := range cfg.Options {
+				opts[k] = v
 			}
 			opts["instance_type"] = "virtual-machine"
 			if lxdWrapper != nil {

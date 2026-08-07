@@ -27,3 +27,4 @@ without re-deriving the analysis.
 | [internal-config.md](internal-config.md) | `internal/config/` | 2026-08-07 |
 | [internal-formatters-stream.md](internal-formatters-stream.md) | `internal/formatters/`, `internal/stream/` | 2026-08-07 |
 | [internal-facts-execution.md](internal-facts-execution.md) | `internal/facts/`, `internal/execution/` | 2026-08-07 |
+| [pkg-nodetypes.md](pkg-nodetypes.md) | `pkg/nodetypes/` | 2026-08-07 |

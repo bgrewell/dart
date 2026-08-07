@@ -84,7 +84,9 @@ func (d *DockerNode) Execute(command string, options ...execution.ExecutionOptio
 	}, nil
 }
 
+// Close has nothing to release: the container lifecycle is handled by
+// Setup/Teardown and the client belongs to the shared wrapper. Returning
+// an error here would fail every run's final cleanup.
 func (d *DockerNode) Close() error {
-	//TODO implement me
-	return helpers.WrapError("not implemented")
+	return nil
 }
