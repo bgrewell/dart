@@ -93,6 +93,16 @@ func (d *DockerNode) Execute(command string, options ...execution.ExecutionOptio
 	}, nil
 }
 
+var _ ifaces.NetworkInspector = &DockerNode{}
+
+// NetworkFacts reports the container's addresses from Docker's own
+// inspection data, so suites can reference {{ fact "node" "ipv4" }}
+// without a fact command. Each attached network also yields a
+// per-network fact ("ipv4.test-net").
+func (d *DockerNode) NetworkFacts() (map[string]string, error) {
+	return d.wrapper.ContainerNetworkFacts(d.name)
+}
+
 // Close has nothing to release: the container lifecycle is handled by
 // Setup/Teardown and the client belongs to the shared wrapper. Returning
 // an error here would fail every run's final cleanup.

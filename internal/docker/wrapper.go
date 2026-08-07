@@ -12,6 +12,7 @@ import (
 	"github.com/docker/docker/client"
 	"io"
 	"path/filepath"
+	"sort"
 )
 
 // Ensure Wrapper implements the PlatformManager interface
@@ -204,6 +205,43 @@ func (w *Wrapper) RemoveContainer(name string) error {
 		return fmt.Errorf("could not remove container: %v", err)
 	}
 	return nil
+}
+
+// ContainerNetworkFacts returns the container's global addresses keyed as
+// "ipv4"/"ipv6" plus per-network entries ("ipv4.<network>").
+func (w *Wrapper) ContainerNetworkFacts(name string) (map[string]string, error) {
+	ctx := context.Background()
+	inspect, err := w.cli.ContainerInspect(ctx, w.containerRef(name))
+	if err != nil {
+		return nil, err
+	}
+	facts := make(map[string]string)
+	if inspect.NetworkSettings == nil {
+		return facts, nil
+	}
+
+	networkNames := make([]string, 0, len(inspect.NetworkSettings.Networks))
+	for network := range inspect.NetworkSettings.Networks {
+		networkNames = append(networkNames, network)
+	}
+	sort.Strings(networkNames)
+
+	for _, network := range networkNames {
+		settings := inspect.NetworkSettings.Networks[network]
+		if settings.IPAddress != "" {
+			if _, exists := facts["ipv4"]; !exists {
+				facts["ipv4"] = settings.IPAddress
+			}
+			facts["ipv4."+network] = settings.IPAddress
+		}
+		if settings.GlobalIPv6Address != "" {
+			if _, exists := facts["ipv6"]; !exists {
+				facts["ipv6"] = settings.GlobalIPv6Address
+			}
+			facts["ipv6."+network] = settings.GlobalIPv6Address
+		}
+	}
+	return facts, nil
 }
 
 func (w *Wrapper) RemoveImage(name string) error {

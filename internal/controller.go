@@ -77,6 +77,7 @@ type TestController struct {
 	reportIteration int
 	onlyTags        []string
 	skipTags        []string
+	filteredTests   []string
 	verbose         bool
 	debug           bool
 	stopOnFail      bool
@@ -160,6 +161,14 @@ func (tc *TestController) validateUntilTarget() error {
 	for idx, cfg := range tc.TestConfigs {
 		if cfg.Name == tc.until || strconv.Itoa(idx+1) == tc.until {
 			return nil
+		}
+	}
+
+	// The target may exist in the suite but be excluded by tag filters —
+	// say so instead of claiming it doesn't exist
+	for _, name := range tc.filteredTests {
+		if name == tc.until {
+			return fmt.Errorf("--until target %q exists but is excluded by the --only/--skip tag filter", tc.until)
 		}
 	}
 
@@ -396,19 +405,31 @@ func (tc *TestController) Run() error {
 
 	// Gather facts from nodes (after node setup, before step/test creation)
 	var store facts.FactStore
-	if facts.HasFacts(tc.NodeConfigs) {
-		tc.formatter.PrintEmpty()
-		tc.formatter.PrintHeader("Gathering node facts")
+	if facts.HasAnyFacts(tc.Nodes, tc.NodeConfigs) {
+		// Built-in address facts are gathered for every capable node, but
+		// only suites that ask for facts get the reporting phase — node
+		// types gaining built-ins must not add output to existing suites
+		showFacts := facts.HasFacts(tc.NodeConfigs)
+		if showFacts {
+			tc.formatter.PrintEmpty()
+			tc.formatter.PrintHeader("Gathering node facts")
+		}
 		var err error
 		store, err = facts.GatherFacts(tc.Nodes, tc.NodeConfigs)
 		if err != nil {
 			return err
 		}
-		for nodeName, nodeFacts := range store {
-			for factName, value := range nodeFacts {
-				f := tc.formatter.StartTask(factName, nodeName, "running")
-				_ = value
-				f.Complete()
+		if showFacts {
+			for _, cfg := range tc.NodeConfigs {
+				names := make([]string, 0, len(cfg.Facts))
+				for factName := range cfg.Facts {
+					names = append(names, factName)
+				}
+				sort.Strings(names)
+				for _, factName := range names {
+					f := tc.formatter.StartTask(factName, cfg.Name, "running")
+					f.Complete()
+				}
 			}
 		}
 	}
@@ -745,6 +766,18 @@ func (tc *TestController) applyTagFilters() {
 			continue
 		}
 		kept = append(kept, cfg)
+	}
+	for _, cfg := range tc.TestConfigs {
+		found := false
+		for _, keptCfg := range kept {
+			if keptCfg == cfg {
+				found = true
+				break
+			}
+		}
+		if !found {
+			tc.filteredTests = append(tc.filteredTests, cfg.Name)
+		}
 	}
 	if excluded := len(tc.TestConfigs) - len(kept); excluded > 0 {
 		tc.formatter.PrintHeader(fmt.Sprintf("Tag filter: running %d of %d tests (%d excluded)", len(kept), len(tc.TestConfigs), excluded))

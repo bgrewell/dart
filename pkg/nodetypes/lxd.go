@@ -14,6 +14,7 @@ import (
 	"math/big"
 	"net"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -519,6 +520,53 @@ func (d *LxdNode) Setup() error {
 	}
 
 	return d.waitForReady()
+}
+
+var _ ifaces.NetworkInspector = &LxdNode{}
+
+// NetworkFacts reports the instance's addresses from LXD's own state, so
+// suites can reference {{ fact "node" "ipv4" }} without a fact command.
+// Loopback is skipped; the first global address per family becomes the
+// bare "ipv4"/"ipv6" fact, and every address is also exposed per
+// interface ("ipv4.eth0").
+func (d *LxdNode) NetworkFacts() (map[string]string, error) {
+	if d.client == nil {
+		return nil, helpers.WrapError("lxd client not initialized")
+	}
+	state, _, err := d.client.GetInstanceState(d.name)
+	if err != nil {
+		return nil, err
+	}
+
+	facts := make(map[string]string)
+	names := make([]string, 0, len(state.Network))
+	for name := range state.Network {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, ifaceName := range names {
+		if ifaceName == "lo" {
+			continue
+		}
+		for _, addr := range state.Network[ifaceName].Addresses {
+			if addr.Scope != "global" {
+				continue
+			}
+			family := "ipv4"
+			if addr.Family == "inet6" {
+				family = "ipv6"
+			}
+			if _, exists := facts[family]; !exists {
+				facts[family] = addr.Address
+			}
+			key := fmt.Sprintf("%s.%s", family, ifaceName)
+			if _, exists := facts[key]; !exists {
+				facts[key] = addr.Address
+			}
+		}
+	}
+	return facts, nil
 }
 
 var _ ifaces.Rebooter = &LxdNode{}

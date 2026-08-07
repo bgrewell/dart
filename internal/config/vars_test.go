@@ -167,3 +167,69 @@ tests:
 	cfg.Tests[0].Tags[0] = "mutated"
 	assert.Equal(t, "network", cfg.Tests[1].Tags[0])
 }
+
+// One level of var-to-var nesting resolves fully (reviewer finding: it
+// used to substitute the raw unresolved value into commands).
+func TestVarReferencingVar(t *testing.T) {
+	yamlData := `
+suite: nesting
+vars:
+  base: hello
+  derived: "{{var.base}} world"
+nodes:
+  - name: l
+    type: local
+tests:
+  - name: t
+    node: l
+    type: execute
+    options:
+      command: echo {{var.derived}}
+`
+	cfg, err := ParseConfiguration([]byte(yamlData), ".")
+	require.NoError(t, err)
+	assert.Equal(t, "echo hello world", cfg.Tests[0].Options["command"])
+}
+
+func TestVarCycleErrors(t *testing.T) {
+	yamlData := "suite: s\nvars:\n  a: \"{{var.b}}\"\n  b: \"{{var.a}}\"\nnodes:\n  - name: l\n    type: local\n"
+	_, err := ParseConfiguration([]byte(yamlData), ".")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "circular")
+}
+
+// A genuine YAML syntax error surfaces as itself, not as a bogus
+// "unresolved references" complaint.
+func TestYamlSyntaxErrorNotMaskedByVars(t *testing.T) {
+	yamlData := "suite: s\nnodes:\n\t- name: l\n    type: local\ntests:\n  - name: t\n    node: l\n    type: execute\n    options:\n      command: echo {{var.x}}\n"
+	_, err := ParseConfiguration([]byte(yamlData), ".")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "yaml:", "the real YAML error must surface")
+	assert.NotContains(t, err.Error(), "unresolved references")
+}
+
+// Risky characters in a value substituted into an UNQUOTED position are
+// rejected with guidance (a '#' would silently truncate, a ':' corrupt).
+func TestRiskyValueUnquotedRejected(t *testing.T) {
+	yamlData := "suite: s\nvars:\n  cmd: \"echo hi # not a comment\"\nnodes:\n  - name: l\n    type: local\ntests:\n  - name: t\n    node: l\n    type: execute\n    options:\n      command: {{var.cmd}}\n"
+	_, err := ParseConfiguration([]byte(yamlData), ".")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "YAML-significant characters")
+}
+
+// The same risky value inside quotes is fine.
+func TestRiskyValueQuotedAllowed(t *testing.T) {
+	yamlData := "suite: s\nvars:\n  cmd: \"echo hi # tail\"\nnodes:\n  - name: l\n    type: local\ntests:\n  - name: t\n    node: l\n    type: execute\n    options:\n      command: \"{{var.cmd}}\"\n"
+	cfg, err := ParseConfiguration([]byte(yamlData), ".")
+	require.NoError(t, err)
+	assert.Equal(t, "echo hi # tail", cfg.Tests[0].Options["command"])
+}
+
+// References inside comments are inert: undefined ones don't fail the
+// load, defined ones don't get values spliced into comment text.
+func TestCommentReferencesIgnored(t *testing.T) {
+	yamlData := "suite: s\nvars:\n  secret: hunter2\n# TODO use {{var.future_thing}} and note {{var.secret}}\nnodes:\n  - name: l\n    type: local\ntests:\n  - name: t\n    node: l\n    type: execute\n    options:\n      command: echo {{var.secret}}\n"
+	cfg, err := ParseConfiguration([]byte(yamlData), ".")
+	require.NoError(t, err, "undefined refs in comments must not fail the load")
+	assert.Equal(t, "echo hunter2", cfg.Tests[0].Options["command"])
+}

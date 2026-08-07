@@ -475,3 +475,20 @@ func TestControllerSkipTagsOnly(t *testing.T) {
 	require.NoError(t, tc.Run())
 	assert.Len(t, f.formatter.tests, 2, "untagged and non-slow tests run")
 }
+
+// An --until target that exists but was tag-filtered out names the filter
+// as the cause instead of claiming the test doesn't exist.
+func TestControllerUntilTargetFilteredByTags(t *testing.T) {
+	f := newFixture("n1")
+	tc := f.controller([]*config.TestConfig{
+		taggedTest("net test", "n1", "network"),
+		taggedTest("smoke test", "n1", "smoke"),
+	}, func(tc *TestController) {
+		tc.until = "smoke test"
+	})
+	tc.SetTagFilters([]string{"network"}, nil)
+
+	err := tc.Run()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "excluded by the --only/--skip tag filter")
+}

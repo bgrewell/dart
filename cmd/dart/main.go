@@ -116,6 +116,9 @@ func parseTagFilter(flagName, value string) ([]string, error) {
 			tags = append(tags, tag)
 		}
 	}
+	if len(tags) == 0 {
+		return nil, fmt.Errorf("--%s must name at least one tag (got %q)", flagName, value)
+	}
 	return tags, nil
 }
 
