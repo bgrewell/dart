@@ -8,6 +8,7 @@ import (
 
 	"github.com/bgrewell/dart/internal/execution"
 	"github.com/bgrewell/dart/internal/helpers"
+	"github.com/bgrewell/dart/internal/stream"
 	"github.com/bgrewell/dart/pkg/ifaces"
 	"golang.org/x/crypto/ssh"
 )
@@ -22,7 +23,7 @@ type SshNodeOpts struct {
 	KeyFile string `yaml:"key,omitempty" json:"key"`
 }
 
-func NewSshNode(opts ifaces.NodeOptions) (node ifaces.Node, err error) {
+func NewSshNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err error) {
 
 	jsonData, err := json.Marshal(opts)
 	if err != nil {
@@ -70,6 +71,7 @@ func NewSshNode(opts ifaces.NodeOptions) (node ifaces.Node, err error) {
 
 	// Return the new ssh node
 	return &SshNode{
+		name:    name,
 		config:  config,
 		client:  client,
 		address: addr,
@@ -130,6 +132,7 @@ func (s *SshNode) Reboot(force bool, readyCommand string, timeout time.Duration)
 }
 
 type SshNode struct {
+	name    string
 	config  *ssh.ClientConfig
 	client  *ssh.Client
 	address string
@@ -153,22 +156,11 @@ func (s *SshNode) Close() error {
 	return nil
 }
 
-// Execute runs a command on the remote SSH host.
-//
-// TODO: Implement debug streaming output for SSH node.
-//
-// Current Issue: The SSH implementation has a bug where session.StdoutPipe() and
-// session.StderrPipe() return pipes that are consumed by session.Run() before
-// the Execute() method returns. By the time the caller tries to read from the
-// returned readers, the pipes are already closed/empty.
-//
-// Solution: Replace the pipe-based approach with direct writers:
-//  1. Create TeeWriter instances for stdout and stderr
-//  2. Assign them to session.Stdout and session.Stderr (instead of using pipes)
-//  3. Call session.Run() which writes directly to our TeeWriters
-//  4. Return TeeWriter.Reader() for both streams
-//
-// This fix also resolves the existing bug where output is lost even without debug mode.
+// Execute runs a command on the remote SSH host. Output is captured into
+// tee writers assigned as the session's Stdout/Stderr — session pipes are
+// unusable here because Run drains and closes them before returning, which
+// previously lost all command output. The tee writers also provide debug
+// streaming, matching the other node types.
 func (s *SshNode) Execute(command string, options ...execution.ExecutionOption) (result *execution.ExecutionResult, err error) {
 
 	// Create a new session
@@ -176,16 +168,13 @@ func (s *SshNode) Execute(command string, options ...execution.ExecutionOption) 
 	if err != nil {
 		return nil, err
 	}
+	defer session.Close()
 
-	// Set up the pipes to capture stdout and stderr
-	stdout, err := session.StdoutPipe()
-	if err != nil {
-		return nil, err
-	}
-	stderr, err := session.StderrPipe()
-	if err != nil {
-		return nil, err
-	}
+	debugEnabled := execution.IsDebugMode()
+	stdoutWriter := stream.NewTeeWriter(stream.StreamStdout, s.name, debugEnabled)
+	stderrWriter := stream.NewTeeWriter(stream.StreamStderr, s.name, debugEnabled)
+	session.Stdout = stdoutWriter
+	session.Stderr = stderrWriter
 
 	// Run the command
 	exitCode := 0
@@ -194,15 +183,15 @@ func (s *SshNode) Execute(command string, options ...execution.ExecutionOption) 
 		if exitErr, ok := err.(*ssh.ExitError); ok {
 			exitCode = exitErr.ExitStatus()
 		} else {
-			return nil, fmt.Errorf("failed to get exit code: %v", err)
+			return nil, fmt.Errorf("ssh command failed: %w", err)
 		}
 	}
 
 	return &execution.ExecutionResult{
 		ExecutionId: helpers.GetRandomId(),
 		ExitCode:    exitCode,
-		Stdout:      stdout,
-		Stderr:      stderr,
+		Stdout:      stdoutWriter.Reader(),
+		Stderr:      stderrWriter.Reader(),
 	}, nil
 }
 
