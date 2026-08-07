@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -77,6 +78,28 @@ type TestController struct {
 	teardownOnly    bool
 	until           string
 	untilBehavior   string
+}
+
+// orderedNodeNames returns node names in config-file order so setup and
+// teardown are deterministic; nodes without a config entry (not expected)
+// are appended in sorted order.
+func (tc *TestController) orderedNodeNames() []string {
+	names := make([]string, 0, len(tc.Nodes))
+	seen := make(map[string]bool, len(tc.Nodes))
+	for _, cfg := range tc.NodeConfigs {
+		if _, ok := tc.Nodes[cfg.Name]; ok && !seen[cfg.Name] {
+			names = append(names, cfg.Name)
+			seen[cfg.Name] = true
+		}
+	}
+	var rest []string
+	for name := range tc.Nodes {
+		if !seen[name] {
+			rest = append(rest, name)
+		}
+	}
+	sort.Strings(rest)
+	return append(names, rest...)
 }
 
 // handleSetupError handles errors during setup phases when pauseOnFail is enabled.
@@ -228,7 +251,11 @@ func (tc *TestController) Run() error {
 			for i := len(setupCompletedPlatforms) - 1; i >= 0; i-- {
 				platform := setupCompletedPlatforms[i]
 				t := tc.formatter.StartTask(fmt.Sprintf("tearing down %s environment", platform.Name()), "", "running")
-				_ = platform.Teardown()
+				if err := platform.Teardown(); err != nil {
+					t.Error()
+					fmt.Printf("Error cleaning up %s environment: %s\n", platform.Name(), err)
+					continue
+				}
 				t.Complete()
 			}
 		}
@@ -246,7 +273,9 @@ func (tc *TestController) Run() error {
 	// Calculate task column width once, before displaying anything
 	tc.formatter.SetTaskColumnWidth(tc.computeTaskColumnWidth(nodeSetupMsg, nodeTeardownMsg))
 
-	// If teardown only is set, skip the setup and tests
+	// If teardown only is set, skip the setup and tests and run the full
+	// teardown sequence: teardown steps, then nodes, then platforms. Steps
+	// are best-effort — the remaining cleanup runs even if one fails.
 	if tc.teardownOnly {
 		// Create teardown steps without template processing (no facts available)
 		var err error
@@ -258,17 +287,41 @@ func (tc *TestController) Run() error {
 		// Compute test column width
 		tc.setFormattingWidths()
 
-		cleanupMsg = "Running teardown only"
-		for name := range tc.Nodes {
-			setupCompletedNodes = append(setupCompletedNodes, name)
-		}
-		// Track all configured platforms for teardown
-		for _, platform := range tc.Platforms {
-			if platform.Configured() {
-				setupCompletedPlatforms = append(setupCompletedPlatforms, platform)
+		tc.formatter.PrintHeader("Running teardown only")
+		for _, step := range tc.Teardown {
+			f := tc.formatter.StartTask(step.Title(), step.NodeName(), "running")
+			if err := step.Run(f); err != nil {
+				f.Error()
+				fmt.Printf("Error running teardown step %q: %s\n", step.Title(), err)
 			}
 		}
-		return nil // The defered function will handle the teardown
+
+		for _, name := range tc.orderedNodeNames() {
+			c := tc.formatter.StartTask(nodeTeardownMsg, name, "running")
+			if err := tc.Nodes[name].Teardown(); err != nil {
+				c.Error()
+				fmt.Printf("Error cleaning up node %s: %s\n", name, err)
+				continue
+			}
+			c.Complete()
+		}
+
+		for i := len(tc.Platforms) - 1; i >= 0; i-- {
+			platform := tc.Platforms[i]
+			if !platform.Configured() {
+				continue
+			}
+			t := tc.formatter.StartTask(fmt.Sprintf("tearing down %s environment", platform.Name()), "", "running")
+			if err := platform.Teardown(); err != nil {
+				t.Error()
+				fmt.Printf("Error cleaning up %s environment: %s\n", platform.Name(), err)
+				continue
+			}
+			t.Complete()
+		}
+
+		cleanupComplete = true
+		return nil
 	}
 
 	// Run the setup steps
@@ -301,7 +354,8 @@ func (tc *TestController) Run() error {
 		}
 	}
 
-	for name, node := range tc.Nodes {
+	for _, name := range tc.orderedNodeNames() {
+		node := tc.Nodes[name]
 	nodeRetry:
 		for {
 			c := tc.formatter.StartTask(nodeSetupMsg, name, "running")
@@ -392,8 +446,10 @@ func (tc *TestController) Run() error {
 		return nil
 	}
 
-	// Run the tests
-	testResults := make(map[string]map[string]*eval.EvaluateResult)
+	// Run the tests. Results are collected per executed test in a slice —
+	// test names are not unique (multi-node expansion reuses the name per
+	// node), so a name-keyed map would collapse them in the summary.
+	var testResults []map[string]*eval.EvaluateResult
 	skippedTests := 0
 	tc.formatter.PrintHeader("Running tests")
 	untilReachedInTests := false
@@ -428,7 +484,7 @@ func (tc *TestController) Run() error {
 		// Results may be present alongside an error (teardown failure after
 		// the test ran); record and report them before acting on the error
 		if results != nil {
-			testResults[test.Name()] = results
+			testResults = append(testResults, results)
 
 			names := make([]string, 0, len(results))
 			for name := range results {
@@ -436,6 +492,10 @@ func (tc *TestController) Run() error {
 			}
 			sort.Strings(names)
 
+			// Report every check before acting on the outcome, so a test
+			// with several failing checks shows all of them even under
+			// stop-on-error, and pause-on-error prompts once per test
+			testFailed := false
 			for _, name := range names {
 				result := results[name]
 				if result.Err != nil {
@@ -446,14 +506,17 @@ func (tc *TestController) Run() error {
 					tc.formatter.PrintFail(name, result.Details)
 				}
 				if !result.Passed {
-					if tc.stopOnFail {
-						return fmt.Errorf("test %s failed", test.Name())
-					}
-					if tc.pauseOnFail {
-						fmt.Println("Press enter to continue")
-						var input string
-						fmt.Scanln(&input)
-					}
+					testFailed = true
+				}
+			}
+			if testFailed {
+				if tc.stopOnFail {
+					return fmt.Errorf("test %s failed", test.Name())
+				}
+				if tc.pauseOnFail {
+					fmt.Println("Press enter to continue")
+					var input string
+					fmt.Scanln(&input)
 				}
 			}
 		}
@@ -494,9 +557,9 @@ func (tc *TestController) Run() error {
 		}
 	}
 
-	for name, node := range tc.Nodes {
+	for _, name := range tc.orderedNodeNames() {
 		c := tc.formatter.StartTask(nodeTeardownMsg, name, "running")
-		err := node.Teardown()
+		err := tc.Nodes[name].Teardown()
 		if err != nil {
 			c.Error()
 			return err
@@ -612,8 +675,11 @@ func (tc *TestController) setFormattingWidths() {
 }
 
 func (tc *TestController) Close() error {
-	for _, node := range tc.Nodes {
-		node.Close()
+	var errs []error
+	for name, node := range tc.Nodes {
+		if err := node.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("closing node %s: %w", name, err))
+		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
