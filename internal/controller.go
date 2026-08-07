@@ -75,6 +75,8 @@ type TestController struct {
 	formatter       formatters.Formatter
 	reports         []report.Spec
 	reportIteration int
+	onlyTags        []string
+	skipTags        []string
 	verbose         bool
 	debug           bool
 	stopOnFail      bool
@@ -225,6 +227,9 @@ func (tc *TestController) createStepsAndTests(store facts.FactStore) error {
 }
 
 func (tc *TestController) Run() error {
+
+	// Tag filters shape the test list before anything references it
+	tc.applyTagFilters()
 
 	// Validate --until target before doing any work
 	if err := tc.validateUntilTarget(); err != nil {
@@ -705,6 +710,46 @@ func (tc *TestController) writeReports(records []report.TestRecord, elapsed time
 		}
 	}
 	return nil
+}
+
+// SetTagFilters restricts which tests run: with onlyTags set, a test must
+// carry at least one of them; a test carrying any skipTags is excluded.
+// Steps are never filtered — setup/teardown chains stay intact.
+func (tc *TestController) SetTagFilters(onlyTags, skipTags []string) {
+	tc.onlyTags = onlyTags
+	tc.skipTags = skipTags
+}
+
+// applyTagFilters drops filtered tests from TestConfigs before creation,
+// reporting how many were excluded.
+func (tc *TestController) applyTagFilters() {
+	if len(tc.onlyTags) == 0 && len(tc.skipTags) == 0 {
+		return
+	}
+	hasAny := func(tags, wanted []string) bool {
+		for _, tag := range tags {
+			for _, want := range wanted {
+				if tag == want {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	kept := make([]*config.TestConfig, 0, len(tc.TestConfigs))
+	for _, cfg := range tc.TestConfigs {
+		if len(tc.onlyTags) > 0 && !hasAny(cfg.Tags, tc.onlyTags) {
+			continue
+		}
+		if len(tc.skipTags) > 0 && hasAny(cfg.Tags, tc.skipTags) {
+			continue
+		}
+		kept = append(kept, cfg)
+	}
+	if excluded := len(tc.TestConfigs) - len(kept); excluded > 0 {
+		tc.formatter.PrintHeader(fmt.Sprintf("Tag filter: running %d of %d tests (%d excluded)", len(kept), len(tc.TestConfigs), excluded))
+	}
+	tc.TestConfigs = kept
 }
 
 // SetReportIteration marks which -i iteration is running (1-based) so each

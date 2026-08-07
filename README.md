@@ -1012,6 +1012,32 @@ reference to a value nothing captured fails the test rather than running
 a mangled command. Values persist across `-i` iterations and are
 overwritten by each run.
 
+### Suite Variables and Tags
+
+Suites parameterize with a `vars:` block, `{{var.name}}` / `{{env.NAME}}`
+references (resolved at config load — a numeric var in a numeric position
+stays a number), and `--vars key=value[,key=value]` CLI overrides. Capture
+references and fact templates are untouched. Unresolved references are
+config errors.
+
+```yaml
+suite: API smoke
+vars:
+  target: 10.0.0.5      # override per run: dart -c suite.yaml --vars target=192.168.1.1
+tests:
+  - name: api answers
+    node: local
+    type: http_request
+    tags: [smoke, network]
+    options:
+      url: http://{{var.target}}:8080/health
+```
+
+Tests carry `tags:`; run subsets with `--only tag=network` (any listed tag
+matches) and exclude with `--skip tag=slow`. Steps are never filtered, so
+setup/teardown chains stay intact; the run reports how many tests the
+filter excluded.
+
 ### Timeouts and Retries
 
 Any `execute` test or step accepts `timeout:` (seconds; `0`/omitted means

@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 )
@@ -45,13 +46,14 @@ func (n NodeReference) MarshalYAML() (interface{}, error) {
 
 // Configuration is the top-level configuration for the test suite
 type Configuration struct {
-	Suite    string        `json:"suite" yaml:"suite"`
-	Docker   *DockerConfig `json:"docker" yaml:"docker"`
-	Lxd      *LxdConfig    `json:"lxd" yaml:"lxd"`
-	Setup    []*StepConfig `json:"setup" yaml:"setup"`
-	Teardown []*StepConfig `json:"teardown" yaml:"teardown"`
-	Nodes    []*NodeConfig `json:"nodes" yaml:"nodes"`
-	Tests    []*TestConfig `json:"tests" yaml:"tests"`
+	Suite    string            `json:"suite" yaml:"suite"`
+	Vars     map[string]string `json:"vars" yaml:"vars"`
+	Docker   *DockerConfig     `json:"docker" yaml:"docker"`
+	Lxd      *LxdConfig        `json:"lxd" yaml:"lxd"`
+	Setup    []*StepConfig     `json:"setup" yaml:"setup"`
+	Teardown []*StepConfig     `json:"teardown" yaml:"teardown"`
+	Nodes    []*NodeConfig     `json:"nodes" yaml:"nodes"`
+	Tests    []*TestConfig     `json:"tests" yaml:"tests"`
 }
 
 // DockerConfig is the configuration for Docker
@@ -111,7 +113,9 @@ type TestConfig struct {
 	SkipUnless string `json:"skip_unless" yaml:"skip_unless"`
 	// Retry reruns the test (command + evaluations) until it passes or the
 	// timeout elapses — for eventually-consistent assertions.
-	Retry   *RetryConfig   `json:"retry,omitempty" yaml:"retry,omitempty"`
+	Retry *RetryConfig `json:"retry,omitempty" yaml:"retry,omitempty"`
+	// Tags label the test for --only/--skip filtering.
+	Tags    []string       `json:"tags,omitempty" yaml:"tags,omitempty"`
 	Loc     SourceLocation `json:"-" yaml:"-"`
 	NodeLoc SourceLocation `json:"-" yaml:"-"`
 	TypeLoc SourceLocation `json:"-" yaml:"-"`
@@ -188,6 +192,12 @@ type LxdProjectConfig struct {
 }
 
 func LoadConfiguration(cfgPath string) (config *Configuration, err error) {
+	return LoadConfigurationWithVars(cfgPath, nil)
+}
+
+// LoadConfigurationWithVars loads a configuration with CLI variable
+// overrides applied on top of the suite's vars block.
+func LoadConfigurationWithVars(cfgPath string, cliVars map[string]string) (config *Configuration, err error) {
 	absPath, err := filepath.Abs(cfgPath)
 	if err != nil {
 		absPath = cfgPath
@@ -200,15 +210,27 @@ func LoadConfiguration(cfgPath string) (config *Configuration, err error) {
 
 	dir := filepath.Dir(absPath)
 
-	return ParseConfiguration(data, dir, absPath)
+	return ParseConfigurationWithVars(data, dir, cliVars, absPath)
 }
 
 func ParseConfiguration(data []byte, location string, filePath ...string) (config *Configuration, err error) {
+	return ParseConfigurationWithVars(data, location, nil, filePath...)
+}
+
+// ParseConfigurationWithVars parses a configuration after substituting
+// {{var.name}} and {{env.NAME}} references. Variables come from the
+// suite's vars block, overridden by cliVars (--var on the command line).
+func ParseConfigurationWithVars(data []byte, location string, cliVars map[string]string, filePath ...string) (config *Configuration, err error) {
 	processed, usedLoadFrom, err := processLoadFromDirectives(data, location)
 	if err != nil {
 		return nil, err
 	}
 	data = processed
+
+	data, err = substituteVars(data, cliVars)
+	if err != nil {
+		return nil, err
+	}
 
 	config = &Configuration{}
 	err = yaml.Unmarshal(data, config)
@@ -247,6 +269,86 @@ func ParseConfiguration(data []byte, location string, filePath ...string) (confi
 	}
 
 	return config, nil
+}
+
+var varRefRe = regexp.MustCompile(`\{\{\s*(var|env)\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}`)
+
+// substituteVars replaces {{var.name}} and {{env.NAME}} references in the
+// raw YAML before unmarshaling, so substituted values land with native
+// YAML types (a numeric var in a numeric position stays a number). The
+// substitution is inline and single-line, so source locations survive.
+// Values may not contain newlines (they would corrupt YAML structure and
+// shift line numbers). Var values may themselves reference {{env.NAME}};
+// deeper nesting is not supported. Capture references and fact templates
+// use different prefixes and pass through untouched.
+func substituteVars(data []byte, cliVars map[string]string) ([]byte, error) {
+	// The vars block is read pre-substitution; CLI overrides win
+	var head struct {
+		Vars map[string]string `yaml:"vars"`
+	}
+	_ = yaml.Unmarshal(data, &head) // full parse later reports YAML errors
+	vars := make(map[string]string, len(head.Vars)+len(cliVars))
+	for k, v := range head.Vars {
+		vars[k] = v
+	}
+	for k, v := range cliVars {
+		vars[k] = v
+	}
+
+	var missing []string
+	resolveEnv := func(text string) string {
+		return varRefRe.ReplaceAllStringFunc(text, func(ref string) string {
+			m := varRefRe.FindStringSubmatch(ref)
+			if m[1] != "env" {
+				return ref
+			}
+			if value, ok := os.LookupEnv(m[2]); ok {
+				return value
+			}
+			missing = append(missing, "env."+m[2])
+			return ref
+		})
+	}
+
+	// Resolve env references inside var values first, so a var defined as
+	// "{{env.HOME}}/data" substitutes fully resolved
+	for name, value := range vars {
+		vars[name] = resolveEnv(value)
+	}
+	for name, value := range vars {
+		if strings.ContainsAny(value, "\n\r") {
+			return nil, fmt.Errorf("var %q contains a newline; variable values must be single-line", name)
+		}
+		_ = value
+	}
+
+	result := varRefRe.ReplaceAllFunc(data, func(ref []byte) []byte {
+		m := varRefRe.FindSubmatch(ref)
+		kind, name := string(m[1]), string(m[2])
+		if kind == "var" {
+			if value, ok := vars[name]; ok {
+				return []byte(value)
+			}
+			missing = append(missing, "var."+name)
+			return ref
+		}
+		if value, ok := os.LookupEnv(name); ok {
+			if strings.ContainsAny(value, "\n\r") {
+				missing = append(missing, fmt.Sprintf("env.%s (value contains a newline)", name))
+				return ref
+			}
+			return []byte(value)
+		}
+		missing = append(missing, "env."+name)
+		return ref
+	})
+
+	if len(missing) > 0 {
+		slices.Sort(missing)
+		missing = slices.Compact(missing)
+		return nil, fmt.Errorf("unresolved references: %s (define in the vars block, pass --vars, or set the environment variable)", strings.Join(missing, ", "))
+	}
+	return result, nil
 }
 
 // validateConfiguration rejects configurations that would otherwise fail
@@ -408,6 +510,8 @@ func expandTestConfigs(configs []*TestConfig) []*TestConfig {
 					Options:    cfg.Options,
 					SkipIf:     cfg.SkipIf,
 					SkipUnless: cfg.SkipUnless,
+					Retry:      cfg.Retry,
+					Tags:       slices.Clone(cfg.Tags),
 					Loc:        cfg.Loc,
 					NodeLoc:    cfg.NodeLoc,
 					TypeLoc:    cfg.TypeLoc,

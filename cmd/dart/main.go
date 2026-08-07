@@ -49,6 +49,9 @@ type CmdlineFlags struct {
 	Report        *string
 	Check         *bool
 	LogFile       *string
+	Vars          *string
+	Only          *string
+	SkipTags      *string
 }
 
 type ControllerParams struct {
@@ -70,12 +73,50 @@ type RunParams struct {
 }
 
 func Configuration(cmdFlags *CmdlineFlags) (*config.Configuration, error) {
+	vars, err := parseVarFlags(*cmdFlags.Vars)
+	if err != nil {
+		return nil, err
+	}
 	// Read in the test configuration file
-	cfg, err := config.LoadConfiguration(*cmdFlags.ConfigFile)
+	cfg, err := config.LoadConfigurationWithVars(*cmdFlags.ConfigFile, vars)
 	if err != nil {
 		return nil, err
 	}
 	return cfg, nil
+}
+
+// parseVarFlags parses --vars "key=value,key2=value2" overrides.
+func parseVarFlags(value string) (map[string]string, error) {
+	if value == "" {
+		return nil, nil
+	}
+	vars := map[string]string{}
+	for _, pair := range strings.Split(value, ",") {
+		key, val, found := strings.Cut(strings.TrimSpace(pair), "=")
+		if !found || key == "" {
+			return nil, fmt.Errorf("--vars entries must be key=value (got %q)", pair)
+		}
+		vars[key] = val
+	}
+	return vars, nil
+}
+
+// parseTagFilter parses a --only/--skip value of the form "tag=a,b".
+func parseTagFilter(flagName, value string) ([]string, error) {
+	if value == "" {
+		return nil, nil
+	}
+	rest, found := strings.CutPrefix(value, "tag=")
+	if !found || rest == "" {
+		return nil, fmt.Errorf("--%s must be tag=<name>[,<name>...] (got %q)", flagName, value)
+	}
+	var tags []string
+	for _, tag := range strings.Split(rest, ",") {
+		if tag = strings.TrimSpace(tag); tag != "" {
+			tags = append(tags, tag)
+		}
+	}
+	return tags, nil
 }
 
 // logCleanup flushes and closes the --log file; os.Exit skips defers, so
@@ -171,6 +212,16 @@ func Controller(params ControllerParams) (ctrl *internal.TestController, err err
 		return nil, err
 	}
 	controller.SetReports(specs)
+
+	onlyTags, err := parseTagFilter("only", *params.Flags.Only)
+	if err != nil {
+		return nil, err
+	}
+	skipTags, err := parseTagFilter("skip", *params.Flags.SkipTags)
+	if err != nil {
+		return nil, err
+	}
+	controller.SetTagFilters(onlyTags, skipTags)
 	return controller, nil
 }
 
@@ -253,6 +304,9 @@ func main() {
 	cfgFlags.Report = u.AddStringOption("r", "report", "", "Write machine-readable results: format:path (junit:results.xml, json:results.json; comma-separate for both)", "", nil)
 	cfgFlags.Check = u.AddBooleanOption("ck", "check", false, "Validate the configuration and print the plan without running anything", "", nil)
 	cfgFlags.LogFile = u.AddStringOption("l", "log", "", "Write a clean (color-free) transcript of the run to this file", "", nil)
+	cfgFlags.Vars = u.AddStringOption("var", "vars", "", "Override suite variables: key=value[,key=value...]", "", nil)
+	cfgFlags.Only = u.AddStringOption("o", "only", "", "Run only tests carrying one of these tags: tag=name[,name...]", "", nil)
+	cfgFlags.SkipTags = u.AddStringOption("sk", "skip", "", "Exclude tests carrying any of these tags: tag=name[,name...]", "", nil)
 
 	if !u.Parse() {
 		u.PrintError(fmt.Errorf("Failed to parse command line arguments"))
@@ -271,7 +325,7 @@ func main() {
 	}
 
 	if *cfgFlags.Check {
-		os.Exit(runCheck(*cfgFlags.ConfigFile, *cfgFlags.Report))
+		os.Exit(runCheck(*cfgFlags.ConfigFile, *cfgFlags.Report, *cfgFlags.Vars, *cfgFlags.Only, *cfgFlags.SkipTags))
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -334,15 +388,28 @@ func (c *checkNode) Reboot(force bool, readyCommand string, timeout time.Duratio
 
 // runCheck validates the configuration — full option parsing for every
 // node, step, and test — and prints the plan without running anything.
-func runCheck(cfgPath, reportValue string) int {
+func runCheck(cfgPath, reportValue, varsValue, onlyValue, skipValue string) int {
 	// Validate flags the run would reject, so --check green means the real
 	// invocation starts
 	if _, err := parseReportSpecs(reportValue); err != nil {
 		fmt.Fprintf(os.Stderr, "\n%s %s\n\n", errorStyle.Sprint("Error:"), err)
 		return 1
 	}
+	if _, err := parseTagFilter("only", onlyValue); err != nil {
+		fmt.Fprintf(os.Stderr, "\n%s %s\n\n", errorStyle.Sprint("Error:"), err)
+		return 1
+	}
+	if _, err := parseTagFilter("skip", skipValue); err != nil {
+		fmt.Fprintf(os.Stderr, "\n%s %s\n\n", errorStyle.Sprint("Error:"), err)
+		return 1
+	}
+	vars, err := parseVarFlags(varsValue)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "\n%s %s\n\n", errorStyle.Sprint("Error:"), err)
+		return 1
+	}
 
-	cfg, err := config.LoadConfiguration(cfgPath)
+	cfg, err := config.LoadConfigurationWithVars(cfgPath, vars)
 	if err != nil {
 		var cfgErr *config.ConfigError
 		if errors.As(err, &cfgErr) {
