@@ -60,10 +60,13 @@ func containsLabel(labels map[string]string, label string) bool {
 func TestListContainers(t *testing.T) {
 	ctx := context.Background()
 
+	// State carries the filterable state ("running"); Status is the human
+	// string ("Up 5 minutes") — the mock filter matches on State, as the
+	// real daemon does
 	mockContainers := []types.Container{
-		{ID: "1", Names: []string{"container1"}, Image: "nginx", Status: "running", Labels: map[string]string{"env": "prod"}},
-		{ID: "2", Names: []string{"container2"}, Image: "alpine", Status: "dead", Labels: map[string]string{}},
-		{ID: "3", Names: []string{"container3"}, Image: "fake", Status: "exited", Labels: map[string]string{}},
+		{ID: "1", Names: []string{"container1"}, Image: "nginx", State: "running", Status: "Up 5 minutes", Labels: map[string]string{"env": "prod"}},
+		{ID: "2", Names: []string{"container2"}, Image: "alpine", State: "dead", Labels: map[string]string{}},
+		{ID: "3", Names: []string{"container3"}, Image: "fake", State: "exited", Labels: map[string]string{}},
 	}
 	mockClient := &MockClient{Containers: mockContainers}
 

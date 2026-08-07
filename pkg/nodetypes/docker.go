@@ -63,11 +63,20 @@ func (d *DockerNode) Setup() error {
 	return nil
 }
 
+// Teardown stops and removes the container. A container that no longer
+// exists (partial setup, previous cleanup, teardown-only run) counts as
+// already removed.
 func (d *DockerNode) Teardown() error {
 	if err := d.wrapper.StopContainer(d.name); err != nil {
+		if docker.IsNotFound(err) {
+			return nil
+		}
 		return err
 	}
-	return d.wrapper.RemoveContainer(d.name)
+	if err := d.wrapper.RemoveContainer(d.name); err != nil && !docker.IsNotFound(err) {
+		return err
+	}
+	return nil
 }
 
 func (d *DockerNode) Execute(command string, options ...execution.ExecutionOption) (result *execution.ExecutionResult, err error) {
