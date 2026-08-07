@@ -6,8 +6,8 @@ import (
 	"gopkg.in/yaml.v3"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -189,16 +189,17 @@ func LoadConfiguration(cfgPath string) (config *Configuration, err error) {
 		return nil, err
 	}
 
-	dir := path.Dir(absPath)
+	dir := filepath.Dir(absPath)
 
 	return ParseConfiguration(data, dir, absPath)
 }
 
 func ParseConfiguration(data []byte, location string, filePath ...string) (config *Configuration, err error) {
-	data, err = processLoadFromDirectives(data, location)
+	processed, usedLoadFrom, err := processLoadFromDirectives(data, location)
 	if err != nil {
 		return nil, err
 	}
+	data = processed
 
 	config = &Configuration{}
 	err = yaml.Unmarshal(data, config)
@@ -206,9 +207,16 @@ func ParseConfiguration(data []byte, location string, filePath ...string) (confi
 		return nil, err
 	}
 
-	// Extract line numbers before expansion (indices match 1:1 with YAML sequences)
-	if len(filePath) > 0 && filePath[0] != "" {
+	// Extract line numbers before expansion (indices match 1:1 with YAML
+	// sequences). Skipped when load_from inlined other files: the processed
+	// buffer's line numbers no longer correspond to the file on disk, and a
+	// snippet pointing at the wrong line is worse than none.
+	if len(filePath) > 0 && filePath[0] != "" && !usedLoadFrom {
 		extractLocations(data, filePath[0], config)
+	}
+
+	if err := validateConfiguration(config); err != nil {
+		return nil, err
 	}
 
 	// Expand multi-node configurations
@@ -223,8 +231,8 @@ func ParseConfiguration(data []byte, location string, filePath ...string) (confi
 	// Ensure that the Dockerfile paths that are relative to the execution point
 	if config.Docker != nil {
 		for _, image := range config.Docker.Images {
-			if !strings.HasPrefix(image.Dockerfile, "/") {
-				image.Dockerfile = path.Join(location, image.Dockerfile)
+			if !filepath.IsAbs(image.Dockerfile) {
+				image.Dockerfile = filepath.Join(location, image.Dockerfile)
 			}
 		}
 	}
@@ -232,20 +240,72 @@ func ParseConfiguration(data []byte, location string, filePath ...string) (confi
 	return config, nil
 }
 
-func processLoadFromDirectives(data []byte, location string) ([]byte, error) {
+// validateConfiguration rejects configurations that would otherwise fail
+// obscurely (or worse, silently) later: duplicate or unnamed nodes, and
+// steps/tests that reference no node. A step or test with a missing or
+// empty `node:` used to be silently dropped during expansion — a suite
+// could pass with fewer tests than written, which is the same
+// false-positive class as skips rendering as passes.
+func validateConfiguration(cfg *Configuration) error {
+	seen := make(map[string]bool, len(cfg.Nodes))
+	for _, node := range cfg.Nodes {
+		if node.Name == "" {
+			return &ConfigError{Message: "node has no name", Location: node.Loc}
+		}
+		if seen[node.Name] {
+			return &ConfigError{
+				Message:  fmt.Sprintf("duplicate node name %q", node.Name),
+				Location: node.Loc,
+			}
+		}
+		seen[node.Name] = true
+	}
+
+	for _, step := range cfg.Setup {
+		if len(step.Node) == 0 {
+			return &ConfigError{
+				Message:  fmt.Sprintf("setup step %q references no node", step.Name),
+				Location: step.Loc,
+			}
+		}
+	}
+	for _, step := range cfg.Teardown {
+		if len(step.Node) == 0 {
+			return &ConfigError{
+				Message:  fmt.Sprintf("teardown step %q references no node", step.Name),
+				Location: step.Loc,
+			}
+		}
+	}
+	for _, test := range cfg.Tests {
+		if len(test.Node) == 0 {
+			return &ConfigError{
+				Message:  fmt.Sprintf("test %q references no node", test.Name),
+				Location: test.Loc,
+			}
+		}
+	}
+	return nil
+}
+
+func processLoadFromDirectives(data []byte, location string) (processed []byte, usedLoadFrom bool, err error) {
 	lines := strings.Split(string(data), "\n")
 	var outputLines []string
 
-	for _, line := range lines {
+	for lineNum, line := range lines {
 		if strings.Contains(line, "!!load_from(") {
 			startIdx := strings.Index(line, "!!load_from(") + len("!!load_from(")
 			endIdx := strings.Index(line[startIdx:], ")")
+			if endIdx < 0 {
+				return nil, false, fmt.Errorf("malformed !!load_from directive on line %d: missing closing parenthesis", lineNum+1)
+			}
 			dir := line[startIdx : startIdx+endIdx]
 
-			loadedData, err := loadFromDirectory(path.Join(location, dir))
+			loadedData, err := loadFromDirectory(filepath.Join(location, dir))
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
+			usedLoadFrom = true
 			indentedLoadedData := indent(loadedData, "  ") // Indent the loaded data
 			outputLines = append(outputLines, fmt.Sprintf("%s\n%s", line[:startIdx-len("!!load_from(")], indentedLoadedData))
 		} else {
@@ -253,7 +313,7 @@ func processLoadFromDirectives(data []byte, location string) ([]byte, error) {
 		}
 	}
 
-	return []byte(strings.Join(outputLines, "\n")), nil
+	return []byte(strings.Join(outputLines, "\n")), usedLoadFrom, nil
 }
 
 func loadFromDirectory(dir string) ([]byte, error) {
@@ -324,15 +384,17 @@ func expandTestConfigs(configs []*TestConfig) []*TestConfig {
 			// Single node - keep as is
 			expanded = append(expanded, cfg)
 		} else {
-			// Multiple nodes - create a copy for each node
+			// Multiple nodes - create a copy for each node. Setup/Teardown
+			// slices are cloned: fact-template rendering rewrites their
+			// entries in place per node, so sharing the backing array would
+			// leak one node's rendered values into its siblings.
 			for _, nodeName := range cfg.Node {
-				// Create a copy of the config
 				newCfg := &TestConfig{
 					Order:      cfg.Order,
 					Name:       cfg.Name,
 					Node:       NodeReference{nodeName},
-					Setup:      cfg.Setup,
-					Teardown:   cfg.Teardown,
+					Setup:      slices.Clone(cfg.Setup),
+					Teardown:   slices.Clone(cfg.Teardown),
 					Type:       cfg.Type,
 					Options:    cfg.Options,
 					SkipIf:     cfg.SkipIf,

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -179,13 +180,14 @@ setup:
         time: 1
 `
 
-	config, err := ParseConfiguration([]byte(yamlData), ".")
-	if err != nil {
-		t.Fatalf("ParseConfiguration() error = %v", err)
+	// A step with no node used to be silently dropped during expansion — a
+	// suite could run with fewer steps/tests than written. It is a config
+	// error now.
+	_, err := ParseConfiguration([]byte(yamlData), ".")
+	if err == nil {
+		t.Fatal("ParseConfiguration() should reject a step with an empty node array")
 	}
-
-	// Empty array should result in no steps after expansion
-	if len(config.Setup) != 0 {
-		t.Errorf("Setup should have 0 steps after expansion of empty array, got %d", len(config.Setup))
+	if !strings.Contains(err.Error(), "references no node") {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
