@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bgrewell/dart/internal/results"
 	"github.com/stretchr/testify/assert"
@@ -77,7 +78,7 @@ func TestPrintError(t *testing.T) {
 
 func TestPrintResultsCounts(t *testing.T) {
 	sf, buf := captureFormatter()
-	sf.PrintResults(3, 1, 2, 4)
+	sf.PrintResults(3, 1, 2, 4, 1500*time.Millisecond)
 	out := buf.String()
 	assert.Contains(t, out, "Pass: 00003")
 	assert.Contains(t, out, "Fail: 00001")
@@ -87,7 +88,7 @@ func TestPrintResultsCounts(t *testing.T) {
 
 func TestPrintResultsOmitsZeroSkipAndRan(t *testing.T) {
 	sf, buf := captureFormatter()
-	sf.PrintResults(1, 0, 0, 0)
+	sf.PrintResults(1, 0, 0, 0, 0)
 	out := buf.String()
 	assert.NotContains(t, out, "Skip:")
 	assert.NotContains(t, out, "Ran:")
@@ -104,7 +105,7 @@ func TestNoAnsiEscapesInCapturedOutput(t *testing.T) {
 	completer := sf.StartTest("1", "escape check", "node-a")
 	completer.Complete([]bool{true})
 	sf.PrintPass("check", "value")
-	sf.PrintResults(1, 0, 0, 0)
+	sf.PrintResults(1, 0, 0, 0, 0)
 
 	require.NotEmpty(t, buf.String())
 	assert.NotContains(t, buf.String(), "\033[38;5;", "raw 256-color escapes must not reach non-terminal output")

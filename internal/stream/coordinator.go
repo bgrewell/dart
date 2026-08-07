@@ -2,6 +2,7 @@ package stream
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"sync"
 
@@ -13,6 +14,31 @@ import (
 type OutputCoordinator struct {
 	mu      sync.Mutex
 	spinner *yacspin.Spinner
+	out     io.Writer
+	errOut  io.Writer
+}
+
+// SetWriters redirects debug output (default os.Stdout/os.Stderr) — wired
+// by --log so streamed command output reaches the transcript too.
+func (c *OutputCoordinator) SetWriters(out, errOut io.Writer) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.out = out
+	c.errOut = errOut
+}
+
+func (c *OutputCoordinator) stdout() io.Writer {
+	if c.out != nil {
+		return c.out
+	}
+	return os.Stdout
+}
+
+func (c *OutputCoordinator) stderr() io.Writer {
+	if c.errOut != nil {
+		return c.errOut
+	}
+	return os.Stderr
 }
 
 var (
@@ -54,13 +80,13 @@ func (c *OutputCoordinator) WriteDebugLine(line string) {
 		c.spinner.Pause()
 
 		// Write the debug line
-		fmt.Fprintln(os.Stdout, line)
+		fmt.Fprintln(c.stdout(), line)
 
 		// Resume spinner (redraws the spinner line)
 		c.spinner.Unpause()
 	} else {
 		// No active spinner, just print
-		fmt.Fprintln(os.Stdout, line)
+		fmt.Fprintln(c.stdout(), line)
 	}
 }
 
@@ -74,12 +100,12 @@ func (c *OutputCoordinator) WriteDebugLineStderr(line string) {
 		c.spinner.Pause()
 
 		// Write the debug line
-		fmt.Fprintln(os.Stderr, line)
+		fmt.Fprintln(c.stderr(), line)
 
 		// Resume spinner (redraws the spinner line)
 		c.spinner.Unpause()
 	} else {
 		// No active spinner, just print
-		fmt.Fprintln(os.Stderr, line)
+		fmt.Fprintln(c.stderr(), line)
 	}
 }

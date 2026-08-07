@@ -3,15 +3,18 @@ package internal
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/bgrewell/dart/internal/config"
 	"github.com/bgrewell/dart/internal/eval"
 	"github.com/bgrewell/dart/internal/execution"
 	"github.com/bgrewell/dart/internal/facts"
 	"github.com/bgrewell/dart/internal/formatters"
+	"github.com/bgrewell/dart/internal/report"
 	"github.com/bgrewell/dart/pkg/ifaces"
 	"github.com/bgrewell/dart/pkg/steptypes"
 	"github.com/bgrewell/dart/pkg/testtypes"
@@ -70,6 +73,8 @@ type TestController struct {
 	Teardown        []ifaces.Step
 	Platforms       []ifaces.PlatformManager
 	formatter       formatters.Formatter
+	reports         []report.Spec
+	reportIteration int
 	verbose         bool
 	debug           bool
 	stopOnFail      bool
@@ -78,6 +83,12 @@ type TestController struct {
 	teardownOnly    bool
 	until           string
 	untilBehavior   string
+}
+
+// SetReports configures machine-readable result outputs written after the
+// suite completes.
+func (tc *TestController) SetReports(specs []report.Spec) {
+	tc.reports = specs
 }
 
 // orderedNodeNames returns node names in config-file order so setup and
@@ -450,7 +461,20 @@ func (tc *TestController) Run() error {
 	// test names are not unique (multi-node expansion reuses the name per
 	// node), so a name-keyed map would collapse them in the summary.
 	var testResults []map[string]*eval.EvaluateResult
+	var records []report.TestRecord
+	suiteStart := time.Now()
 	skippedTests := 0
+
+	// Guarantee a report on EVERY exit from here on — teardown failures,
+	// --until exits, aborts. A CI run must never end reportless with
+	// collected results; a missing artifact reads as "no results" rather
+	// than what actually happened.
+	reportWritten := false
+	defer func() {
+		if !reportWritten {
+			tc.writeAbortReports(records, suiteStart)
+		}
+	}()
 	tc.formatter.PrintHeader("Running tests")
 	untilReachedInTests := false
 	for idx, test := range tc.Tests {
@@ -464,11 +488,19 @@ func (tc *TestController) Run() error {
 		if skipErr != nil {
 			f.Error()
 			tc.formatter.PrintFail(test.Name(), skipErr.Error())
+			records = append(records, report.TestRecord{
+				Name: test.Name(), Node: test.NodeName(),
+				Status: report.StatusError, Failures: []string{skipErr.Error()},
+			})
 			return skipErr
 		}
 		if skip {
 			f.Skip()
 			skippedTests++
+			records = append(records, report.TestRecord{
+				Name: test.Name(), Node: test.NodeName(),
+				Status: report.StatusSkip, Reason: skipReason,
+			})
 			if tc.verbose {
 				tc.formatter.PrintSkip(test.Name(), skipReason)
 			}
@@ -479,7 +511,11 @@ func (tc *TestController) Run() error {
 			continue
 		}
 
+		testStart := time.Now()
 		results, runErr := test.Run(f)
+		record := report.TestRecord{
+			Name: test.Name(), Node: test.NodeName(), Duration: time.Since(testStart),
+		}
 
 		// Results may be present alongside an error (teardown failure after
 		// the test ran); record and report them before acting on the error
@@ -500,15 +536,26 @@ func (tc *TestController) Run() error {
 				result := results[name]
 				if result.Err != nil {
 					tc.formatter.PrintFail(name, fmt.Sprintf("evaluation error: %v", result.Err))
+					record.Failures = append(record.Failures, fmt.Sprintf("%s: evaluation error: %v", name, result.Err))
 				} else if result.Passed && tc.verbose {
 					tc.formatter.PrintPass(name, result.Details)
 				} else if !result.Passed {
 					tc.formatter.PrintFail(name, result.Details)
+					record.Failures = append(record.Failures, fmt.Sprintf("%s: %s", name, formatDetails(result.Details)))
 				}
 				if !result.Passed {
 					testFailed = true
 				}
 			}
+			switch {
+			case len(results) == 0:
+				record.Status = report.StatusRan
+			case testFailed:
+				record.Status = report.StatusFail
+			default:
+				record.Status = report.StatusPass
+			}
+			records = append(records, record)
 			if testFailed {
 				if tc.stopOnFail {
 					return fmt.Errorf("test %s failed", test.Name())
@@ -524,6 +571,12 @@ func (tc *TestController) Run() error {
 		if runErr != nil {
 			// TODO: This is an error not a fail, there should be a distinction since they are handled differently
 			tc.formatter.PrintFail(test.Name(), runErr.Error())
+			if results == nil {
+				// The test never produced results; record the error itself
+				record.Status = report.StatusError
+				record.Failures = append(record.Failures, runErr.Error())
+				records = append(records, record)
+			}
 			if tc.pauseOnFail {
 				fmt.Println("Press enter to continue")
 				var input string
@@ -606,13 +659,79 @@ func (tc *TestController) Run() error {
 			failed++
 		}
 	}
-	tc.formatter.PrintResults(passed, failed, skippedTests, ran)
+	suiteElapsed := time.Since(suiteStart)
+	tc.formatter.PrintResults(passed, failed, skippedTests, ran, suiteElapsed)
 	cleanupComplete = true
+
+	if err := tc.writeReports(records, suiteElapsed); err != nil {
+		return err
+	}
+	reportWritten = true
 
 	if failed > 0 {
 		return fmt.Errorf("%d tests failed", failed)
 	}
 	return nil
+}
+
+// writeAbortReports best-effort writes reports when the run aborts early:
+// a CI job that stops on error still needs a result file — a missing file
+// reads as "no results" rather than "failed". Totals derive from the
+// records collected so far; write errors are reported but do not mask the
+// abort cause.
+func (tc *TestController) writeAbortReports(records []report.TestRecord, suiteStart time.Time) {
+	if len(tc.reports) == 0 {
+		return
+	}
+	r := report.FromRecords(tc.Suite, records, time.Since(suiteStart))
+	for _, spec := range tc.reports {
+		if err := report.Write(tc.iterationSpec(spec), r); err != nil {
+			fmt.Printf("Warning: writing %s report to %s: %s\n", spec.Format, spec.Path, err)
+		}
+	}
+}
+
+// writeReports renders configured machine-readable outputs. Totals derive
+// from the records themselves so the file can never disagree with its own
+// test list.
+func (tc *TestController) writeReports(records []report.TestRecord, elapsed time.Duration) error {
+	if len(tc.reports) == 0 {
+		return nil
+	}
+	r := report.FromRecords(tc.Suite, records, elapsed)
+	for _, spec := range tc.reports {
+		if err := report.Write(tc.iterationSpec(spec), r); err != nil {
+			return fmt.Errorf("writing %s report to %s: %w", spec.Format, spec.Path, err)
+		}
+	}
+	return nil
+}
+
+// SetReportIteration marks which -i iteration is running (1-based) so each
+// iteration writes its own report file instead of overwriting the last —
+// a passing final iteration must not mask an earlier failure. Zero means
+// single-run (paths unchanged).
+func (tc *TestController) SetReportIteration(iteration int) {
+	tc.reportIteration = iteration
+}
+
+// iterationSpec suffixes the report path with the iteration number
+// (results.xml -> results-2.xml) when iterations are in play.
+func (tc *TestController) iterationSpec(spec report.Spec) report.Spec {
+	if tc.reportIteration <= 0 {
+		return spec
+	}
+	ext := filepath.Ext(spec.Path)
+	spec.Path = fmt.Sprintf("%s-%d%s", strings.TrimSuffix(spec.Path, ext), tc.reportIteration, ext)
+	return spec
+}
+
+// formatDetails renders evaluation details for report bodies.
+func formatDetails(details interface{}) string {
+	if details == nil {
+		return "failed"
+	}
+	return fmt.Sprint(details)
 }
 
 // computeTaskColumnWidth calculates the maximum width needed for the task column

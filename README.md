@@ -652,6 +652,24 @@ Options:
     -teardown --teardown-only   false        Only run the teardown steps
 ```
 
+### CI Integration
+
+```bash
+dart -c suite.yaml -r junit:results.xml,json:results.json   # test panels + tooling
+dart -c suite.yaml -l run.log                               # clean transcript (no colors/spinners)
+dart -c suite.yaml --check                                  # validate config + print plan, run nothing
+```
+
+JUnit output feeds GitHub/GitLab/Jenkins test panels (skips and failure
+details included); JSON carries the same data plus durations for custom
+tooling. `--check` validates node types, report specs, and the full option set of
+every step and test against mock nodes — a pre-commit or CI lint that
+touches no infrastructure (node connectivity is not exercised). The results summary shows total suite time. With `-i N`, each iteration
+writes its own report (`results-1.xml`, `results-2.xml`, ...) so a passing
+final iteration can't mask an earlier failure; reports are also written
+when a run aborts early (teardown failure, stop-on-error), and `--log`
+captures debug-streamed command output too.
+
 ### Exit Codes
 
 - **0**: All tests passed successfully.
