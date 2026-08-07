@@ -12,6 +12,19 @@ import (
 type BaseNode struct {
 }
 
+// knownNodeTypes mirrors the factory switch in CreateNodesWithWrappers;
+// IsKnownNodeType lets validate-only paths (--check) reject unknown types
+// without constructing real nodes.
+var knownNodeTypes = map[string]bool{
+	"local": true, "docker": true, "docker-compose": true,
+	"ssh": true, "lxd": true, "lxd-vm": true,
+}
+
+// IsKnownNodeType reports whether the factory can construct this type.
+func IsKnownNodeType(nodeType string) bool {
+	return knownNodeTypes[nodeType]
+}
+
 // CreateNodes creates nodes using only the Docker wrapper (backward compatible)
 func CreateNodes(configs []*config.NodeConfig, wrapper *docker.Wrapper) (map[string]ifaces.Node, error) {
 	return CreateNodesWithWrappers(configs, wrapper, nil)

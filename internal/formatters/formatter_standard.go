@@ -104,7 +104,7 @@ func (sf *StandardFormatter) PrintEmpty() {
 	fmt.Fprintln(sf.out)
 }
 
-func (sf *StandardFormatter) PrintResults(pass, fail, skipped, ran int) {
+func (sf *StandardFormatter) PrintResults(pass, fail, skipped, ran int, elapsed time.Duration) {
 
 	p := 5 - (len(strconv.Itoa(pass)))
 	f := 5 - (len(strconv.Itoa(fail)))
@@ -140,6 +140,9 @@ func (sf *StandardFormatter) PrintResults(pass, fail, skipped, ran int) {
 	if ran > 0 {
 		fmt.Fprintf(sf.out, "%sRan:  %s%s\n", indent, numberPaddingColor.Sprint(ranPad), valueRanColor.Sprint(ranVal))
 
+	}
+	if elapsed > 0 {
+		fmt.Fprintf(sf.out, "%sTime: %s\n", indent, valueColor.Sprint(elapsed.Round(10*time.Millisecond).String()))
 	}
 }
 

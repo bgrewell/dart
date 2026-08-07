@@ -1,2 +1,3 @@
-- [DART project overview](project_dart_overview.md) — repo layout, retry/timeout/reboot code locations, controller.go abort-on-error behavior.
+- [DART project overview](project_dart_overview.md) — repo layout, retry/timeout/reboot code locations, controller.go abort-on-error behavior, report/log/check architecture.
 - [feature/timeouts-retry review findings](feedback_dart_retry_timeout_review.md) — verified bugs (reboot+retry, abandoned-goroutine races, wait_for budget shrinkage) and the write-a-throwaway-repro-test verification method that found them.
+- [feature/ci-integration review findings](feedback_dart_ci_integration_review.md) — verified bugs (report writing skipped on teardown/until abort paths, --iterations overwrites report, --check false negatives for node type/--report/--until, ANSI regex misses CSI `?` sequences, --log misses --debug streamed output).

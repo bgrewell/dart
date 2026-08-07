@@ -1,5 +1,7 @@
 package formatters
 
+import "time"
+
 type Formatter interface {
 	SetTaskColumnWidth(width int)
 	SetTestColumnWidth(width int)
@@ -7,7 +9,7 @@ type Formatter interface {
 	StartTask(task, nodeName, status string) TaskCompleter
 	StartTest(id, name, nodeName string) TestCompleter
 	PrintHeader(header string)
-	PrintResults(pass, fail, skipped, ran int)
+	PrintResults(pass, fail, skipped, ran int, elapsed time.Duration)
 	PrintPass(name string, details interface{})
 	PrintFail(name string, details interface{})
 	PrintSkip(name string, reason string)

@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/bgrewell/dart/internal"
 	"github.com/bgrewell/dart/internal/config"
@@ -12,8 +15,12 @@ import (
 	"github.com/bgrewell/dart/internal/formatters"
 	"github.com/bgrewell/dart/internal/logger"
 	"github.com/bgrewell/dart/internal/lxd"
+	"github.com/bgrewell/dart/internal/report"
+	"github.com/bgrewell/dart/internal/stream"
 	"github.com/bgrewell/dart/pkg/ifaces"
 	"github.com/bgrewell/dart/pkg/nodetypes"
+	"github.com/bgrewell/dart/pkg/steptypes"
+	"github.com/bgrewell/dart/pkg/testtypes"
 	"github.com/bgrewell/usage"
 	"github.com/fatih/color"
 	"go.uber.org/dig"
@@ -39,6 +46,9 @@ type CmdlineFlags struct {
 	Iterations    *int
 	Until         *string
 	UntilBehavior *string
+	Report        *string
+	Check         *bool
+	LogFile       *string
 }
 
 type ControllerParams struct {
@@ -68,7 +78,28 @@ func Configuration(cmdFlags *CmdlineFlags) (*config.Configuration, error) {
 	return cfg, nil
 }
 
-func Formatter() (formatters.Formatter, error) {
+// logCleanup flushes and closes the --log file; os.Exit skips defers, so
+// exit paths call it explicitly.
+var logCleanup = func() {}
+
+func Formatter(cmdFlags *CmdlineFlags) (formatters.Formatter, error) {
+	if *cmdFlags.LogFile != "" {
+		file, err := os.Create(*cmdFlags.LogFile)
+		if err != nil {
+			return nil, fmt.Errorf("cannot open log file: %w", err)
+		}
+		logWriter := formatters.NewCleanLogWriter(file)
+		logCleanup = func() {
+			logWriter.Flush()
+			file.Close()
+		}
+		// Debug-streamed command output must reach the transcript too
+		stream.GetCoordinator().SetWriters(
+			io.MultiWriter(os.Stdout, logWriter),
+			io.MultiWriter(os.Stderr, logWriter))
+		return formatters.NewStandardFormatterWithWriter(
+			io.MultiWriter(os.Stdout, logWriter)), nil
+	}
 	return formatters.NewStandardFormatter(), nil
 }
 
@@ -117,7 +148,7 @@ func Controller(params ControllerParams) (ctrl *internal.TestController, err err
 
 	// Create the test controller with raw configs; steps/tests are created
 	// inside Run() after nodes are set up and facts are gathered.
-	return internal.NewTestController(
+	controller := internal.NewTestController(
 		params.Cfg.Suite,
 		platforms,
 		params.Nodes,
@@ -133,7 +164,30 @@ func Controller(params ControllerParams) (ctrl *internal.TestController, err err
 		*params.Flags.TeardownOnly,
 		*params.Flags.Until,
 		*params.Flags.UntilBehavior,
-		params.Formatter), nil
+		params.Formatter)
+
+	specs, err := parseReportSpecs(*params.Flags.Report)
+	if err != nil {
+		return nil, err
+	}
+	controller.SetReports(specs)
+	return controller, nil
+}
+
+// parseReportSpecs parses the comma-separated --report value.
+func parseReportSpecs(value string) ([]report.Spec, error) {
+	if value == "" {
+		return nil, nil
+	}
+	var specs []report.Spec
+	for _, item := range strings.Split(value, ",") {
+		spec, err := report.ParseSpec(strings.TrimSpace(item))
+		if err != nil {
+			return nil, err
+		}
+		specs = append(specs, spec)
+	}
+	return specs, nil
 }
 
 var errorStyle = color.New(color.FgRed, color.Bold)
@@ -147,6 +201,11 @@ func RegisterHooks(params RunParams) {
 			}
 			var lastErr error
 			for i := 0; i < iterations; i++ {
+				if iterations > 1 {
+					// Per-iteration report files: a passing final iteration
+					// must not overwrite an earlier failure
+					params.Ctrl.SetReportIteration(i + 1)
+				}
 				err := params.Ctrl.Run()
 				if err != nil {
 					lastErr = err
@@ -191,6 +250,9 @@ func main() {
 	cfgFlags.Iterations = u.AddIntegerOption("i", "iterations", 1, "Number of iterations to run", "", nil)
 	cfgFlags.Until = u.AddStringOption("u", "until", "", "Run up to and including this step or test, then stop", "", nil)
 	cfgFlags.UntilBehavior = u.AddStringOption("ub", "until-behavior", "exit", "Behavior when --until target is reached: exit (default) or pause", "", nil)
+	cfgFlags.Report = u.AddStringOption("r", "report", "", "Write machine-readable results: format:path (junit:results.xml, json:results.json; comma-separate for both)", "", nil)
+	cfgFlags.Check = u.AddBooleanOption("ck", "check", false, "Validate the configuration and print the plan without running anything", "", nil)
+	cfgFlags.LogFile = u.AddStringOption("l", "log", "", "Write a clean (color-free) transcript of the run to this file", "", nil)
 
 	if !u.Parse() {
 		u.PrintError(fmt.Errorf("Failed to parse command line arguments"))
@@ -206,6 +268,10 @@ func main() {
 	if *cfgFlags.UntilBehavior != "exit" && *cfgFlags.UntilBehavior != "pause" {
 		fmt.Fprintf(os.Stderr, "\n%s until-behavior must be \"exit\" or \"pause\" (got %q)\n\n", errorStyle.Sprint("Error:"), *cfgFlags.UntilBehavior)
 		os.Exit(1)
+	}
+
+	if *cfgFlags.Check {
+		os.Exit(runCheck(*cfgFlags.ConfigFile, *cfgFlags.Report))
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -239,6 +305,7 @@ func main() {
 			os.Exit(1)
 		}
 		fmt.Fprintf(os.Stderr, "\n%s %s\n\n", errorStyle.Sprint("Error:"), rootErr)
+		logCleanup()
 		os.Exit(1)
 	}
 
@@ -248,7 +315,86 @@ func main() {
 		log.Errorf("Failed to stop: %v", err)
 	}
 
+	logCleanup()
+
 	// Propagate the exit code so that if any tests failed we return a non-zero exit code
 	// This is useful for CI/CD pipelines or other tools that expect a non-zero exit code on failure
 	os.Exit(shutdownSig.ExitCode)
+}
+
+// checkNode is a mock node satisfying every capability interface, so
+// --check can validate any test type without touching infrastructure.
+type checkNode struct {
+	*nodetypes.MockNode
+}
+
+func (c *checkNode) Reboot(force bool, readyCommand string, timeout time.Duration) error {
+	return nil
+}
+
+// runCheck validates the configuration — full option parsing for every
+// node, step, and test — and prints the plan without running anything.
+func runCheck(cfgPath, reportValue string) int {
+	// Validate flags the run would reject, so --check green means the real
+	// invocation starts
+	if _, err := parseReportSpecs(reportValue); err != nil {
+		fmt.Fprintf(os.Stderr, "\n%s %s\n\n", errorStyle.Sprint("Error:"), err)
+		return 1
+	}
+
+	cfg, err := config.LoadConfiguration(cfgPath)
+	if err != nil {
+		var cfgErr *config.ConfigError
+		if errors.As(err, &cfgErr) {
+			fmt.Fprint(os.Stderr, config.RenderConfigError(cfgErr))
+		} else {
+			fmt.Fprintf(os.Stderr, "\n%s %s\n\n", errorStyle.Sprint("Error:"), err)
+		}
+		return 1
+	}
+
+	mocks := make(map[string]ifaces.Node, len(cfg.Nodes))
+	for _, node := range cfg.Nodes {
+		// Unknown node types must fail --check exactly as they fail a run
+		if !nodetypes.IsKnownNodeType(node.Type) {
+			fmt.Fprint(os.Stderr, config.RenderConfigError(&config.ConfigError{
+				Message:  fmt.Sprintf("unknown node type %q", node.Type),
+				Location: node.TypeLoc,
+			}))
+			return 1
+		}
+		mocks[node.Name] = &checkNode{MockNode: nodetypes.NewMockNode()}
+	}
+
+	fail := func(stage string, err error) int {
+		var cfgErr *config.ConfigError
+		if errors.As(err, &cfgErr) {
+			fmt.Fprint(os.Stderr, config.RenderConfigError(cfgErr))
+		} else {
+			fmt.Fprintf(os.Stderr, "\n%s %s: %s\n\n", errorStyle.Sprint("Error:"), stage, err)
+		}
+		return 1
+	}
+
+	setup, err := steptypes.CreateSteps(cfg.Setup, mocks)
+	if err != nil {
+		return fail("setup", err)
+	}
+	teardown, err := steptypes.CreateSteps(cfg.Teardown, mocks)
+	if err != nil {
+		return fail("teardown", err)
+	}
+	tests, err := testtypes.CreateTests(cfg.Tests, mocks)
+	if err != nil {
+		return fail("tests", err)
+	}
+
+	fmt.Printf("Suite: %s\n", cfg.Suite)
+	fmt.Printf("Nodes: %d\n", len(cfg.Nodes))
+	for _, node := range cfg.Nodes {
+		fmt.Printf("  - %s (%s)\n", node.Name, node.Type)
+	}
+	fmt.Printf("Setup steps: %d, Tests: %d, Teardown steps: %d\n", len(setup), len(tests), len(teardown))
+	fmt.Println("Configuration valid.")
+	return 0
 }

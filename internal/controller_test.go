@@ -1,13 +1,18 @@
 package internal
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/bgrewell/dart/internal/config"
 	"github.com/bgrewell/dart/internal/formatters"
+	"github.com/bgrewell/dart/internal/report"
 	"github.com/bgrewell/dart/pkg/ifaces"
 	"github.com/bgrewell/dart/pkg/nodetypes"
 	"github.com/stretchr/testify/assert"
@@ -54,7 +59,7 @@ func (r *recordingFormatter) PrintHeader(header string) {
 	r.headers = append(r.headers, header)
 }
 
-func (r *recordingFormatter) PrintResults(pass, fail, skipped, ran int) {
+func (r *recordingFormatter) PrintResults(pass, fail, skipped, ran int, elapsed time.Duration) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.results.pass, r.results.fail, r.results.skipped, r.results.ran = pass, fail, skipped, ran
@@ -364,4 +369,74 @@ func TestControllerRunErrorAborts(t *testing.T) {
 	require.Error(t, err)
 	assert.Len(t, f.formatter.tests, 1, "run aborts on test error")
 	assert.Contains(t, f.events, "teardown:n1", "error path still cleans up nodes")
+}
+
+// A teardown failure after passing tests must still produce a report:
+// CI needs the artifact showing what actually ran.
+func TestControllerReportWrittenOnTeardownFailure(t *testing.T) {
+	f := newFixture("n1")
+	reportPath := filepath.Join(t.TempDir(), "results.json")
+
+	teardownSteps := []*config.StepConfig{{
+		Name: "failing cleanup",
+		Node: config.NodeReference{"n1"},
+		Step: config.StepDetails{
+			Type:    "execute",
+			Options: map[string]interface{}{"command": "unmapped-cleanup-cmd"},
+		},
+	}}
+	tc := NewTestController("suite", nil, f.nodes, f.configs, nil, teardownSteps,
+		[]*config.TestConfig{execTest("passes", "n1", "echo ok", map[string]interface{}{"exit_code": 0})},
+		false, false, false, false, false, false, "", "", f.formatter)
+	tc.SetReports([]report.Spec{{Format: "json", Path: reportPath}})
+
+	err := tc.Run()
+	require.Error(t, err, "teardown failure aborts the run")
+
+	data, readErr := os.ReadFile(reportPath)
+	require.NoError(t, readErr, "report must exist despite the teardown failure")
+	var r report.Report
+	require.NoError(t, json.Unmarshal(data, &r))
+	assert.Equal(t, 1, r.Passed, "the passing test's result survives")
+}
+
+// stop-on-error still gets its report via the deferred writer.
+func TestControllerReportWrittenOnStopOnFail(t *testing.T) {
+	f := newFixture("n1")
+	reportPath := filepath.Join(t.TempDir(), "results.json")
+
+	tc := f.controller([]*config.TestConfig{
+		execTest("fails", "n1", "false", map[string]interface{}{"exit_code": 0}),
+	}, func(tc *TestController) {
+		tc.stopOnFail = true
+	})
+	tc.SetReports([]report.Spec{{Format: "json", Path: reportPath}})
+
+	require.Error(t, tc.Run())
+	data, err := os.ReadFile(reportPath)
+	require.NoError(t, err)
+	var r report.Report
+	require.NoError(t, json.Unmarshal(data, &r))
+	assert.Equal(t, 1, r.Failed)
+}
+
+// Iteration-suffixed report paths keep every iteration's outcome.
+func TestControllerIterationReportPaths(t *testing.T) {
+	f := newFixture("n1")
+	dir := t.TempDir()
+	base := filepath.Join(dir, "results.json")
+
+	tc := f.controller([]*config.TestConfig{
+		execTest("t", "n1", "echo ok", map[string]interface{}{"exit_code": 0}),
+	})
+	tc.SetReports([]report.Spec{{Format: "json", Path: base}})
+
+	tc.SetReportIteration(1)
+	require.NoError(t, tc.Run())
+	tc.SetReportIteration(2)
+	require.NoError(t, tc.Run())
+
+	assert.FileExists(t, filepath.Join(dir, "results-1.json"))
+	assert.FileExists(t, filepath.Join(dir, "results-2.json"))
+	assert.NoFileExists(t, base)
 }
