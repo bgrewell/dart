@@ -83,23 +83,46 @@ func (w *Wrapper) Setup() error {
 	return nil
 }
 
-// Teardown removes the networks and images created by the wrapper
+// Teardown removes the networks and images created by the wrapper.
+// Resources that no longer exist — a partial setup, a previous run's
+// cleanup, or a teardown-only run in a fresh process — count as already
+// removed rather than failing the remaining teardown.
 func (w *Wrapper) Teardown() error {
 	// Remove the networks
 	for _, net := range w.cfg.Networks {
-		if err := w.RemoveNetwork(net.Name); err != nil {
+		if err := w.RemoveNetwork(net.Name); err != nil && !IsNotFound(err) {
 			return err
 		}
 	}
 
 	// Remove the images
 	for _, image := range w.cfg.Images {
-		if err := w.RemoveImage(image.Name); err != nil {
+		if err := w.RemoveImage(image.Name); err != nil && !IsNotFound(err) {
 			return err
 		}
 	}
 
 	return nil
+}
+
+// containerRef resolves a container name to the ID recorded at creation,
+// falling back to the name itself: the map only holds containers created by
+// this process, and a --teardown-only run starts with it empty. The Docker
+// API accepts names wherever it accepts IDs.
+func (w *Wrapper) containerRef(name string) string {
+	if id, ok := w.containerNamesToId[name]; ok && id != "" {
+		return id
+	}
+	return name
+}
+
+// networkRef resolves a network name to its recorded ID, falling back to
+// the name. See containerRef.
+func (w *Wrapper) networkRef(name string) string {
+	if id, ok := w.networkNamesToId[name]; ok && id != "" {
+		return id
+	}
+	return name
 }
 
 func (w *Wrapper) BuildImage(name string, tag string, dockerFilePath string) error {
@@ -153,7 +176,7 @@ func (w *Wrapper) CreateContainer(name, hostname, image string, options ...Conta
 
 func (w *Wrapper) StartContainer(name string) error {
 	ctx := context.Background()
-	if err := StartContainer(ctx, w.cli, w.containerNamesToId[name]); err != nil {
+	if err := StartContainer(ctx, w.cli, w.containerRef(name)); err != nil {
 		return fmt.Errorf("could not start container: %v", err)
 	}
 	return nil
@@ -161,7 +184,7 @@ func (w *Wrapper) StartContainer(name string) error {
 
 func (w *Wrapper) WaitForContainerReady(name string) error {
 	ctx := context.Background()
-	if err := WaitForContainerReady(ctx, w.cli, w.containerNamesToId[name], nil); err != nil {
+	if err := WaitForContainerReady(ctx, w.cli, w.containerRef(name), nil); err != nil {
 		return fmt.Errorf("container %s not ready: %v", name, err)
 	}
 	return nil
@@ -169,7 +192,7 @@ func (w *Wrapper) WaitForContainerReady(name string) error {
 
 func (w *Wrapper) StopContainer(name string) error {
 	ctx := context.Background()
-	if err := StopContainer(ctx, w.cli, w.containerNamesToId[name]); err != nil {
+	if err := StopContainer(ctx, w.cli, w.containerRef(name)); err != nil {
 		return fmt.Errorf("could not stop container: %v", err)
 	}
 	return nil
@@ -177,7 +200,7 @@ func (w *Wrapper) StopContainer(name string) error {
 
 func (w *Wrapper) RemoveContainer(name string) error {
 	ctx := context.Background()
-	if err := RemoveContainer(ctx, w.cli, w.containerNamesToId[name]); err != nil {
+	if err := RemoveContainer(ctx, w.cli, w.containerRef(name)); err != nil {
 		return fmt.Errorf("could not remove container: %v", err)
 	}
 	return nil
@@ -212,7 +235,7 @@ func (w *Wrapper) CreateNetwork(name string, subnet string, gateway string) erro
 
 func (w *Wrapper) RemoveNetwork(name string) error {
 	ctx := context.Background()
-	if err := RemoveNetwork(ctx, w.cli, w.networkNamesToId[name]); err != nil {
+	if err := RemoveNetwork(ctx, w.cli, w.networkRef(name)); err != nil {
 		return fmt.Errorf("could not remove network: %v", err)
 	}
 	return nil
@@ -235,11 +258,9 @@ func (w *Wrapper) RemoveNetworkIsolationRules() error {
 }
 
 func (w *Wrapper) ExecuteInContainer(containerName, command string) (exitCode int, stdout, stderr io.Reader, err error) {
-	id := w.containerNamesToId[containerName]
-	return RunCommandInContainer(w.cli, id, command)
+	return RunCommandInContainer(w.cli, w.containerRef(containerName), command)
 }
 
 func (w *Wrapper) ExecuteInContainerStreaming(containerName, command string, debugEnabled bool) (exitCode int, stdout, stderr io.Reader, err error) {
-	id := w.containerNamesToId[containerName]
-	return RunCommandInContainerStreaming(w.cli, id, containerName, command, debugEnabled)
+	return RunCommandInContainerStreaming(w.cli, w.containerRef(containerName), containerName, command, debugEnabled)
 }
