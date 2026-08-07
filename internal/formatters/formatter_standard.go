@@ -2,6 +2,8 @@ package formatters
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -13,11 +15,6 @@ import (
 )
 
 var _ Formatter = &StandardFormatter{}
-
-// ANSI 256-color escape code helper
-func colorize256(colorCode int, text string) string {
-	return fmt.Sprintf("\033[38;5;%dm%s\033[0m", colorCode, text)
-}
 
 var (
 	headerColor        = color.New(color.FgHiBlue).Add(color.Bold)
@@ -39,7 +36,16 @@ func NewStandardFormatter() *StandardFormatter {
 	return &StandardFormatter{
 		indent:       2,
 		detailIndent: 7,
+		out:          os.Stdout,
 	}
+}
+
+// NewStandardFormatterWithWriter directs all formatter output (including
+// spinner output) to w — for tests and captured runs.
+func NewStandardFormatterWithWriter(w io.Writer) *StandardFormatter {
+	sf := NewStandardFormatter()
+	sf.out = w
+	return sf
 }
 
 type StandardFormatter struct {
@@ -48,46 +54,54 @@ type StandardFormatter struct {
 	nodeNameWidth   int
 	indent          int
 	detailIndent    int
+	out             io.Writer
 }
 
 func (sf *StandardFormatter) PrintError(err error) {
-	fmt.Printf("%s%s\n", strings.Repeat(" ", sf.detailIndent-sf.indent), valueFailColor.Sprint(err.Error()))
+	fmt.Fprintf(sf.out, "%s%s\n", strings.Repeat(" ", sf.detailIndent-sf.indent), valueFailColor.Sprint(err.Error()))
 }
 
 func (sf *StandardFormatter) PrintPass(name string, details interface{}) {
-	fmt.Printf("%s+%s:\n", strings.Repeat(" ", sf.detailIndent-sf.indent), headerPassColor.Sprint(name))
-	switch details.(type) {
-	case string:
-		lines := strings.Split(details.(string), "\n")
-		for _, line := range lines {
-			fmt.Printf("%s%s\n", strings.Repeat(" ", sf.detailIndent), valueColor.Sprint(line))
-		}
-	case int:
-		fmt.Printf("%s%s\n", strings.Repeat(" ", sf.detailIndent), valueColor.Sprint(strconv.Itoa(details.(int))))
-	}
+	fmt.Fprintf(sf.out, "%s+%s:\n", strings.Repeat(" ", sf.detailIndent-sf.indent), headerPassColor.Sprint(name))
+	sf.printDetails(details)
 }
 
 func (sf *StandardFormatter) PrintFail(name string, details interface{}) {
-	fmt.Printf("%s-%s:\n", strings.Repeat(" ", sf.detailIndent-sf.indent), headerFailColor.Sprint(name))
-	switch details.(type) {
-	case string:
-		lines := strings.Split(details.(string), "\n")
-		for _, line := range lines {
-			fmt.Printf("%s%s\n", strings.Repeat(" ", sf.detailIndent), valueColor.Sprint(line))
-		}
-	case int:
-		fmt.Printf("%s%s\n", strings.Repeat(" ", sf.detailIndent), valueColor.Sprint(strconv.Itoa(details.(int))))
+	fmt.Fprintf(sf.out, "%s-%s:\n", strings.Repeat(" ", sf.detailIndent-sf.indent), headerFailColor.Sprint(name))
+	switch d := details.(type) {
 	case *results.ResultStringMatchFail:
-		fmt.Printf("%s%s: %s\n", strings.Repeat(" ", sf.detailIndent), labelFailColor.Sprint("Expected"), details.(*results.ResultStringMatchFail).Expected)
-		fmt.Printf("%s%s: %s\n", strings.Repeat(" ", sf.detailIndent), labelFailColor.Sprint("Actual"), details.(*results.ResultStringMatchFail).Actual)
+		fmt.Fprintf(sf.out, "%s%s: %s\n", strings.Repeat(" ", sf.detailIndent), labelFailColor.Sprint("Expected"), d.Expected)
+		fmt.Fprintf(sf.out, "%s%s: %s\n", strings.Repeat(" ", sf.detailIndent), labelFailColor.Sprint("Actual"), d.Actual)
 	case *results.ResultIntMatchFail:
-		fmt.Printf("%s%s: %d\n", strings.Repeat(" ", sf.detailIndent), labelFailColor.Sprint("Expected"), details.(*results.ResultIntMatchFail).Expected)
-		fmt.Printf("%s%s: %d\n", strings.Repeat(" ", sf.detailIndent), labelFailColor.Sprint("Actual"), details.(*results.ResultIntMatchFail).Actual)
+		fmt.Fprintf(sf.out, "%s%s: %d\n", strings.Repeat(" ", sf.detailIndent), labelFailColor.Sprint("Expected"), d.Expected)
+		fmt.Fprintf(sf.out, "%s%s: %d\n", strings.Repeat(" ", sf.detailIndent), labelFailColor.Sprint("Actual"), d.Actual)
+	default:
+		sf.printDetails(details)
+	}
+}
+
+// printDetails renders a detail value of any type; unknown types render via
+// fmt.Sprint rather than printing nothing.
+func (sf *StandardFormatter) printDetails(details interface{}) {
+	if details == nil {
+		return
+	}
+	var text string
+	switch d := details.(type) {
+	case string:
+		text = d
+	case int:
+		text = strconv.Itoa(d)
+	default:
+		text = fmt.Sprint(d)
+	}
+	for _, line := range strings.Split(text, "\n") {
+		fmt.Fprintf(sf.out, "%s%s\n", strings.Repeat(" ", sf.detailIndent), valueColor.Sprint(line))
 	}
 }
 
 func (sf *StandardFormatter) PrintEmpty() {
-	fmt.Println()
+	fmt.Fprintln(sf.out)
 }
 
 func (sf *StandardFormatter) PrintResults(pass, fail, skipped, ran int) {
@@ -118,26 +132,25 @@ func (sf *StandardFormatter) PrintResults(pass, fail, skipped, ran int) {
 
 	indent := strings.Repeat(" ", sf.indent)
 	sf.PrintHeader("Results")
-	fmt.Printf("%sPass: %s%s\n", indent, numberPaddingColor.Sprint(passPad), valuePassColor.Sprint(passVal))
-	fmt.Printf("%sFail: %s%s\n", indent, numberPaddingColor.Sprint(failPad), valueFailColor.Sprint(failVal))
+	fmt.Fprintf(sf.out, "%sPass: %s%s\n", indent, numberPaddingColor.Sprint(passPad), valuePassColor.Sprint(passVal))
+	fmt.Fprintf(sf.out, "%sFail: %s%s\n", indent, numberPaddingColor.Sprint(failPad), valueFailColor.Sprint(failVal))
 	if skipped > 0 {
-		fmt.Printf("%sSkip: %s%s\n", indent, numberPaddingColor.Sprint(skipPad), valueRanColor.Sprint(skipVal))
+		fmt.Fprintf(sf.out, "%sSkip: %s%s\n", indent, numberPaddingColor.Sprint(skipPad), valueRanColor.Sprint(skipVal))
 	}
 	if ran > 0 {
-		fmt.Printf("%sRan:  %s%s\n", indent, numberPaddingColor.Sprint(ranPad), valueRanColor.Sprint(ranVal))
+		fmt.Fprintf(sf.out, "%sRan:  %s%s\n", indent, numberPaddingColor.Sprint(ranPad), valueRanColor.Sprint(ranVal))
 
 	}
 }
 
 // PrintSkip reports a skipped test with the reason its condition triggered.
 func (sf *StandardFormatter) PrintSkip(name string, reason string) {
-	fmt.Printf("%s~%s:\n", strings.Repeat(" ", sf.detailIndent-sf.indent), valueRanColor.Sprint(name))
-	fmt.Printf("%s%s\n", strings.Repeat(" ", sf.detailIndent), valueColor.Sprint(reason))
+	fmt.Fprintf(sf.out, "%s~%s:\n", strings.Repeat(" ", sf.detailIndent-sf.indent), valueRanColor.Sprint(name))
+	fmt.Fprintf(sf.out, "%s%s\n", strings.Repeat(" ", sf.detailIndent), valueColor.Sprint(reason))
 }
 
 func (sf *StandardFormatter) PrintHeader(header string) {
-	headerPrefixColor.Printf("[+] ")
-	headerColor.Printf("%s\n", header)
+	fmt.Fprintf(sf.out, "%s%s\n", headerPrefixColor.Sprint("[+] "), headerColor.Sprint(header))
 }
 
 func (sf *StandardFormatter) SetTaskColumnWidth(width int) {
@@ -156,6 +169,7 @@ func (sf *StandardFormatter) StartTask(task, nodeName, status string) TaskComple
 
 	spinner, _ := yacspin.New(yacspin.Config{
 		Frequency:         100 * time.Millisecond,
+		Writer:            sf.out,
 		ShowCursor:        false,
 		SpinnerAtEnd:      true,
 		CharSet:           yacspin.CharSets[14],
@@ -190,6 +204,7 @@ func (sf *StandardFormatter) StartTask(task, nodeName, status string) TaskComple
 func (sf *StandardFormatter) StartTest(id, name, nodeName string) TestCompleter {
 	spinner, _ := yacspin.New(yacspin.Config{
 		Frequency:         100 * time.Millisecond,
+		Writer:            sf.out,
 		ShowCursor:        false,
 		SpinnerAtEnd:      true,
 		CharSet:           yacspin.CharSets[14],
@@ -208,7 +223,11 @@ func (sf *StandardFormatter) StartTest(id, name, nodeName string) TestCompleter 
 		TestName: padRightWithPeriods(name, sf.testColumnWidth-len(name)+3),
 	}
 
-	pad := strings.Repeat("0", 5-len(id))
+	padWidth := 5 - len(id)
+	if padWidth < 0 {
+		padWidth = 0
+	}
+	pad := strings.Repeat("0", padWidth)
 	indent := strings.Repeat(" ", sf.indent)
 	nodeBox := sf.formatNodeBox(nodeName)
 	message := fmt.Sprintf("%s%s%s: %s%s", indent, numberPaddingColor.Sprint(pad), numberColor.Sprint(c.TestId), nodeBox, c.TestName)
@@ -314,9 +333,12 @@ func padRightWithPeriods(s string, n int) string {
 
 func (sf *StandardFormatter) formatNodeBox(nodeName string) string {
 	if sf.nodeNameWidth > 0 {
-		// Pad the node name to the fixed width, accounting for the brackets and internal spaces
+		// Pad the node name to the fixed width, accounting for the brackets
+		// and internal spaces. nodeNameColor (rather than a raw ANSI escape)
+		// keeps escapes out of non-terminal output: the color package
+		// disables itself when stdout is not a TTY.
 		paddedNodeName := fmt.Sprintf("%-*s", sf.nodeNameWidth, nodeName)
-		return nodeBracketColor.Sprint("[ ") + colorize256(46, paddedNodeName) + nodeBracketColor.Sprint(" ]") + " "
+		return nodeBracketColor.Sprint("[ ") + nodeNameColor.Sprint(paddedNodeName) + nodeBracketColor.Sprint(" ]") + " "
 	}
 	return ""
 }
