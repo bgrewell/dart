@@ -1,0 +1,2 @@
+- [DART project overview](project_dart_overview.md) — repo layout, retry/timeout/reboot code locations, controller.go abort-on-error behavior.
+- [feature/timeouts-retry review findings](feedback_dart_retry_timeout_review.md) — verified bugs (reboot+retry, abandoned-goroutine races, wait_for budget shrinkage) and the write-a-throwaway-repro-test verification method that found them.

@@ -34,6 +34,11 @@ func newRebootTest(base BaseTest, opts map[string]interface{}) (ifaces.Test, err
 	if _, ok := base.node.(ifaces.Rebooter); !ok {
 		return nil, fmt.Errorf("node %q does not support reboot (supported: lxd, ssh) in test %q", base.nodeName, base.name)
 	}
+	// Retrying a reboot test would power-cycle the target on every failed
+	// evaluation — reject rather than surprise
+	if base.retryTimeout > 0 {
+		return nil, fmt.Errorf("retry is not supported on reboot tests (test %q): a failing evaluation would reboot the target repeatedly", base.name)
+	}
 
 	mode, present, err := optString(base.name, opts, "mode")
 	if err != nil {
