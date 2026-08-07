@@ -273,20 +273,38 @@ func ParseConfigurationWithVars(data []byte, location string, cliVars map[string
 
 var varRefRe = regexp.MustCompile(`\{\{\s*(var|env)\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}`)
 
+// yamlRiskyChars are characters that change YAML structure when a value is
+// substituted into an unquoted position (comments, mappings, flow
+// collections, anchors, tags, block scalars).
+const yamlRiskyChars = "#:\"'{}[]&*!|>%@`,"
+
 // substituteVars replaces {{var.name}} and {{env.NAME}} references in the
 // raw YAML before unmarshaling, so substituted values land with native
 // YAML types (a numeric var in a numeric position stays a number). The
 // substitution is inline and single-line, so source locations survive.
-// Values may not contain newlines (they would corrupt YAML structure and
-// shift line numbers). Var values may themselves reference {{env.NAME}};
-// deeper nesting is not supported. Capture references and fact templates
-// use different prefixes and pass through untouched.
+//
+// Rules enforced here, each guarding a real failure mode:
+//   - values may not contain newlines (they would rewrite YAML structure)
+//   - var values may reference env and other vars; cycles are errors
+//   - references inside comments are ignored entirely (no failures on
+//     documentation, no values spliced into comments)
+//   - a value containing YAML-significant characters may only substitute
+//     into a quoted position — unquoted, a '#' would silently truncate the
+//     line and a ':' would corrupt the mapping
 func substituteVars(data []byte, cliVars map[string]string) ([]byte, error) {
-	// The vars block is read pre-substitution; CLI overrides win
+	// The vars block is read pre-substitution; CLI overrides win. A failed
+	// head parse must not be swallowed: distinguish a broken document
+	// (report the real YAML error) from a malformed vars block.
 	var head struct {
 		Vars map[string]string `yaml:"vars"`
 	}
-	_ = yaml.Unmarshal(data, &head) // full parse later reports YAML errors
+	if err := yaml.Unmarshal(data, &head); err != nil {
+		var generic map[string]interface{}
+		if gerr := yaml.Unmarshal(data, &generic); gerr != nil {
+			return nil, gerr
+		}
+		return nil, fmt.Errorf("vars block is invalid: %w (quote values that contain {{...}} references)", err)
+	}
 	vars := make(map[string]string, len(head.Vars)+len(cliVars))
 	for k, v := range head.Vars {
 		vars[k] = v
@@ -296,59 +314,153 @@ func substituteVars(data []byte, cliVars map[string]string) ([]byte, error) {
 	}
 
 	var missing []string
-	resolveEnv := func(text string) string {
+	resolveValue := func(text string) string {
 		return varRefRe.ReplaceAllStringFunc(text, func(ref string) string {
 			m := varRefRe.FindStringSubmatch(ref)
-			if m[1] != "env" {
+			kind, name := m[1], m[2]
+			if kind == "env" {
+				if value, ok := os.LookupEnv(name); ok {
+					return value
+				}
+				missing = append(missing, "env."+name)
 				return ref
 			}
-			if value, ok := os.LookupEnv(m[2]); ok {
+			if value, ok := vars[name]; ok {
 				return value
 			}
-			missing = append(missing, "env."+m[2])
+			missing = append(missing, "var."+name)
 			return ref
 		})
 	}
 
-	// Resolve env references inside var values first, so a var defined as
-	// "{{env.HOME}}/data" substitutes fully resolved
-	for name, value := range vars {
-		vars[name] = resolveEnv(value)
+	// Resolve references inside var values first (env and var alike), so a
+	// var defined in terms of another substitutes fully resolved. Bounded
+	// iteration turns definition cycles into errors instead of hangs.
+	for round := 0; ; round++ {
+		if round >= 10 {
+			return nil, fmt.Errorf("var definitions reference each other too deeply or circularly")
+		}
+		changed := false
+		for name, value := range vars {
+			if resolved := resolveValue(value); resolved != value {
+				vars[name] = resolved
+				changed = true
+			}
+		}
+		if !changed {
+			break
+		}
+	}
+	if len(missing) > 0 {
+		slices.Sort(missing)
+		missing = slices.Compact(missing)
+		return nil, fmt.Errorf("unresolved references in var values: %s", strings.Join(missing, ", "))
 	}
 	for name, value := range vars {
 		if strings.ContainsAny(value, "\n\r") {
 			return nil, fmt.Errorf("var %q contains a newline; variable values must be single-line", name)
 		}
-		_ = value
+		// A cycle converges to a self-referential fixed point rather than
+		// iterating forever — any ref still present after resolution is one
+		if varRefRe.MatchString(value) {
+			return nil, fmt.Errorf("var %q could not be fully resolved (circular or self-referential definition)", name)
+		}
 	}
 
-	result := varRefRe.ReplaceAllFunc(data, func(ref []byte) []byte {
-		m := varRefRe.FindSubmatch(ref)
-		kind, name := string(m[1]), string(m[2])
+	// Manual replacement loop: each match needs its line context to skip
+	// comments and to reject risky values in unquoted positions.
+	matches := varRefRe.FindAllSubmatchIndex(data, -1)
+	if len(matches) == 0 && len(missing) == 0 {
+		return data, nil
+	}
+	var out bytes.Buffer
+	last := 0
+	for _, m := range matches {
+		start, end := m[0], m[1]
+		kind := string(data[m[2]:m[3]])
+		name := string(data[m[4]:m[5]])
+
+		lineStart := bytes.LastIndexByte(data[:start], '\n') + 1
+		linePrefix := string(data[lineStart:start])
+
+		// References inside comments are inert: no resolution, no failure
+		if inYAMLComment(linePrefix) {
+			continue
+		}
+
+		var value string
+		var ok bool
 		if kind == "var" {
-			if value, ok := vars[name]; ok {
-				return []byte(value)
-			}
-			missing = append(missing, "var."+name)
-			return ref
+			value, ok = vars[name]
+		} else {
+			value, ok = os.LookupEnv(name)
 		}
-		if value, ok := os.LookupEnv(name); ok {
-			if strings.ContainsAny(value, "\n\r") {
-				missing = append(missing, fmt.Sprintf("env.%s (value contains a newline)", name))
-				return ref
-			}
-			return []byte(value)
+		if !ok {
+			missing = append(missing, kind+"."+name)
+			continue
 		}
-		missing = append(missing, "env."+name)
-		return ref
-	})
+		if strings.ContainsAny(value, "\n\r") {
+			return nil, fmt.Errorf("%s.%s value contains a newline; variable values must be single-line", kind, name)
+		}
+		if strings.ContainsAny(value, yamlRiskyChars) && !inQuotedContext(linePrefix) {
+			return nil, fmt.Errorf("%s.%s value %q contains YAML-significant characters; quote the reference (e.g. \"{{%s.%s}}\")", kind, name, value, kind, name)
+		}
+
+		out.Write(data[last:start])
+		out.WriteString(value)
+		last = end
+	}
+	out.Write(data[last:])
 
 	if len(missing) > 0 {
 		slices.Sort(missing)
 		missing = slices.Compact(missing)
 		return nil, fmt.Errorf("unresolved references: %s (define in the vars block, pass --vars, or set the environment variable)", strings.Join(missing, ", "))
 	}
-	return result, nil
+	return out.Bytes(), nil
+}
+
+// inYAMLComment reports whether the position after linePrefix sits in a
+// comment: an unquoted '#' appears earlier on the line.
+func inYAMLComment(linePrefix string) bool {
+	inSingle, inDouble := false, false
+	for _, r := range linePrefix {
+		switch r {
+		case '\'':
+			if !inDouble {
+				inSingle = !inSingle
+			}
+		case '"':
+			if !inSingle {
+				inDouble = !inDouble
+			}
+		case '#':
+			if !inSingle && !inDouble {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// inQuotedContext reports whether the position after linePrefix is inside
+// a single- or double-quoted scalar (an odd number of unescaped quotes
+// precede it on the line).
+func inQuotedContext(linePrefix string) bool {
+	inSingle, inDouble := false, false
+	for _, r := range linePrefix {
+		switch r {
+		case '\'':
+			if !inDouble {
+				inSingle = !inSingle
+			}
+		case '"':
+			if !inSingle {
+				inDouble = !inDouble
+			}
+		}
+	}
+	return inSingle || inDouble
 }
 
 // validateConfiguration rejects configurations that would otherwise fail

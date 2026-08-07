@@ -85,3 +85,30 @@ See [[feedback-dart-retry-timeout-review]] for the specific bugs found in the
 
 Full detail and verification method in
 [[feedback-dart-ci-integration-review]].
+
+## Network testing (`feature/network-testing`, on top of ci-integration + vars-tags)
+
+- `pkg/testtypes/port_check.go` — `from: host|node`; `from: node` builds a
+  shell probe string (`nc -z` / `bash -c 'exec 3<>/dev/tcp/...'` fallback)
+  returned as a `commandTest`, run via `node.Execute` (which every node
+  type shells out as a single `sh -c "<whole string>"` argument — see
+  `pkg/nodetypes/local.go:26`).
+- `pkg/testtypes/tls_cert.go` — dials with `InsecureSkipVerify`, emits
+  `certFacts` (JSON on stdout: subject/issuer/dns_names/not_before/
+  not_after/days_remaining/chain_valid — no IP SAN field), evaluators
+  reconstruct a bare `x509.Certificate` from those facts for hostname
+  checks.
+- `internal/facts/facts.go` `GatherFacts` — built-in `NetworkInspector`
+  facts first (best-effort, errors swallowed), then user `facts:` commands
+  (hard error), user facts win on name collision. `RenderTemplate`'s
+  `fact()` func splices fact-command stdout into option strings completely
+  unfiltered (no shell-quoting) — this is the main way untrusted-ish data
+  reaches string options like `port_check`'s `host`.
+- `internal/config/config.go` `substituteVars`/`yamlRiskyChars` — new in
+  this batch, guards `{{var.x}}`/`{{env.X}}` YAML-text substitution against
+  corrupting YAML structure when unquoted, but only for var/env
+  substitution; it doesn't apply to (and can't protect against) the facts
+  templating path above.
+- See [[feedback-dart-network-testing-review]] for verified bugs
+  (shell injection, busybox `nc -z` gap, tls_cert IP-SAN false negative)
+  and what was checked and ruled out.

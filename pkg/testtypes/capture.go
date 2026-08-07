@@ -44,7 +44,7 @@ func (s *captureStore) interpolate(text string) (string, error) {
 		return value
 	})
 	if len(missing) > 0 {
-		return "", fmt.Errorf("no captured value named %s (captured by an earlier test via `capture:`)", strings.Join(missing, ", "))
+		return "", fmt.Errorf("no captured value named %s — the capturing test must run earlier in the suite and must not be skipped or excluded by --only/--skip tag filters", strings.Join(missing, ", "))
 	}
 	return replaced, nil
 }

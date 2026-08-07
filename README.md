@@ -892,6 +892,7 @@ the same `evaluate` keys where noted.
 | `http_request` | HTTP request from the DART host | `url`, `method`, `headers`, `timeout`; `evaluate.status_code` plus standard keys against the body |
 | `port_check` | TCP connect from the DART host | `host`, `port`, `timeout`; `evaluate.status: open\|closed` |
 | `reboot` | Restart the node mid-suite and wait until it accepts commands | `mode: graceful\|force`, `ready_command`, `timeout` (lxd and ssh nodes) |
+| `tls_cert` | Inspect a TLS endpoint's certificate | `host`, `port` (443), `server_name`, `timeout`; `evaluate.min_days_remaining`, `dns_names`, `issuer_contains`, `subject_contains`, `chain_valid` |
 
 Any test also accepts test-level `retry:` (see Timeouts and Retries) and
 `skip_if`/`skip_unless` (see Conditional Skips).
@@ -947,9 +948,74 @@ tests:
 ```
 
 Note: `ping`, `exists`, `file_content`, `file_hash`, and `service_status`
-run commands on the target node (POSIX tools assumed); `http_request` and
-`port_check` act from the host running DART and verify reachability from
-the controller's viewpoint.
+run commands on the target node (POSIX tools assumed); `http_request`,
+`tls_cert`, and `port_check` act from the host running DART unless told
+otherwise.
+
+### Network Reachability and Certificates
+
+`port_check` answers firewall and ACL questions when pointed at a node:
+`from: node` runs the probe on the node's own shell, so a suite can assert
+both that permitted paths work and that blocked ones stay blocked. The
+probe prefers bash's `/dev/tcp` and falls back to `nc` only after proving
+the node's build accepts `-z` (busybox builds often don't); a node with no
+usable method reports `unsupported` and fails the check rather than
+guessing. Host values are passed as arguments, never interpolated into a
+shell string.
+
+```yaml
+tests:
+  - name: app server reaches the database
+    node: app
+    type: port_check
+    options:
+      host: db.internal
+      port: 5432
+      from: node          # probe from the node, not the DART host
+
+  - name: app server cannot reach admin SSH
+    node: app
+    type: port_check
+    options:
+      host: admin.internal
+      port: 22
+      from: node
+      evaluate:
+        status: closed    # negative policy assertions
+
+  - name: gateway certificate is not about to expire
+    node: local
+    type: tls_cert
+    options:
+      host: vault.internal
+      evaluate:
+        min_days_remaining: 30
+        chain_valid: true
+        dns_names: [vault.internal]
+```
+
+Certificate facts are emitted as JSON, so `json_path`, `contains`, and the
+other standard evaluators work against them too. Inspection deliberately
+skips chain verification during the handshake, so expired or misissued
+certificates are still inspectable — assert `chain_valid` explicitly.
+
+### Built-in Network Facts
+
+LXD and Docker nodes report their own addresses without a fact command:
+`{{ fact "web" "ipv4" }}`, `{{ fact "web" "ipv6" }}`, and per-interface or
+per-network variants (`ipv4.eth0`, `ipv4.test-net`). User-defined facts of
+the same name win, and discovery failures never fail a run.
+
+```yaml
+tests:
+  - name: load balancer reaches the backend
+    node: lb
+    type: execute
+    options:
+      command: curl -sf http://{{ fact "backend" "ipv4" }}:8080/health
+      evaluate:
+        exit_code: 0
+```
 
 ### Value Extraction and Numeric Assertions
 

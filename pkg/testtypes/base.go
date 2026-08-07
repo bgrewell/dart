@@ -24,6 +24,7 @@ const (
 	TypePortCheck     = "port_check"
 	TypeServiceStatus = "service_status"
 	TypeReboot        = "reboot"
+	TypeTLSCert       = "tls_cert"
 )
 
 // testFactory constructs a test from its base and raw options. Invalid
@@ -42,6 +43,7 @@ var testFactories = map[string]testFactory{
 	TypePortCheck:     newPortCheckTest,
 	TypeServiceStatus: newServiceStatusTest,
 	TypeReboot:        newRebootTest,
+	TypeTLSCert:       newTLSCertTest,
 }
 
 type BaseTest struct {

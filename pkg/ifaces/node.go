@@ -72,6 +72,15 @@ func BoundedCommand(node Node, command string, timeout time.Duration) func() (*e
 	}
 }
 
+// NetworkInspector is implemented by node types that can report their own
+// addresses without running a command, so suites can reference a node's IP
+// ({{ fact "web" "ipv4" }}) without hand-rolling `hostname -I` facts.
+type NetworkInspector interface {
+	// NetworkFacts returns address facts such as "ipv4", "ipv6", and
+	// per-interface entries ("ipv4.eth0").
+	NetworkFacts() (map[string]string, error)
+}
+
 // Rebooter is implemented by node types that can restart their target and
 // block until it accepts commands again. With force set the restart models
 // a power cut (no clean shutdown). readyCommand overrides the node's

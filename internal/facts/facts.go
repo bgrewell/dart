@@ -21,6 +21,35 @@ type FactStore map[string]map[string]string
 func GatherFacts(nodes map[string]ifaces.Node, configs []*config.NodeConfig) (FactStore, error) {
 	store := make(FactStore)
 
+	// Built-in facts come first so a suite can reference a node's address
+	// without defining a fact command; user facts of the same name win.
+	for _, cfg := range configs {
+		node, ok := nodes[cfg.Name]
+		if !ok {
+			continue
+		}
+		inspector, ok := node.(ifaces.NetworkInspector)
+		if !ok {
+			continue
+		}
+		builtins, err := inspector.NetworkFacts()
+		if err != nil {
+			// Address discovery is best-effort: a node that cannot report
+			// its addresses must not fail the run
+			continue
+		}
+		if len(builtins) > 0 {
+			nodeFacts := store[cfg.Name]
+			if nodeFacts == nil {
+				nodeFacts = make(map[string]string, len(builtins))
+				store[cfg.Name] = nodeFacts
+			}
+			for name, value := range builtins {
+				nodeFacts[name] = value
+			}
+		}
+	}
+
 	for _, cfg := range configs {
 		if len(cfg.Facts) == 0 {
 			continue
@@ -38,7 +67,10 @@ func GatherFacts(nodes map[string]ifaces.Node, configs []*config.NodeConfig) (Fa
 		}
 		sort.Strings(names)
 
-		nodeFacts := make(map[string]string, len(cfg.Facts))
+		nodeFacts := store[cfg.Name]
+		if nodeFacts == nil {
+			nodeFacts = make(map[string]string, len(cfg.Facts))
+		}
 		for _, name := range names {
 			command := cfg.Facts[name]
 			result, err := node.Execute(command)
@@ -213,6 +245,21 @@ func ProcessTestConfigs(configs []*config.TestConfig, store FactStore) ([]*confi
 func HasFacts(configs []*config.NodeConfig) bool {
 	for _, cfg := range configs {
 		if len(cfg.Facts) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// HasAnyFacts reports whether facts should be gathered at all: either a
+// node defines fact commands, or a node type can report built-in network
+// facts.
+func HasAnyFacts(nodes map[string]ifaces.Node, configs []*config.NodeConfig) bool {
+	if HasFacts(configs) {
+		return true
+	}
+	for _, node := range nodes {
+		if _, ok := node.(ifaces.NetworkInspector); ok {
 			return true
 		}
 	}

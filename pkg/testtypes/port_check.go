@@ -2,10 +2,13 @@ package testtypes
 
 import (
 	"fmt"
+	"math"
 	"net"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/bgrewell/dart/internal/helpers"
 
 	"github.com/bgrewell/dart/internal/eval"
 	"github.com/bgrewell/dart/internal/execution"
@@ -25,14 +28,27 @@ type PortCheckTest struct {
 	timeout time.Duration
 }
 
-// newPortCheckTest parses host and port (required) and timeout seconds
-// (default 5). Evaluate: status ("open" or "closed", default "open");
+// newPortCheckTest parses host and port (required), timeout seconds
+// (default 5), and from ("host" or "node", default "host"). from: node
+// probes from the test's node instead of the DART host — the mode that
+// answers firewall/ACL questions ("can node A reach B:5432, is node C
+// blocked?"). Evaluate: status ("open" or "closed", default "open");
 // other keys fall through to the standard evaluators (the observed status
 // is the result's stdout, closed also sets a non-zero exit code).
 func newPortCheckTest(base BaseTest, opts map[string]interface{}) (ifaces.Test, error) {
 	host, err := requiredString(base.name, opts, "host")
 	if err != nil {
 		return nil, err
+	}
+	from, present, err := optString(base.name, opts, "from")
+	if err != nil {
+		return nil, err
+	}
+	if !present || from == "" {
+		from = "host"
+	}
+	if from != "host" && from != "node" {
+		return nil, fmt.Errorf("from must be \"host\" or \"node\" in test %q (got %q)", base.name, from)
 	}
 	port, err := optInt(base.name, opts, "port", 0)
 	if err != nil {
@@ -74,6 +90,17 @@ func newPortCheckTest(base BaseTest, opts map[string]interface{}) (ifaces.Test, 
 	evaluations["status"] = &eval.EvaluateMatch{Expected: status, Trim: true}
 
 	base.evaluations = evaluations
+
+	if from == "node" {
+		return &commandTest{
+			BaseTest: base,
+			command:  nodePortProbe(host, port, timeoutSeconds),
+			// DART bounds the probe itself, so a node without a working
+			// `timeout` binary still cannot hang the suite
+			timeout: time.Duration((timeoutSeconds + 5) * float64(time.Second)),
+		}, nil
+	}
+
 	return &PortCheckTest{
 		BaseTest: base,
 		host:     host,
@@ -106,4 +133,34 @@ func (t *PortCheckTest) probe() (*execution.ExecutionResult, error) {
 		Stdout:   strings.NewReader(status),
 		Stderr:   strings.NewReader(""),
 	}, nil
+}
+
+// nodePortProbe builds the shell probe for `from: node`. Design notes,
+// each guarding a real failure mode found in review:
+//
+//   - The host never reaches an inner shell as text: bash receives it as a
+//     positional argument, so quotes or semicolons in a host (which can
+//     arrive from a fact, var, or capture) become part of the hostname and
+//     fail the connection rather than executing.
+//   - `nc` is only used after proving the local build accepts -z: busybox
+//     builds without FEATURE_NC_EXTRA reject it, which would otherwise make
+//     every port report closed.
+//   - When no usable method exists the probe prints "unsupported" instead
+//     of guessing, so the status check fails loudly rather than silently
+//     reporting a wrong answer.
+func nodePortProbe(host string, port int, timeoutSeconds float64) string {
+	timeoutSecs := int(math.Ceil(timeoutSeconds))
+	if timeoutSecs < 1 {
+		timeoutSecs = 1
+	}
+
+	return fmt.Sprintf(`dart_h=%s; dart_p=%d; dart_t=%d
+if command -v timeout >/dev/null 2>&1; then dart_to="timeout $dart_t"; else dart_to=""; fi
+if command -v bash >/dev/null 2>&1; then
+  if $dart_to bash -c 'exec 3<>/dev/tcp/"$0"/"$1"' "$dart_h" "$dart_p" >/dev/null 2>&1; then echo open; else echo closed; fi
+elif command -v nc >/dev/null 2>&1 && ! nc -z -w "$dart_t" "$dart_h" "$dart_p" 2>&1 | grep -qiE 'invalid option|unrecognized option|bad option|illegal option'; then
+  if nc -z -w "$dart_t" "$dart_h" "$dart_p" >/dev/null 2>&1; then echo open; else echo closed; fi
+else
+  echo unsupported
+fi`, helpers.ShellQuote(host), port, timeoutSecs)
 }
