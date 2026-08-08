@@ -599,11 +599,15 @@ func expandStepConfigs(configs []*StepConfig) []*StepConfig {
 	return expanded
 }
 
+// TypeConsistency names the one test type that compares results ACROSS
+// nodes, so its node list must survive expansion intact.
+const TypeConsistency = "consistency"
+
 // expandTestConfigs expands test configurations with multiple nodes into individual test configs
 func expandTestConfigs(configs []*TestConfig) []*TestConfig {
 	var expanded []*TestConfig
 	for _, cfg := range configs {
-		if len(cfg.Node) == 1 {
+		if cfg.Type == TypeConsistency || len(cfg.Node) == 1 {
 			// Single node - keep as is
 			expanded = append(expanded, cfg)
 		} else {

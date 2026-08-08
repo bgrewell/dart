@@ -1,6 +1,7 @@
 package nodetypes
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/bgrewell/dart/internal/config"
@@ -23,6 +24,61 @@ var knownNodeTypes = map[string]bool{
 // IsKnownNodeType reports whether the factory can construct this type.
 func IsKnownNodeType(nodeType string) bool {
 	return knownNodeTypes[nodeType]
+}
+
+// ValidateNodeOptions checks the option shapes that can be verified
+// without contacting anything, so --check catches them before a run:
+// unreadable known_hosts, missing SSH credentials, malformed bastion or
+// volume specifications.
+func ValidateNodeOptions(cfg *config.NodeConfig) error {
+	switch cfg.Type {
+	case "ssh":
+		var opts SshNodeOpts
+		if err := decodeNodeOptions(cfg.Options, &opts); err != nil {
+			return err
+		}
+		if _, err := sshAuthMethods(opts.KeyFile, opts.Pass); err != nil {
+			return err
+		}
+		if _, err := hostKeyCallbackFor(opts.KnownHosts, opts.InsecureSkipHostKey); err != nil {
+			return err
+		}
+		if opts.Bastion != nil {
+			if opts.Bastion.Host == "" {
+				return fmt.Errorf("bastion host is required")
+			}
+			if opts.Bastion.Bastion != nil {
+				return fmt.Errorf("chained bastions are not supported: remove the nested bastion block")
+			}
+			if _, err := sshAuthMethods(opts.Bastion.KeyFile, opts.Bastion.Pass); err != nil {
+				return fmt.Errorf("bastion: %w", err)
+			}
+		}
+	case "docker", "docker-compose":
+		var opts DockerNodeOpts
+		if err := decodeNodeOptions(cfg.Options, &opts); err != nil {
+			return err
+		}
+		if _, err := resolveVolumes(opts.Volumes); err != nil {
+			return err
+		}
+		if len(opts.Ports) > 0 {
+			if err := docker.ValidatePortSpecs(opts.Ports); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// decodeNodeOptions reuses the same JSON round-trip the factories use, so
+// validation sees exactly what construction would.
+func decodeNodeOptions(options map[string]interface{}, target interface{}) error {
+	data, err := json.Marshal(options)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, target)
 }
 
 // CreateNodes creates nodes using only the Docker wrapper (backward compatible)

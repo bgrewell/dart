@@ -10,6 +10,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
+	"github.com/docker/go-connections/nat"
 	"io"
 	"path/filepath"
 	"sort"
@@ -159,11 +160,22 @@ func (w *Wrapper) CreateContainer(name, hostname, image string, options ...Conta
 	containerCfg := &container.Config{
 		Image:    image,
 		Hostname: hostname,
+		Env:      c.env,
 	}
 	hostCfg := &container.HostConfig{
 		Privileged:  c.priviliged,
 		CapAdd:      c.capabilities,
 		NetworkMode: container.NetworkMode(c.networkMode),
+		Binds:       c.volumes,
+	}
+
+	if len(c.ports) > 0 {
+		exposed, bindings, err := nat.ParsePortSpecs(c.ports)
+		if err != nil {
+			return fmt.Errorf("invalid port specification: %w", err)
+		}
+		containerCfg.ExposedPorts = exposed
+		hostCfg.PortBindings = bindings
 	}
 	networkCfg := &network.NetworkingConfig{}
 

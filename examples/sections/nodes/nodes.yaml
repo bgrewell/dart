@@ -14,6 +14,9 @@ nodes:
       host: 10.114.143.151
       user: ubuntu
       key: /home/ben/.ssh/id_dart
+      # Host keys are verified against ~/.ssh/known_hosts by default.
+      # Point elsewhere with known_hosts: <path>, or opt out for
+      # throwaway lab targets with insecure_skip_host_key: true.
 
   - name: lxd
     type: lxd

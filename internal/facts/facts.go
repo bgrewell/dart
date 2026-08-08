@@ -126,6 +126,12 @@ func RenderTemplate(text string, store FactStore, currentNode string) (string, e
 	funcMap := template.FuncMap{
 		"fact": func(nodeName, factName string) (string, error) {
 			if nodeName == "self" {
+				if currentNode == "" {
+					// A command shared across nodes has no single "self";
+					// resolving it to one node would silently feed that
+					// node's data to all the others
+					return "", fmt.Errorf("fact \"self\" is ambiguous in a test that spans nodes; name the node explicitly")
+				}
 				nodeName = currentNode
 			}
 			nodeFacts, ok := store[nodeName]
@@ -214,7 +220,12 @@ func ProcessStepConfigs(configs []*config.StepConfig, store FactStore) ([]*confi
 // and pre/post test commands (Setup/Teardown string slices).
 func ProcessTestConfigs(configs []*config.TestConfig, store FactStore) ([]*config.TestConfig, error) {
 	for _, cfg := range configs {
-		currentNode := cfg.Node[0]
+		// Tests that span nodes (consistency) keep their full node list, so
+		// there is no single "self" to resolve against
+		currentNode := ""
+		if len(cfg.Node) == 1 {
+			currentNode = cfg.Node[0]
+		}
 
 		processed, err := ProcessConfigOptions(cfg.Options, store, currentNode)
 		if err != nil {

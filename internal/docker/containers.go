@@ -15,6 +15,7 @@ import (
 	"github.com/docker/docker/api/types/strslice"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/docker/go-connections/nat"
 )
 
 // ContainerOptions is a function type that sets options for creating a container.
@@ -26,6 +27,9 @@ type containerOptions struct {
 	capabilities []string
 	networkMode  string
 	priviliged   bool
+	volumes      []string
+	env          []string
+	ports        []string
 }
 
 // WithDetach is a function that sets the detach option for creating a container.
@@ -46,6 +50,36 @@ func WithCapabilities(capabilities []string) ContainerOptions {
 func WithPrivileged() ContainerOptions {
 	return func(o *containerOptions) {
 		o.priviliged = true
+	}
+}
+
+// ValidatePortSpecs reports whether port specifications parse, for
+// validate-only paths that must not contact a daemon.
+func ValidatePortSpecs(ports []string) error {
+	if _, _, err := nat.ParsePortSpecs(ports); err != nil {
+		return fmt.Errorf("invalid port specification: %w", err)
+	}
+	return nil
+}
+
+// WithVolumes sets bind mounts in Docker's host:container[:opts] form.
+func WithVolumes(volumes []string) ContainerOptions {
+	return func(o *containerOptions) {
+		o.volumes = volumes
+	}
+}
+
+// WithEnv sets environment variables in KEY=VALUE form.
+func WithEnv(env []string) ContainerOptions {
+	return func(o *containerOptions) {
+		o.env = env
+	}
+}
+
+// WithPorts publishes ports in host:container[/proto] form.
+func WithPorts(ports []string) ContainerOptions {
+	return func(o *containerOptions) {
+		o.ports = ports
 	}
 }
 
