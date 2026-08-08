@@ -975,6 +975,7 @@ the same `evaluate` keys where noted.
 | `http_request` | HTTP request from the DART host | `url`, `method`, `headers`, `timeout`; `evaluate.status_code` plus standard keys against the body |
 | `port_check` | TCP connect from the DART host | `host`, `port`, `timeout`; `evaluate.status: open\|closed` |
 | `reboot` | Restart the node mid-suite and wait until it accepts commands | `mode: graceful\|force`, `ready_command`, `timeout` (lxd and ssh nodes) |
+| `consistency` | Compare one command's output **across** nodes | `command`, `nodes`; `evaluate.all_equal`, `matching: {pattern, count}` |
 | `tls_cert` | Inspect a TLS endpoint's certificate | `host`, `port` (443), `server_name`, `timeout`; `evaluate.min_days_remaining`, `dns_names`, `issuer_contains`, `subject_contains`, `chain_valid` |
 
 Any test also accepts test-level `retry:` (see Timeouts and Retries) and
@@ -1081,6 +1082,53 @@ Certificate facts are emitted as JSON, so `json_path`, `contains`, and the
 other standard evaluators work against them too. Inspection deliberately
 skips chain verification during the handshake, so expired or misissued
 certificates are still inspectable — assert `chain_valid` explicitly.
+
+### Cluster Consistency
+
+Config drift and quorum questions compare nodes *with each other*, which
+per-node tests cannot express. A `consistency` test runs one command
+everywhere and compares the results; unlike other types its `node:` list
+is not expanded into separate tests.
+
+```yaml
+tests:
+  - name: every node runs the same config
+    node: [web-1, web-2, web-3]
+    type: consistency
+    options:
+      command: sha256sum /etc/app.conf
+      # all_equal: true is the default check
+
+  - name: exactly one leader is elected
+    node: [db-1, db-2, db-3]
+    type: consistency
+    options:
+      command: cluster-role
+      evaluate:
+        matching:
+          pattern: "^leader$"
+          count: 1              # 2 leaders (split brain) or 0 both fail
+
+  - name: nodes keep distinct identities
+    node: [web-1, web-2]
+    type: consistency
+    options:
+      command: hostname
+      evaluate:
+        all_equal: false
+```
+
+Failures name which nodes disagree and what each returned
+(`web-1,web-2 => "v3" | web-3 => "v2"`). A node that cannot run the
+command fails the comparison in **both** directions — an outage never
+satisfies `all_equal: false` — and comparison is by content digest, so
+binary outputs cannot collapse into false agreement. `timeout:` bounds
+each node's command, and the per-node report is emitted as JSON so
+`json_path` and the standard evaluators apply too.
+
+Note: `{{ fact "self" ... }}` is rejected in a consistency command —
+one command runs on many nodes, so "self" has no single meaning; name
+the node explicitly.
 
 ### Built-in Network Facts
 
