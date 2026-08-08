@@ -1,7 +1,9 @@
 package testtypes
 
 import (
+	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -69,6 +71,34 @@ func noteOption(keys ...string) {
 	}
 }
 
+// leadingKeyRe pulls the option name off the front of a message such as
+// "timeout must be positive in test %q" — the convention every option error
+// in this package follows.
+var leadingKeyRe = regexp.MustCompile(`^([a-z_][a-z0-9_]*)\b`)
+
+// locatedOptionError attaches the offending option's position to a factory
+// error, so the snippet marks that option rather than the first line of the
+// test. The name is taken from the message and only used when the test
+// really has an option by that name; anything else keeps the test's own
+// location.
+func locatedOptionError(cfg *config.TestConfig, err error) error {
+	var existing *config.ConfigError
+	if errors.As(err, &existing) {
+		return err
+	}
+
+	message := err.Error()
+	match := leadingKeyRe.FindStringSubmatch(message)
+	if match == nil {
+		return &config.ConfigError{Message: message, Location: cfg.Loc}
+	}
+	loc, ok := cfg.OptionLocs[match[1]]
+	if !ok {
+		return &config.ConfigError{Message: message, Location: cfg.Loc}
+	}
+	return &config.ConfigError{Message: message, Location: loc, Key: match[1]}
+}
+
 // unknownOptionError reports unread keys against the test, listing what the
 // type does accept so the fix is obvious.
 func unknownOptionError(cfg *config.TestConfig, unknown, accepted []string) error {
@@ -87,5 +117,9 @@ func unknownOptionError(cfg *config.TestConfig, unknown, accepted []string) erro
 		message += fmt.Sprintf(" (%s %s test takes no options)", article, cfg.Type)
 	}
 
-	return &config.ConfigError{Message: message, Location: cfg.Loc}
+	location := cfg.Loc
+	if loc, ok := cfg.OptionLocs[unknown[0]]; ok {
+		location = loc
+	}
+	return &config.ConfigError{Message: message, Location: location, Key: unknown[0]}
 }

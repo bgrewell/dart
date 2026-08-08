@@ -3,6 +3,7 @@ package steptypes
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -129,11 +130,37 @@ func CreateSteps(configs []*config.StepConfig, nodes map[string]ifaces.Node) ([]
 }
 
 // optionError builds a ConfigError anchored at the step's location.
-func optionError(c *config.StepConfig, format string, args ...interface{}) error {
-	return &config.ConfigError{
-		Message:  fmt.Sprintf(format, args...),
-		Location: c.Loc,
+// optionLoc returns where an option key is written, falling back to the step
+// itself when the key is absent or locations were not recorded.
+func optionLoc(c *config.StepConfig, key string) config.SourceLocation {
+	if loc, ok := c.OptionLocs[key]; ok {
+		return loc
 	}
+	return c.Loc
+}
+
+// leadingKeyRe pulls the option name off the front of a message such as
+// "timeout must be positive in step %q" — the convention every option error
+// in this package follows.
+var leadingKeyRe = regexp.MustCompile(`^([a-z_][a-z0-9_]*)\b`)
+
+func optionError(c *config.StepConfig, format string, args ...interface{}) error {
+	message := fmt.Sprintf(format, args...)
+
+	// An option error should mark the option, not the first line of the
+	// step. The name is taken from the message and only used when this
+	// step really has an option by that name, so a message that opens with
+	// some other word falls back to the step's own location.
+	location := c.Loc
+	key := ""
+	if match := leadingKeyRe.FindStringSubmatch(message); match != nil {
+		if loc, ok := c.OptionLocs[match[1]]; ok {
+			location = loc
+			key = match[1]
+		}
+	}
+
+	return &config.ConfigError{Message: message, Location: location, Key: key}
 }
 
 // The opt* helpers validate raw option values. A present-but-wrong-typed

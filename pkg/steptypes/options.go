@@ -86,5 +86,9 @@ func unknownOptionError(c *config.StepConfig, unknown, accepted []string) error 
 		message += fmt.Sprintf(" (%s %s step takes no options)", article, c.Step.Type)
 	}
 
-	return &config.ConfigError{Message: message, Location: c.Loc}
+	return &config.ConfigError{
+		Message:  message,
+		Location: optionLoc(c, unknown[0]),
+		Key:      unknown[0],
+	}
 }

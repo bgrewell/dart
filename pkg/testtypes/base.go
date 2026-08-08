@@ -393,7 +393,7 @@ func CreateTests(configs []*config.TestConfig, nodes map[string]ifaces.Node) (te
 		accepted := acceptedKeys()
 		unknown := finish(cfg.Options)
 		if err != nil {
-			return nil, err
+			return nil, locatedOptionError(cfg, err)
 		}
 		if len(unknown) > 0 {
 			return nil, unknownOptionError(cfg, unknown, accepted)
