@@ -3,10 +3,10 @@ package nodetypes
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/bgrewell/dart/internal/config"
 	"github.com/bgrewell/dart/internal/docker"
 	"github.com/bgrewell/dart/internal/execution"
 	"github.com/bgrewell/dart/internal/helpers"
@@ -22,7 +22,16 @@ type DockerNetworkOpts struct {
 }
 
 type DockerNodeOpts struct {
-	Image       string                 `yaml:"image,omitempty" json:"image"`
+	Image string `yaml:"image,omitempty" json:"image"`
+	// ContainerName decouples the Docker object's name from the node name.
+	// Defaults to the node name, which is what makes a suite's containers
+	// findable by the name the YAML uses.
+	ContainerName string `yaml:"container_name,omitempty" json:"container_name"`
+	// Command and Entrypoint override the image's CMD and ENTRYPOINT. An
+	// image whose default command exits immediately cannot host a node
+	// otherwise.
+	Command     []string               `yaml:"command,omitempty" json:"command"`
+	Entrypoint  []string               `yaml:"entrypoint,omitempty" json:"entrypoint"`
 	ExecOptions map[string]interface{} `yaml:"exec_opts,omitempty" json:"exec_opts"`
 	Networks    []DockerNetworkOpts    `yaml:"networks,omitempty" json:"networks"`
 	// Privileged grants the container full host capabilities. It is
@@ -37,7 +46,7 @@ type DockerNodeOpts struct {
 	Capabilities []string `yaml:"capabilities,omitempty" json:"capabilities"`
 }
 
-func NewDockerNode(wrapper *docker.Wrapper, name string, opts ifaces.NodeOptions) (node ifaces.Node, err error) {
+func NewDockerNode(wrapper *docker.Wrapper, name string, opts ifaces.NodeOptions, suiteDir string) (node ifaces.Node, err error) {
 
 	jsonData, err := json.Marshal(opts)
 	if err != nil {
@@ -51,23 +60,25 @@ func NewDockerNode(wrapper *docker.Wrapper, name string, opts ifaces.NodeOptions
 	}
 
 	return &DockerNode{
-		name:    name,
-		wrapper: wrapper,
-		options: nodeopts,
+		name:     name,
+		wrapper:  wrapper,
+		options:  nodeopts,
+		suiteDir: suiteDir,
 	}, nil
 }
 
 type DockerNode struct {
-	name    string
-	wrapper *docker.Wrapper
-	options DockerNodeOpts
+	name     string
+	wrapper  *docker.Wrapper
+	options  DockerNodeOpts
+	suiteDir string
 }
 
 // resolveVolumes turns relative host paths into absolute ones. The Engine
 // API treats a non-absolute source as a NAMED VOLUME, so "./fixtures"
 // would silently mount an empty volume instead of the directory —
 // a passing-looking test against missing data.
-func resolveVolumes(volumes []string) ([]string, error) {
+func resolveVolumes(volumes []string, suiteDir string) ([]string, error) {
 	resolved := make([]string, 0, len(volumes))
 	for _, spec := range volumes {
 		parts := strings.SplitN(spec, ":", 2)
@@ -77,19 +88,12 @@ func resolveVolumes(volumes []string) ([]string, error) {
 		source := parts[0]
 		// A bare name (no separator) is a named volume by intent; a path
 		// is anything containing a separator or starting with . or ~
-		if strings.HasPrefix(source, "~") {
-			home, err := os.UserHomeDir()
+		if strings.HasPrefix(source, "~") || (strings.ContainsAny(source, "/.") && !filepath.IsAbs(source)) {
+			resolved, err := config.ResolveLocalPath(suiteDir, source)
 			if err != nil {
-				return nil, fmt.Errorf("volume %q: cannot resolve ~: %w", spec, err)
+				return nil, fmt.Errorf("volume %q: %w", spec, err)
 			}
-			source = filepath.Join(home, strings.TrimPrefix(source, "~"))
-		}
-		if strings.ContainsAny(source, "/.") && !filepath.IsAbs(source) {
-			absolute, err := filepath.Abs(source)
-			if err != nil {
-				return nil, fmt.Errorf("volume %q: cannot resolve host path: %w", spec, err)
-			}
-			source = absolute
+			source = resolved
 		}
 		resolved = append(resolved, source+":"+parts[1])
 	}
@@ -105,7 +109,7 @@ func (d *DockerNode) Setup() error {
 		opts = append(opts, docker.WithCapabilities(d.options.Capabilities))
 	}
 	if len(d.options.Volumes) > 0 {
-		volumes, err := resolveVolumes(d.options.Volumes)
+		volumes, err := resolveVolumes(d.options.Volumes, d.suiteDir)
 		if err != nil {
 			return err
 		}
@@ -117,38 +121,57 @@ func (d *DockerNode) Setup() error {
 	if len(d.options.Ports) > 0 {
 		opts = append(opts, docker.WithPorts(d.options.Ports))
 	}
+	if len(d.options.Command) > 0 {
+		opts = append(opts, docker.WithCommand(d.options.Command))
+	}
+	if len(d.options.Entrypoint) > 0 {
+		opts = append(opts, docker.WithEntrypoint(d.options.Entrypoint))
+	}
 
-	if err := d.wrapper.CreateContainer(d.name, d.name, d.options.Image, opts...); err != nil {
+	// The hostname stays the node name even when the container is named
+	// something else, so node-side commands see the name the suite uses
+	if err := d.wrapper.CreateContainer(d.containerName(), d.name, d.options.Image, opts...); err != nil {
 		return err
 	}
-	if err := d.wrapper.StartContainer(d.name); err != nil {
+	if err := d.wrapper.StartContainer(d.containerName()); err != nil {
 		return err
 	}
 	// Wait for the container to be fully ready (running and responsive)
-	if err := d.wrapper.WaitForContainerReady(d.name); err != nil {
+	if err := d.wrapper.WaitForContainerReady(d.containerName()); err != nil {
 		return err
 	}
 	return nil
+}
+
+// containerName is the Docker object's name. It defaults to the node name,
+// so a suite's containers are findable by the name the YAML uses;
+// container_name overrides it for suites that must match an externally
+// fixed name.
+func (d *DockerNode) containerName() string {
+	if d.options.ContainerName != "" {
+		return d.options.ContainerName
+	}
+	return d.name
 }
 
 // Teardown stops and removes the container. A container that no longer
 // exists (partial setup, previous cleanup, teardown-only run) counts as
 // already removed.
 func (d *DockerNode) Teardown() error {
-	if err := d.wrapper.StopContainer(d.name); err != nil {
+	if err := d.wrapper.StopContainer(d.containerName()); err != nil {
 		if docker.IsNotFound(err) {
 			return nil
 		}
 		return err
 	}
-	if err := d.wrapper.RemoveContainer(d.name); err != nil && !docker.IsNotFound(err) {
+	if err := d.wrapper.RemoveContainer(d.containerName()); err != nil && !docker.IsNotFound(err) {
 		return err
 	}
 	return nil
 }
 
 func (d *DockerNode) Execute(command string, options ...execution.ExecutionOption) (result *execution.ExecutionResult, err error) {
-	code, stdout, stderr, err := d.wrapper.ExecuteInContainerStreaming(d.name, command, execution.IsDebugMode())
+	code, stdout, stderr, err := d.wrapper.ExecuteInContainerStreaming(d.containerName(), command, execution.IsDebugMode())
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +191,7 @@ var _ ifaces.NetworkInspector = &DockerNode{}
 // without a fact command. Each attached network also yields a
 // per-network fact ("ipv4.test-net").
 func (d *DockerNode) NetworkFacts() (map[string]string, error) {
-	return d.wrapper.ContainerNetworkFacts(d.name)
+	return d.wrapper.ContainerNetworkFacts(d.containerName())
 }
 
 // Close has nothing to release: the container lifecycle is handled by

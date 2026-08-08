@@ -42,7 +42,7 @@ func TestBuildDevices(t *testing.T) {
 		},
 	}
 
-	built, err := buildDevices(devices, true)
+	built, err := buildDevices(devices, true, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestBuildDevicesSourceHandling(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			built, err := buildDevices(map[string]map[string]interface{}{"dev": tt.device}, tt.resolvePaths)
+			built, err := buildDevices(map[string]map[string]interface{}{"dev": tt.device}, tt.resolvePaths, "")
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -111,7 +111,7 @@ func TestBuildDevicesSourceHandling(t *testing.T) {
 func TestBuildDevicesRequiresType(t *testing.T) {
 	_, err := buildDevices(map[string]map[string]interface{}{
 		"iso": {"source": "/srv/images/boot.iso"},
-	}, true)
+	}, true, "")
 
 	if err == nil {
 		t.Fatal("expected an error for a device without a type")
@@ -148,7 +148,7 @@ func TestLxdNodeEmptyWithImageIsRejected(t *testing.T) {
 		"instance_type": "virtual-machine",
 	}
 
-	_, err := NewLxdNode("test-node", ifaces.NodeOptions(&opts))
+	_, err := NewLxdNode("test-node", ifaces.NodeOptions(&opts), "")
 	if err == nil {
 		t.Fatal("expected an error when both empty and image are set")
 	}

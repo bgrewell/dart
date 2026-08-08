@@ -30,6 +30,8 @@ type containerOptions struct {
 	volumes      []string
 	env          []string
 	ports        []string
+	command      []string
+	entrypoint   []string
 }
 
 // WithDetach is a function that sets the detach option for creating a container.
@@ -80,6 +82,22 @@ func WithEnv(env []string) ContainerOptions {
 func WithPorts(ports []string) ContainerOptions {
 	return func(o *containerOptions) {
 		o.ports = ports
+	}
+}
+
+// WithCommand overrides the image's CMD. An image whose default command
+// exits immediately — a bare distribution image, whose CMD is an
+// interactive shell — needs one that stays in the foreground instead.
+func WithCommand(command []string) ContainerOptions {
+	return func(o *containerOptions) {
+		o.command = command
+	}
+}
+
+// WithEntrypoint overrides the image's ENTRYPOINT.
+func WithEntrypoint(entrypoint []string) ContainerOptions {
+	return func(o *containerOptions) {
+		o.entrypoint = entrypoint
 	}
 }
 

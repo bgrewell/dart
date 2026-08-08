@@ -13,13 +13,13 @@ import (
 	"fmt"
 	"math/big"
 	"net"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 	"unicode"
 
+	"github.com/bgrewell/dart/internal/config"
 	"github.com/bgrewell/dart/internal/execution"
 	"github.com/bgrewell/dart/internal/helpers"
 	"github.com/bgrewell/dart/internal/lxc"
@@ -80,6 +80,10 @@ type LxdNodeOpts struct {
 	SkipVerify bool   `yaml:"skip_verify,omitempty" json:"skip_verify"` // Skip TLS verification (not recommended for production)
 	// Project support
 	Project string `yaml:"project,omitempty" json:"project"` // LXD project to use (defaults to lxd.DefaultProject)
+	// InstanceName decouples the LXD/Incus instance name from the node
+	// name. Defaults to the node name, which is what makes a suite's
+	// instances findable by the name the YAML uses.
+	InstanceName string `yaml:"instance_name,omitempty" json:"instance_name"`
 }
 
 // emptyInstance reports whether the instance should be created without an image.
@@ -147,7 +151,7 @@ func optionValueToString(value interface{}) string {
 // Relative disk sources are resolved against the working directory so that test files
 // can reference build artifacts by their path in the repository. Sources are paths on
 // the LXD host, so they are left untouched when the node talks to a remote server.
-func buildDevices(devices map[string]map[string]interface{}, resolvePaths bool) (map[string]map[string]string, error) {
+func buildDevices(devices map[string]map[string]interface{}, resolvePaths bool, suiteDir string) (map[string]map[string]string, error) {
 	built := make(map[string]map[string]string, len(devices))
 	for deviceName, device := range devices {
 		converted := make(map[string]string, len(device))
@@ -161,7 +165,7 @@ func buildDevices(devices map[string]map[string]interface{}, resolvePaths bool) 
 
 		// Only plain disks reference a host path; disks backed by a storage pool name a volume
 		if resolvePaths && converted["type"] == "disk" && converted["pool"] == "" && converted["source"] != "" {
-			absolute, err := filepath.Abs(converted["source"])
+			absolute, err := config.ResolveLocalPath(suiteDir, converted["source"])
 			if err != nil {
 				return nil, helpers.WrapError(fmt.Sprintf("device %q: unable to resolve source %q: %v", deviceName, converted["source"], err))
 			}
@@ -175,7 +179,7 @@ func buildDevices(devices map[string]map[string]interface{}, resolvePaths bool) 
 }
 
 // NewLxdNode creates a new LXD node without using the wrapper
-func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err error) {
+func NewLxdNode(name string, opts ifaces.NodeOptions, suiteDir string) (node ifaces.Node, err error) {
 
 	jsonData, err := json.Marshal(opts)
 	if err != nil {
@@ -234,6 +238,15 @@ func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err err
 		nodeopts.Image = strings.Split(nodeopts.Image, ":")[1]
 		nodeopts.Server = server
 		nodeopts.Protocol = protocol
+	}
+
+	// Certificate paths belong to the machine running DART
+	for _, field := range []*string{&nodeopts.ClientCert, &nodeopts.ClientKey, &nodeopts.ServerCert} {
+		resolved, resolveErr := config.ResolveLocalPath(suiteDir, *field)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		*field = resolved
 	}
 
 	// Connect to LXD server (local or remote)
@@ -340,9 +353,10 @@ func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err err
 	}
 
 	return &LxdNode{
-		name:    name,
-		options: nodeopts,
-		client:  client,
+		name:     name,
+		options:  nodeopts,
+		client:   client,
+		suiteDir: suiteDir,
 	}, nil
 
 }
@@ -351,7 +365,7 @@ func NewLxdNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err err
 // Note: When using a wrapper, the connection to the LXD server is managed by the wrapper itself.
 // Remote connection configuration in node options will be ignored.
 // Use NewWrapper or NewWrapperWithOptions to configure remote connections when using wrappers.
-func NewLxdNodeWithWrapper(wrapper *lxd.Wrapper, name string, opts ifaces.NodeOptions) (node ifaces.Node, err error) {
+func NewLxdNodeWithWrapper(wrapper *lxd.Wrapper, name string, opts ifaces.NodeOptions, suiteDir string) (node ifaces.Node, err error) {
 
 	jsonData, err := json.Marshal(opts)
 	if err != nil {
@@ -406,15 +420,28 @@ func NewLxdNodeWithWrapper(wrapper *lxd.Wrapper, name string, opts ifaces.NodeOp
 	}
 
 	return &LxdNode{
-		name:    name,
-		options: nodeopts,
-		wrapper: wrapper,
-		client:  client,
+		name:     name,
+		options:  nodeopts,
+		wrapper:  wrapper,
+		client:   client,
+		suiteDir: suiteDir,
 	}, nil
+}
+
+// instanceName is the LXD/Incus instance's name. It defaults to the node
+// name, so a suite's instances are findable by the name the YAML uses;
+// instance_name overrides it for suites that must match an externally
+// fixed name.
+func (d *LxdNode) instanceName() string {
+	if d.options.InstanceName != "" {
+		return d.options.InstanceName
+	}
+	return d.name
 }
 
 type LxdNode struct {
 	name      string
+	suiteDir  string
 	client    lxdclient.InstanceServer
 	wrapper   *lxd.Wrapper
 	options   LxdNodeOpts
@@ -456,7 +483,7 @@ func (d *LxdNode) Setup() error {
 
 	// Merge in any explicitly configured devices, such as an ISO attached as boot media.
 	// These are applied last so a node can override a generated NIC if it needs to.
-	configuredDevices, err := buildDevices(d.options.Devices, d.options.RemoteAddr == "")
+	configuredDevices, err := buildDevices(d.options.Devices, d.options.RemoteAddr == "", d.suiteDir)
 	if err != nil {
 		return err
 	}
@@ -483,7 +510,7 @@ func (d *LxdNode) Setup() error {
 
 	// Create a request for the instance
 	req := api.InstancesPost{
-		Name:   d.name,
+		Name:   d.instanceName(),
 		Source: source,
 		Type:   instanceType,
 		InstancePut: api.InstancePut{
@@ -510,7 +537,7 @@ func (d *LxdNode) Setup() error {
 		Timeout: -1,
 	}
 
-	op, err = d.client.UpdateInstanceState(d.name, reqState, "")
+	op, err = d.client.UpdateInstanceState(d.instanceName(), reqState, "")
 	if err != nil {
 		return helpers.WrapError(fmt.Sprintf("error starting instance: %v", err))
 	}
@@ -533,7 +560,7 @@ func (d *LxdNode) NetworkFacts() (map[string]string, error) {
 	if d.client == nil {
 		return nil, helpers.WrapError("lxd client not initialized")
 	}
-	state, _, err := d.client.GetInstanceState(d.name)
+	state, _, err := d.client.GetInstanceState(d.instanceName())
 	if err != nil {
 		return nil, err
 	}
@@ -578,7 +605,7 @@ func (d *LxdNode) Snapshot(name string, stateful bool) error {
 	if d.client == nil {
 		return helpers.WrapError("lxd client not initialized")
 	}
-	return lxd.CreateInstanceSnapshot(context.Background(), d.client, d.name, name, stateful)
+	return lxd.CreateInstanceSnapshot(context.Background(), d.client, d.instanceName(), name, stateful)
 }
 
 // RestoreSnapshot rolls the instance back to a snapshot. LXD stops and
@@ -592,11 +619,11 @@ func (d *LxdNode) RestoreSnapshot(name string, stateful bool) error {
 	}
 
 	wasRunning := false
-	if state, _, err := d.client.GetInstanceState(d.name); err == nil {
+	if state, _, err := d.client.GetInstanceState(d.instanceName()); err == nil {
 		wasRunning = state.Status == "Running"
 	}
 
-	if err := lxd.RestoreInstanceSnapshot(context.Background(), d.client, d.name, name, stateful); err != nil {
+	if err := lxd.RestoreInstanceSnapshot(context.Background(), d.client, d.instanceName(), name, stateful); err != nil {
 		return err
 	}
 
@@ -605,8 +632,8 @@ func (d *LxdNode) RestoreSnapshot(name string, stateful bool) error {
 	}
 	cfg := d.options.BootWait.readinessConfig()
 	command := d.options.BootWait.readyCommand(d.shell())
-	if err := lxd.WaitForInstanceCommand(context.Background(), d.client, d.name, command, cfg); err != nil {
-		return helpers.WrapError(fmt.Sprintf("instance %s did not become ready after restoring snapshot %s: %v", d.name, name, err))
+	if err := lxd.WaitForInstanceCommand(context.Background(), d.client, d.instanceName(), command, cfg); err != nil {
+		return helpers.WrapError(fmt.Sprintf("instance %s did not become ready after restoring snapshot %s: %v", d.instanceName(), name, err))
 	}
 	return nil
 }
@@ -617,7 +644,7 @@ func (d *LxdNode) DeleteSnapshot(name string) error {
 	if d.client == nil {
 		return helpers.WrapError("lxd client not initialized")
 	}
-	if err := lxd.DeleteInstanceSnapshot(context.Background(), d.client, d.name, name); err != nil && !lxd.IsNotFound(err) {
+	if err := lxd.DeleteInstanceSnapshot(context.Background(), d.client, d.instanceName(), name); err != nil && !lxd.IsNotFound(err) {
 		return err
 	}
 	return nil
@@ -630,16 +657,16 @@ var _ ifaces.Rebooter = &LxdNode{}
 // which matters for crash-safety testing. The readiness wait reuses the
 // node's boot_wait configuration; readyCommand and timeout override it.
 func (d *LxdNode) Reboot(force bool, readyCommand string, timeout time.Duration) error {
-	op, err := d.client.UpdateInstanceState(d.name, api.InstanceStatePut{
+	op, err := d.client.UpdateInstanceState(d.instanceName(), api.InstanceStatePut{
 		Action:  "restart",
 		Timeout: -1,
 		Force:   force,
 	}, "")
 	if err != nil {
-		return helpers.WrapError(fmt.Sprintf("error restarting instance %s: %v", d.name, err))
+		return helpers.WrapError(fmt.Sprintf("error restarting instance %s: %v", d.instanceName(), err))
 	}
 	if err := op.Wait(); err != nil {
-		return helpers.WrapError(fmt.Sprintf("error restarting instance %s: %v", d.name, err))
+		return helpers.WrapError(fmt.Sprintf("error restarting instance %s: %v", d.instanceName(), err))
 	}
 
 	cfg := d.options.BootWait.readinessConfig()
@@ -650,8 +677,8 @@ func (d *LxdNode) Reboot(force bool, readyCommand string, timeout time.Duration)
 	if readyCommand != "" {
 		command = []string{d.shell(), "-c", readyCommand}
 	}
-	if err := lxd.WaitForInstanceCommand(context.Background(), d.client, d.name, command, cfg); err != nil {
-		return helpers.WrapError(fmt.Sprintf("instance %s did not become ready after reboot: %v", d.name, err))
+	if err := lxd.WaitForInstanceCommand(context.Background(), d.client, d.instanceName(), command, cfg); err != nil {
+		return helpers.WrapError(fmt.Sprintf("instance %s did not become ready after reboot: %v", d.instanceName(), err))
 	}
 	return nil
 }
@@ -675,7 +702,7 @@ func (d *LxdNode) waitForReady() error {
 			}
 		}
 		command := d.options.BootWait.readyCommand(d.shell())
-		if err := lxd.WaitForInstanceCommand(ctx, d.client, d.name, command, d.options.BootWait.readinessConfig()); err != nil {
+		if err := lxd.WaitForInstanceCommand(ctx, d.client, d.instanceName(), command, d.options.BootWait.readinessConfig()); err != nil {
 			return helpers.WrapError(fmt.Sprintf("error waiting for instance to be ready: %v", err))
 		}
 		return nil
@@ -688,7 +715,7 @@ func (d *LxdNode) waitForReady() error {
 	}
 
 	// Wait for the instance to be fully ready (OS booted, networking available)
-	if err := lxd.WaitForInstanceReady(ctx, d.client, d.name, nil); err != nil {
+	if err := lxd.WaitForInstanceReady(ctx, d.client, d.instanceName(), nil); err != nil {
 		return helpers.WrapError(fmt.Sprintf("error waiting for instance to be ready: %v", err))
 	}
 
@@ -712,9 +739,9 @@ func (d *LxdNode) ejectAfterPoweroff(ctx context.Context) error {
 		case <-waitCtx.Done():
 			return helpers.WrapError(fmt.Sprintf(
 				"timeout waiting for instance %s to power off before ejecting %v: %v",
-				d.name, d.options.BootWait.EjectOnPoweroff, waitCtx.Err()))
+				d.instanceName(), d.options.BootWait.EjectOnPoweroff, waitCtx.Err()))
 		case <-ticker.C:
-			state, _, err := d.client.GetInstanceState(d.name)
+			state, _, err := d.client.GetInstanceState(d.instanceName())
 			if err != nil {
 				continue
 			}
@@ -723,32 +750,32 @@ func (d *LxdNode) ejectAfterPoweroff(ctx context.Context) error {
 			}
 
 			// Detach the install media
-			inst, etag, err := d.client.GetInstance(d.name)
+			inst, etag, err := d.client.GetInstance(d.instanceName())
 			if err != nil {
-				return helpers.WrapError(fmt.Sprintf("error getting instance %s to eject devices: %v", d.name, err))
+				return helpers.WrapError(fmt.Sprintf("error getting instance %s to eject devices: %v", d.instanceName(), err))
 			}
 			for _, dev := range d.options.BootWait.EjectOnPoweroff {
 				if _, ok := inst.Devices[dev]; !ok {
 					return helpers.WrapError(fmt.Sprintf(
-						"device %q in eject_on_poweroff not found on instance %s", dev, d.name))
+						"device %q in eject_on_poweroff not found on instance %s", dev, d.instanceName()))
 				}
 				delete(inst.Devices, dev)
 			}
-			op, err := d.client.UpdateInstance(d.name, inst.Writable(), etag)
+			op, err := d.client.UpdateInstance(d.instanceName(), inst.Writable(), etag)
 			if err != nil {
-				return helpers.WrapError(fmt.Sprintf("error ejecting devices from instance %s: %v", d.name, err))
+				return helpers.WrapError(fmt.Sprintf("error ejecting devices from instance %s: %v", d.instanceName(), err))
 			}
 			if err := op.Wait(); err != nil {
-				return helpers.WrapError(fmt.Sprintf("error ejecting devices from instance %s: %v", d.name, err))
+				return helpers.WrapError(fmt.Sprintf("error ejecting devices from instance %s: %v", d.instanceName(), err))
 			}
 
 			// Boot from the installed disk
-			op, err = d.client.UpdateInstanceState(d.name, api.InstanceStatePut{Action: "start", Timeout: -1}, "")
+			op, err = d.client.UpdateInstanceState(d.instanceName(), api.InstanceStatePut{Action: "start", Timeout: -1}, "")
 			if err != nil {
-				return helpers.WrapError(fmt.Sprintf("error restarting instance %s after eject: %v", d.name, err))
+				return helpers.WrapError(fmt.Sprintf("error restarting instance %s after eject: %v", d.instanceName(), err))
 			}
 			if err := op.Wait(); err != nil {
-				return helpers.WrapError(fmt.Sprintf("error restarting instance %s after eject: %v", d.name, err))
+				return helpers.WrapError(fmt.Sprintf("error restarting instance %s after eject: %v", d.instanceName(), err))
 			}
 			return nil
 		}
@@ -770,7 +797,7 @@ func (d *LxdNode) Teardown() error {
 
 	// An instance may already be stopped, for example a VM that powered itself off at
 	// the end of an unattended install, and stopping it again is an error
-	state, _, err := d.client.GetInstanceState(d.name)
+	state, _, err := d.client.GetInstanceState(d.instanceName())
 	if err != nil {
 		// Already-removed instances (e.g. a suite teardown step deleted it as a
 		// safety net) leave nothing to tear down
@@ -788,7 +815,7 @@ func (d *LxdNode) Teardown() error {
 			Timeout: -1,
 			Force:   true,
 		}
-		op, err = d.client.UpdateInstanceState(d.name, req, "")
+		op, err = d.client.UpdateInstanceState(d.instanceName(), req, "")
 		if err != nil {
 			return helpers.WrapError(fmt.Sprintf("error stopping instance: %v", err))
 		}
@@ -798,7 +825,7 @@ func (d *LxdNode) Teardown() error {
 	}
 
 	// Create a delete request
-	op, err = d.client.DeleteInstance(d.name)
+	op, err = d.client.DeleteInstance(d.instanceName())
 	if err != nil {
 		return helpers.WrapError(fmt.Sprintf("error deleting instance: %v", err))
 	}
@@ -818,8 +845,8 @@ func (d *LxdNode) Execute(command string, options ...execution.ExecutionOption) 
 	debugEnabled := execution.IsDebugMode()
 
 	// Create TeeWriters that optionally stream to console
-	stdoutWriter := stream.NewTeeWriter(stream.StreamStdout, d.name, debugEnabled)
-	stderrWriter := stream.NewTeeWriter(stream.StreamStderr, d.name, debugEnabled)
+	stdoutWriter := stream.NewTeeWriter(stream.StreamStdout, d.instanceName(), debugEnabled)
+	stderrWriter := stream.NewTeeWriter(stream.StreamStderr, d.instanceName(), debugEnabled)
 
 	execArgs := lxdclient.InstanceExecArgs{
 		Stdout: stdoutWriter,
@@ -833,7 +860,7 @@ func (d *LxdNode) Execute(command string, options ...execution.ExecutionOption) 
 		Interactive: false,
 	}
 
-	op, err := d.client.ExecInstance(d.name, execPost, &execArgs)
+	op, err := d.client.ExecInstance(d.instanceName(), execPost, &execArgs)
 	if err != nil {
 		return nil, helpers.WrapError(fmt.Sprintf("error executing command: %v", err))
 	}

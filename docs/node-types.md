@@ -9,15 +9,16 @@ DART supports several types of nodes that can be used as test targets:
 - **Local Node (`local`)**  
   Execute tests on the local machine where DART is running.
   Invariant: at most one `local` node per suite. A second one fails configuration
-  with `only one local node allowed; "<name>" is a duplicate`, reported against
-  that node's line in the YAML. The limit applies only to `local`; other types may
+  with `only one local node allowed; "<name>" duplicates "<first>"`, reported
+  against that node's line in the YAML and caught by `--check`. The limit applies only to `local`; other types may
   appear any number of times. Several roles on one machine are modelled with a
   single local node, distinguished by test and step naming rather than by separate
   node entries.
 
 - **Docker Node (`docker`)**  
   Run tests inside Docker containers, with volume, environment, port, capability,
-  and privileged-mode options. Supports both local and remote Docker hosts.
+  privileged-mode, and command/entrypoint options. Supports both local and remote
+  Docker hosts.
 
 - **Docker Compose Node (`docker-compose`)**  
   Manage and test services defined in Docker Compose files. Multiple nodes can target different services in the same compose stack.
@@ -135,10 +136,16 @@ on the target platform.
 - **Docker Compose nodes:** the node name is used as the Compose project name when
   `project_name` is omitted.
 
+`container_name` (docker) and `instance_name` (lxd, lxd-vm) decouple the platform
+identifier from the node identity. Both default to the node name, which is what
+makes a suite's containers and instances findable by the name the YAML uses;
+setting one is for suites that must match an externally fixed name. The node name
+remains what `node:` references, what reports and console output show, and — for
+docker — what the container's hostname is set to, so node-side commands still see
+the name the suite uses.
+
 Note: name syntax is not validated by DART. A name the platform rejects surfaces as
-the daemon's or LXD server's own error during node setup. There is no
-`container_name` or `instance_name` option that decouples the platform identifier
-from the node identity.
+the daemon's or LXD server's own error during node setup.
 
 ### Node Security Defaults
 
@@ -161,43 +168,49 @@ for an ephemeral target need not relax it for the long-lived jump host;
 reconnects after `reboot` route through the bastion too, and chained
 bastions are rejected rather than silently dropped.
 
-`--check` validates the node options that need no connection: SSH
-authentication (a key file that exists and parses, or a password),
-`known_hosts` readability under the configured host-key policy, and — when a
-`bastion:` block is present — that it names a host, carries usable
-credentials, and is not chained. For docker nodes it checks `volumes` and
-`ports` specification syntax, resolving relative volume host paths
-(`./fixtures:/fixtures`) to absolute paths, since the Engine API would
-otherwise treat them as *named volumes* and mount an empty one. These
-breaking changes therefore surface before a run rather than during one.
+`--check` validates everything about a node that needs no connection:
 
-Note: `--check` does not verify that required fields are present. An `ssh`
-node missing `host` passes the check and then fails the run dialling `:22`; a
-`docker` node missing `image` fails at container creation; a `docker-compose`
-node missing `compose_file` fails at node construction. Only the *bastion's*
-host is required at check time.
+- **Required fields** — `host` on `ssh`, `image` on `docker`, `compose_file` on
+  `docker-compose`, and a bastion's `host` when a `bastion:` block is present.
+- **Option names** — any key the node type does not accept is an error naming
+  the accepted set (see [Unrecognised Options](#unrecognised-options)).
+- **Credentials and host keys** — SSH authentication (a key file that exists and
+  parses, or a password), `known_hosts` readability under the configured
+  host-key policy, and that a bastion carries usable credentials and is not
+  chained.
+- **Specification syntax** — docker `volumes` and `ports`, resolving relative
+  volume host paths (`./fixtures:/fixtures`) to absolute paths, since the Engine
+  API would otherwise treat them as *named volumes* and mount an empty one.
+- **Cross-node constraints** — duplicate node names, and more than one `local`
+  node.
+
+What remains outside its reach is anything that needs the platform to answer:
+whether an image exists, whether a host is reachable, whether a bind source
+exists on the daemon.
 
 ### Unrecognised Options
 
-Option names must match exactly. On `docker`, `docker-compose`, `ssh`, and `lxd`
-nodes, `options:` is decoded by a JSON round-trip into a typed struct, so any key
-that is not a recognised option is discarded without an error or a warning. A
-misspelling such as `priviliged` instead of `privileged`, `hostname` instead of
-`host`, or `known_host` instead of `known_hosts` leaves the option at its default
-and the suite runs on.
+Option names must match exactly. A key the node type does not accept is a
+configuration error naming the offending key and the full accepted set:
 
-Only `local` nodes warn. A local node prints
-`Warning: node "<name>": option "<key>" is not recognized and was ignored (known options: env, shell, sudo, exec_opts)`
-to stderr. That warning is specific to local nodes and is not a general guarantee.
+```text
+Error: node "web": unknown option "privilaged" for a docker node (accepted:
+capabilities, command, container_name, entrypoint, env, exec_opts, image,
+networks, ports, privileged, volumes)
+```
 
-Note: `--check` does not detect option typos on any node type. It validates the
-*semantics* of recognised options that need no connection, but it decodes options
-through the same round-trip that drops unknown keys, and it substitutes mock nodes
-for real ones — so even the local node's warning appears only in a real run.
+Rationale: `options:` is decoded by a JSON round-trip into a typed struct, which
+discards anything it does not recognise. Without this check a misspelling such as
+`priviliged` for `privileged` left the option at its default while the suite read
+as though it were set — the assertion looked configured and tested nothing.
 
-A dropped SSH security key fails safe: a mistyped `insecure_skip_host_key` leaves
-it `false`, and a mistyped `known_hosts` falls back to `~/.ssh/known_hosts`, so
-host-key verification stays on and the symptom is a confusing connection error
+`--check` reports these, so a typo surfaces before any infrastructure is created.
+Local nodes additionally warn about keys misplaced inside `exec_opts`.
+
+Historically a dropped SSH security key failed safe: a mistyped
+`insecure_skip_host_key` left it `false`, and a mistyped `known_hosts` fell back
+to `~/.ssh/known_hosts`, so host-key verification stayed on and the symptom was a
+confusing connection error
 rather than a silent downgrade. The real cost is a silently ineffective option — a
 `privileged` or `capabilities` typo, for example, surfaces later as an unexplained
 permission failure inside the container.
@@ -413,6 +426,9 @@ setup, and before any setup step runs. Consequences worth knowing:
 | `ports` | list of `host:container[/proto]` | Published ports. |
 | `privileged` | bool | Opt-in full host capabilities; defaults to `false`. |
 | `capabilities` | list of strings | Individual Linux capabilities, for example `[NET_ADMIN]`. |
+| `command` | list of strings | Overrides the image's `CMD`. Use it to give an image that would otherwise exit a process that stays in the foreground. |
+| `entrypoint` | list of strings | Overrides the image's `ENTRYPOINT`. |
+| `container_name` | string | The container's name on the daemon; defaults to the node name. |
 
 Note: DART does not pull Docker images. The `image:` a docker node references must
 already exist in the local daemon — pulled beforehand (`docker pull nginx:alpine`)
@@ -422,19 +438,33 @@ node setup with `could not create container: ...` followed by the daemon's
 `No such image`. This applies to `type: docker` nodes only: `docker-compose` nodes
 pull through Compose, and LXD/Incus nodes fetch images through the LXD client.
 
-Note: the container is created from the image's own `CMD`/`ENTRYPOINT`. DART sets
-the image, hostname, environment, published ports, bind mounts, and the privilege
-options from the table above, and offers no `command`,
-`entrypoint`, or `tty` option, so the image must run a process that stays in the
-foreground. After starting the container, node setup polls every second for up to
-two minutes until the container reports `Running` and a trivial `exec` of `true`
-succeeds. An image whose `CMD` exits immediately — such as bare `ubuntu:latest`,
-whose `CMD` is `/bin/bash` and which exits at once because DART allocates no TTY
-and attaches no stdin — never becomes ready, and setup fails after two minutes with
+The container is created from the image's own `CMD`/`ENTRYPOINT` unless
+`command:` or `entrypoint:` overrides them. DART allocates no TTY and attaches no
+stdin, so the process it runs must stay in the foreground. After starting the
+container, node setup polls every second for up to two minutes until the container
+reports `Running` and a trivial `exec` of `true` succeeds. An image whose `CMD`
+exits immediately — bare `ubuntu:latest`, whose `CMD` is `/bin/bash` — never
+becomes ready, and setup fails after two minutes with
 `container <name> not ready: timeout waiting for container ... context deadline exceeded`.
-A service image (`nginx:alpine`, `postgres:16`) or a purpose-built image whose
-`CMD` is a supervisor satisfies the check; `examples/docker/docker.yaml` builds
-exactly such an image through the `docker.images` block.
+
+Three ways to satisfy the readiness check:
+
+- a service image whose `CMD` already stays up (`nginx:alpine`, `postgres:16`);
+- a bare distribution image plus a `command:` that stays up:
+
+  ```yaml
+  nodes:
+    - name: shellbox
+      type: docker
+      options:
+        image: ubuntu:24.04
+        command: ["sleep", "infinity"]
+  ```
+
+- a purpose-built image whose `CMD` is a supervisor, as
+  `examples/docker/docker.yaml` builds through the `docker.images` block.
+
+Note: there is no `tty` option. A command that requires a terminal still fails.
 
 Warning: `networks` on a `docker` node is not implemented. The option parses but is
 never applied — `DockerNode.Setup` does not read it, and containers are created
@@ -524,8 +554,8 @@ dart -c config.yaml
 
 Warning: `volumes` host paths are resolved on the machine running DART but
 interpreted by the daemon. DART expands a leading `~` from the local `$HOME` and
-makes any relative path absolute against DART's working directory; the result is
-handed to the daemon as-is. With a remote `DOCKER_HOST`, `./fixtures:/fixtures`
+makes any relative path absolute against the suite file's directory; the result
+is handed to the daemon as-is. With a remote `DOCKER_HOST`, `./fixtures:/fixtures`
 becomes a local absolute path the daemon host probably does not have — and a bind
 source that does not exist is created as an empty directory rather than failing, so
 a test can read nothing and still pass. `--check` validates the
@@ -573,6 +603,7 @@ docker compose -f <compose_file> -p <project_name> down
 | `boot_wait` | map | — | Replaces the default readiness check; see [Empty VMs and ISO Boot](#empty-vms-and-iso-boot). |
 | `exec_opts` | map | — | Currently one key, `shell`, defaulting to `/bin/bash`. |
 | `project` | string | `default` | LXD project the instance is created in. Not inherited from `lxd.project`. |
+| `instance_name` | string | the node name | The instance's name on the LXD/Incus server. |
 | `socket` | string | auto-detected | Unix socket path; used only when the suite has no top-level `lxd:` block. |
 | `server`, `protocol` | string | `local`, `lxd` | Image server URL and protocol; used only with a bare image alias. |
 | `remote_addr`, `trust_token`, `client_cert`, `client_key`, `server_cert`, `skip_verify` | — | — | Remote connection settings; used only when the suite has no top-level `lxd:` block. See [Remote LXD Support](#remote-lxd-support). |
@@ -776,10 +807,11 @@ Notes:
   setting both `empty: true` and `image` is rejected.
 - `devices` accepts any LXD device configuration and is merged over the NICs generated from
   [`networks`](#networks), so a node can override a generated device if it needs to.
-- Relative `source` paths on pool-less disk devices are made absolute against DART's working
-  directory — not the suite file's directory, unlike `docker.images[].dockerfile`. A disk
-  device that names a `pool` refers to a storage volume and is passed through untouched, as
-  are all sources on remote nodes, which are paths on the remote server.
+- Relative `source` paths on pool-less disk devices are made absolute against the suite
+  file's directory, the same rule `docker.images[].dockerfile` and every other local path
+  follows. A disk device that names a `pool` refers to a storage volume and is passed
+  through untouched, as are all sources on remote nodes, which are paths on the remote
+  server.
 - `boot_wait` replaces the default readiness check: DART polls `ready_command` through the
   node's shell (`exec_opts.shell`, default `/bin/bash`) until it exits zero or the timeout
   expires. Without `ready_command`, being able to run any command at all counts as ready. An

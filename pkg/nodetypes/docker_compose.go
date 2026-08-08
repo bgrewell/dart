@@ -3,6 +3,7 @@ package nodetypes
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/bgrewell/dart/internal/config"
 	"github.com/bgrewell/dart/internal/docker"
 	"github.com/bgrewell/dart/internal/execution"
 	"github.com/bgrewell/dart/internal/helpers"
@@ -21,7 +22,7 @@ type DockerComposeNodeOpts struct {
 }
 
 // NewDockerComposeNode creates a new docker-compose node
-func NewDockerComposeNode(wrapper *docker.Wrapper, name string, opts ifaces.NodeOptions) (node ifaces.Node, err error) {
+func NewDockerComposeNode(wrapper *docker.Wrapper, name string, opts ifaces.NodeOptions, suiteDir string) (node ifaces.Node, err error) {
 	jsonData, err := json.Marshal(opts)
 	if err != nil {
 		return nil, err
@@ -36,6 +37,9 @@ func NewDockerComposeNode(wrapper *docker.Wrapper, name string, opts ifaces.Node
 	// Validate required options
 	if nodeopts.ComposeFile == "" {
 		return nil, fmt.Errorf("compose_file is required for docker-compose node")
+	}
+	if nodeopts.ComposeFile, err = config.ResolveLocalPath(suiteDir, nodeopts.ComposeFile); err != nil {
+		return nil, err
 	}
 
 	return &DockerComposeNode{

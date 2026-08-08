@@ -54,6 +54,12 @@ type Configuration struct {
 	Teardown []*StepConfig     `json:"teardown" yaml:"teardown"`
 	Nodes    []*NodeConfig     `json:"nodes" yaml:"nodes"`
 	Tests    []*TestConfig     `json:"tests" yaml:"tests"`
+
+	// SuiteDir is the directory holding the suite file. Every local path a
+	// suite writes resolves against it (see ResolveLocalPath), so a suite
+	// behaves the same regardless of where DART is invoked from. It is
+	// empty for configurations built in memory.
+	SuiteDir string `json:"-" yaml:"-"`
 }
 
 // DockerConfig is the configuration for Docker
@@ -78,6 +84,10 @@ type StepConfig struct {
 	Step    StepDetails    `json:"step" yaml:"step"`
 	Loc     SourceLocation `json:"-" yaml:"-"`
 	NodeLoc SourceLocation `json:"-" yaml:"-"`
+	// SuiteDir carries the suite file's directory to step construction, so
+	// local paths in options resolve against it rather than the working
+	// directory.
+	SuiteDir string `json:"-" yaml:"-"`
 }
 
 // StepDetails is the details of a single step
@@ -95,6 +105,10 @@ type NodeConfig struct {
 	Facts   map[string]string      `json:"facts,omitempty" yaml:"facts,omitempty"`
 	Loc     SourceLocation         `json:"-" yaml:"-"`
 	TypeLoc SourceLocation         `json:"-" yaml:"-"`
+	// SuiteDir carries the suite file's directory to node construction, so
+	// local paths in options resolve against it rather than the working
+	// directory.
+	SuiteDir string `json:"-" yaml:"-"`
 }
 
 // TestConfig is the configuration for a single test
@@ -259,12 +273,30 @@ func ParseConfigurationWithVars(data []byte, location string, cliVars map[string
 		test.Order = i
 	}
 
-	// Ensure that the Dockerfile paths that are relative to the execution point
+	// Local paths resolve against the suite file's directory. Stamping it
+	// onto each record is what lets step and node construction apply the
+	// same rule without reaching back for global state.
+	config.SuiteDir = location
+	for _, step := range config.Setup {
+		step.SuiteDir = location
+	}
+	for _, step := range config.Teardown {
+		step.SuiteDir = location
+	}
+	for _, node := range config.Nodes {
+		node.SuiteDir = location
+	}
+
 	if config.Docker != nil {
 		for _, image := range config.Docker.Images {
-			if !filepath.IsAbs(image.Dockerfile) {
-				image.Dockerfile = filepath.Join(location, image.Dockerfile)
+			if image.Dockerfile == "" {
+				continue
 			}
+			resolved, err := ResolveLocalPath(location, image.Dockerfile)
+			if err != nil {
+				return nil, err
+			}
+			image.Dockerfile = resolved
 		}
 	}
 

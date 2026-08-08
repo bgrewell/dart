@@ -430,6 +430,18 @@ func runCheck(cfgPath, reportValue, varsValue, onlyValue, skipValue string) int 
 		return 1
 	}
 
+	// Constraints across the whole node list — duplicate names, more than
+	// one local node — are the same ones a real run enforces
+	if err := nodetypes.ValidateNodeSet(cfg.Nodes); err != nil {
+		var cfgErr *config.ConfigError
+		if errors.As(err, &cfgErr) {
+			fmt.Fprint(os.Stderr, config.RenderConfigError(cfgErr))
+		} else {
+			fmt.Fprintf(os.Stderr, "\n%s %s\n\n", errorStyle.Sprint("Error:"), err)
+		}
+		return 1
+	}
+
 	mocks := make(map[string]ifaces.Node, len(cfg.Nodes))
 	for _, node := range cfg.Nodes {
 		// Unknown node types must fail --check exactly as they fail a run

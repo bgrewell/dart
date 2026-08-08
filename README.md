@@ -195,12 +195,13 @@ unreachable endpoint. A minimal image that ships none of them is a case for
 
 Warning: a docker node's image must run a long-lived foreground process.
 DART creates the container from the image's own `CMD`/`ENTRYPOINT` with no
-TTY and no attached stdin, and there is no `command:` option, so an image
-whose default command is an interactive shell — `ubuntu`, `debian`,
-`alpine` — exits the moment it starts. Node setup then polls for up to two
-minutes waiting for the container to report running and fails with
-`timeout waiting for container ... to become ready`. Purpose-built service
-images work; bare distribution images belong on an `lxd` (or `lxd-vm`) or `ssh`
+TTY and no attached stdin, so an image whose default command is an
+interactive shell — `ubuntu`, `debian`, `alpine` — exits the moment it
+starts. Node setup then polls for up to two minutes waiting for the
+container to report running and fails with
+`timeout waiting for container ... to become ready`. Give such an image a
+`command:` that stays up (`command: ["sleep", "infinity"]`), use a
+purpose-built service image, or put it on an `lxd` (or `lxd-vm`) or `ssh`
 node instead.
 
 ### Does my config deploy correctly?
@@ -242,13 +243,13 @@ Both `create_dir` and `overwrite` default to false: without them the step
 fails when the parent directory is missing, and fails again when the
 destination already exists.
 
-Note: local paths in file steps — `source` on `file_push` and
-`file_template`, and `dest` on `file_fetch` — resolve against the directory
-DART is invoked from, not the directory holding the suite file. Absolute
-paths, or paths written relative to the runner's working directory, are the
-safe form. Platform paths do not share this rule: `docker.images[].dockerfile`
-and the `!!load_from` directive resolve relative to the suite file, so a
-suite that mixes both cannot use one convention throughout.
+Note: every local path a suite writes follows one rule — absolute paths are
+used as-is, `~` is the invoking user's home directory, and anything else is
+relative to the directory holding the suite file. That covers file-step
+sources and destinations, docker `volumes`, LXD disk `source`s, SSH keys and
+`known_hosts`, LXD certificates, `compose_file`, `docker.images[].dockerfile`,
+and `!!load_from`. A suite is therefore portable: it behaves the same run from
+the repository root, from its own directory, or from a CI checkout elsewhere.
 
 ### Is the package installable on a clean machine?
 
@@ -266,7 +267,7 @@ setup:
     node: clean
     step:
       type: file_push
-      # source is read on the machine running DART, relative to its working directory
+      # source is read on the machine running DART, relative to the suite file
       options: { source: dist/myservice.deb, dest: /tmp/myservice.deb }
   - name: install it
     node: clean
