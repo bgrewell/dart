@@ -52,6 +52,7 @@ type CmdlineFlags struct {
 	Vars          *string
 	Only          *string
 	SkipTags      *string
+	Color         *string
 }
 
 type ControllerParams struct {
@@ -311,9 +312,29 @@ func main() {
 	cfgFlags.Vars = u.AddStringOption("var", "vars", "", "Override suite variables: key=value[,key=value...]", "", nil)
 	cfgFlags.Only = u.AddStringOption("o", "only", "", "Run only tests carrying one of these tags: tag=name[,name...]", "", nil)
 	cfgFlags.SkipTags = u.AddStringOption("sk", "skip", "", "Exclude tests carrying any of these tags: tag=name[,name...]", "", nil)
+	cfgFlags.Color = u.AddStringOption("co", "color", "auto", "Colorize output: auto (a terminal), always, or never", "", nil)
 
 	if !u.Parse() {
 		u.PrintError(fmt.Errorf("Failed to parse command line arguments"))
+	}
+
+	// Colour is resolved before anything can print, so an error rendered on
+	// the way out of parsing already honours the setting
+	switch *cfgFlags.Color {
+	case "auto":
+		// The color package disables itself when stdout is not a terminal;
+		// NO_COLOR is honoured here because it is the cross-tool convention
+		if _, noColor := os.LookupEnv("NO_COLOR"); noColor {
+			color.NoColor = true
+		}
+	case "always":
+		color.NoColor = false
+	case "never":
+		color.NoColor = true
+	default:
+		fmt.Fprintf(os.Stderr, "\n%s color must be auto, always, or never (got %q)\n\n",
+			errorStyle.Sprint("Error:"), *cfgFlags.Color)
+		os.Exit(1)
 	}
 
 	// Validate flag values that would otherwise fail silently: zero

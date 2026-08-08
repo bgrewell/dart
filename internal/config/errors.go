@@ -1,8 +1,11 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/fatih/color"
@@ -100,4 +103,36 @@ func RenderConfigError(cfgErr *ConfigError) string {
 	b.WriteString("\n\n")
 
 	return b.String()
+}
+
+// yamlLineRe matches the position yaml.v3 embeds in its error text. The
+// library reports syntax problems as plain errors with the line inside the
+// message, so recovering it is the only way to show the offending line.
+var yamlLineRe = regexp.MustCompile(`(?m)^yaml: (?:unmarshal errors:\n\s*)?line (\d+): (.*)$`)
+
+// AsConfigError converts a YAML decoding error into a located ConfigError so
+// a syntax problem gets the same snippet as a semantic one. Errors that carry
+// no position are returned unchanged.
+func AsConfigError(err error, filePath string) error {
+	if err == nil {
+		return nil
+	}
+	var cfgErr *ConfigError
+	if errors.As(err, &cfgErr) {
+		return err
+	}
+
+	match := yamlLineRe.FindStringSubmatch(err.Error())
+	if match == nil {
+		return err
+	}
+	line, convErr := strconv.Atoi(match[1])
+	if convErr != nil {
+		return err
+	}
+
+	return &ConfigError{
+		Message:  strings.TrimSpace(match[2]),
+		Location: SourceLocation{File: filePath, Line: line},
+	}
 }

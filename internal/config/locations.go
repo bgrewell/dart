@@ -56,9 +56,12 @@ func populateNodeLocations(seq *yaml.Node, filePath string, nodes []*NodeConfig)
 
 		if itemNode.Kind == yaml.MappingNode {
 			for j := 0; j+1 < len(itemNode.Content); j += 2 {
-				if itemNode.Content[j].Value == "type" {
-					valNode := itemNode.Content[j+1]
+				valNode := itemNode.Content[j+1]
+				switch itemNode.Content[j].Value {
+				case "type":
 					nodes[idx].TypeLoc = SourceLocation{File: filePath, Line: valNode.Line, Column: valNode.Column}
+				case "options":
+					nodes[idx].OptionLocs = optionLocations(valNode, filePath)
 				}
 			}
 		}
@@ -85,10 +88,27 @@ func populateTestLocations(seq *yaml.Node, filePath string, tests []*TestConfig)
 					tests[idx].NodeLoc = SourceLocation{File: filePath, Line: valNode.Line, Column: valNode.Column}
 				case "type":
 					tests[idx].TypeLoc = SourceLocation{File: filePath, Line: valNode.Line, Column: valNode.Column}
+				case "options":
+					tests[idx].OptionLocs = optionLocations(valNode, filePath)
 				}
 			}
 		}
 	}
+}
+
+// optionLocations maps each key of an options mapping to the position of the
+// key itself. Pointing at the key rather than the enclosing block is what
+// lets an error about `timout:` mark the line `timout:` is written on.
+func optionLocations(optionsNode *yaml.Node, filePath string) map[string]SourceLocation {
+	if optionsNode == nil || optionsNode.Kind != yaml.MappingNode {
+		return nil
+	}
+	locs := make(map[string]SourceLocation, len(optionsNode.Content)/2)
+	for i := 0; i+1 < len(optionsNode.Content); i += 2 {
+		keyNode := optionsNode.Content[i]
+		locs[keyNode.Value] = SourceLocation{File: filePath, Line: keyNode.Line, Column: keyNode.Column}
+	}
+	return locs
 }
 
 // populateStepLocations sets Loc, NodeLoc, and step.TypeLoc on each StepConfig.
@@ -113,12 +133,15 @@ func populateStepLocations(seq *yaml.Node, filePath string, steps []*StepConfig)
 					// The "step" value is itself a mapping; find "type" inside it
 					if valNode.Kind == yaml.MappingNode {
 						for k := 0; k+1 < len(valNode.Content); k += 2 {
-							if valNode.Content[k].Value == "type" {
+							switch valNode.Content[k].Value {
+							case "type":
 								steps[idx].Step.TypeLoc = SourceLocation{
 									File:   filePath,
 									Line:   valNode.Content[k+1].Line,
 									Column: valNode.Content[k+1].Column,
 								}
+							case "options":
+								steps[idx].OptionLocs = optionLocations(valNode.Content[k+1], filePath)
 							}
 						}
 					}

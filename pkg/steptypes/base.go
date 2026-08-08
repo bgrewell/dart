@@ -129,6 +129,15 @@ func CreateSteps(configs []*config.StepConfig, nodes map[string]ifaces.Node) ([]
 }
 
 // optionError builds a ConfigError anchored at the step's location.
+// optionLoc returns where an option key is written, falling back to the step
+// itself when the key is absent or locations were not recorded.
+func optionLoc(c *config.StepConfig, key string) config.SourceLocation {
+	if loc, ok := c.OptionLocs[key]; ok {
+		return loc
+	}
+	return c.Loc
+}
+
 func optionError(c *config.StepConfig, format string, args ...interface{}) error {
 	return &config.ConfigError{
 		Message:  fmt.Sprintf(format, args...),
