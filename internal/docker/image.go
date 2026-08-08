@@ -48,7 +48,7 @@ func ListImages(ctx context.Context, cli *client.Client) ([]image.Summary, error
 	return images, nil
 }
 
-func RemoveImage(ctx context.Context, cli *client.Client, imageName string) error {
+func RemoveImage(ctx context.Context, cli client.APIClient, imageName string) error {
 	_, err := cli.ImageRemove(ctx, imageName, image.RemoveOptions{})
 	if err != nil {
 		return err

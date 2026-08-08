@@ -127,6 +127,13 @@ func (d *DockerNode) Setup() error {
 	if len(d.options.Entrypoint) > 0 {
 		opts = append(opts, docker.WithEntrypoint(d.options.Entrypoint))
 	}
+	if len(d.options.Networks) > 0 {
+		attachments := make([]docker.NetworkAttachment, 0, len(d.options.Networks))
+		for _, net := range d.options.Networks {
+			attachments = append(attachments, docker.NetworkAttachment{Name: net.Name, IPv4: net.Ip})
+		}
+		opts = append(opts, docker.WithNetworks(attachments))
+	}
 
 	// The hostname stays the node name even when the container is named
 	// something else, so node-side commands see the name the suite uses

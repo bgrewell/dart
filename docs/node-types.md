@@ -466,14 +466,35 @@ Three ways to satisfy the readiness check:
 
 Note: there is no `tty` option. A command that requires a terminal still fails.
 
-Warning: `networks` on a `docker` node is not implemented. The option parses but is
-never applied — `DockerNode.Setup` does not read it, and containers are created
-with an empty networking configuration and no network mode, so they attach to
-Docker's default bridge and the `subnet`/`ip` values have no effect. Platform-level
-`docker.networks` still creates and removes the named networks, but no container
-joins them. Because the default bridge has no embedded DNS, containers cannot
-resolve each other by node name; `{{ fact "<node>" "ipv4" }}` yields a container's
-actual bridge address. Node-level `networks` is implemented for `lxd` nodes only.
+`networks` attaches the container to networks the suite declares under
+`docker.networks`. Joining a user-defined network takes the container off the
+default bridge, which is what makes isolation between nodes real, and gives it
+Docker's embedded DNS so containers resolve each other by name.
+
+```yaml
+docker:
+  networks:
+    - name: frontend
+      subnet: 172.30.0.0/24
+      gateway: 172.30.0.1
+
+nodes:
+  - name: web
+    type: docker
+    options:
+      image: nginx:alpine
+      networks:
+        - name: frontend      # must name a declared docker.networks entry
+          ip: 172.30.0.10     # optional; requires the network to define a subnet
+```
+
+Note: Docker accepts one network at container creation, so the first entry is
+applied there and any others are connected immediately afterwards. The order
+of the list is preserved.
+
+Note: a node joins a network; it does not define one. Setting `subnet` on a
+node-level entry is a configuration error naming the right place for it —
+`docker.networks[].subnet`, which is what creates the network.
 
 Note: Docker and Docker Compose nodes always run commands as `sh -c "<command>"`
 inside the target container; the shell is not configurable. The `exec_opts` block
@@ -525,8 +546,9 @@ as `<name>:latest`: with a non-`latest` `tag`, the image DART just built is left
 behind while an unrelated `<name>:latest` is deleted instead. Suite-unique names
 are recommended, and `tag: latest` until the tag handling is fixed.
 
-Note: node-level `networks` is inert on docker nodes (see Docker Node Options), so
-the networks declared here are created and removed but joined by nothing.
+Note: the networks declared here are created before node setup and removed
+during platform teardown. A node joins one by naming it under the node's own
+`networks:` option.
 
 See `examples/docker/docker.yaml` for a complete worked example.
 
