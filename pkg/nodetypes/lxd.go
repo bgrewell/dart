@@ -569,6 +569,60 @@ func (d *LxdNode) NetworkFacts() (map[string]string, error) {
 	return facts, nil
 }
 
+var _ ifaces.Snapshotter = &LxdNode{}
+
+// Snapshot captures the instance's current state. A stateful snapshot
+// includes running memory (requires CRIU on the host); stateless captures
+// the disk only.
+func (d *LxdNode) Snapshot(name string, stateful bool) error {
+	if d.client == nil {
+		return helpers.WrapError("lxd client not initialized")
+	}
+	return lxd.CreateInstanceSnapshot(context.Background(), d.client, d.name, name, stateful)
+}
+
+// RestoreSnapshot rolls the instance back to a snapshot. LXD stops and
+// restarts a running instance to do so, so this blocks until the instance
+// accepts commands again — otherwise the next step races a booting
+// target. Instances that were stopped before the restore stay stopped and
+// are not waited on.
+func (d *LxdNode) RestoreSnapshot(name string, stateful bool) error {
+	if d.client == nil {
+		return helpers.WrapError("lxd client not initialized")
+	}
+
+	wasRunning := false
+	if state, _, err := d.client.GetInstanceState(d.name); err == nil {
+		wasRunning = state.Status == "Running"
+	}
+
+	if err := lxd.RestoreInstanceSnapshot(context.Background(), d.client, d.name, name, stateful); err != nil {
+		return err
+	}
+
+	if !wasRunning {
+		return nil
+	}
+	cfg := d.options.BootWait.readinessConfig()
+	command := d.options.BootWait.readyCommand(d.shell())
+	if err := lxd.WaitForInstanceCommand(context.Background(), d.client, d.name, command, cfg); err != nil {
+		return helpers.WrapError(fmt.Sprintf("instance %s did not become ready after restoring snapshot %s: %v", d.name, name, err))
+	}
+	return nil
+}
+
+// DeleteSnapshot removes a snapshot; a snapshot that no longer exists
+// counts as removed so teardown stays idempotent.
+func (d *LxdNode) DeleteSnapshot(name string) error {
+	if d.client == nil {
+		return helpers.WrapError("lxd client not initialized")
+	}
+	if err := lxd.DeleteInstanceSnapshot(context.Background(), d.client, d.name, name); err != nil && !lxd.IsNotFound(err) {
+		return err
+	}
+	return nil
+}
+
 var _ ifaces.Rebooter = &LxdNode{}
 
 // Reboot restarts the instance and blocks until it accepts commands again.

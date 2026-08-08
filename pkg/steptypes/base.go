@@ -25,6 +25,10 @@ const (
 	TypeServiceCheck = "service_check"
 	TypeReboot       = "reboot"
 	TypeWaitFor      = "wait_for"
+	TypeFilePush     = "file_push"
+	TypeFileFetch    = "file_fetch"
+	TypeFileTemplate = "file_template"
+	TypeSnapshot     = "snapshot"
 )
 
 // BaseStep provides a common structure for all step types.
@@ -73,6 +77,10 @@ var stepFactories = map[string]stepFactory{
 	TypeServiceCheck: newServiceCheckStep,
 	TypeReboot:       newRebootStep,
 	TypeWaitFor:      newWaitForStep,
+	TypeFilePush:     newFilePushStep,
+	TypeFileFetch:    newFileFetchStep,
+	TypeFileTemplate: newFileTemplateStep,
+	TypeSnapshot:     newSnapshotStep,
 }
 
 // CreateSteps constructs a slice of executable Steps based on provided configuration.

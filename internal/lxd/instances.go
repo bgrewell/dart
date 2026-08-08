@@ -179,6 +179,33 @@ func DeleteInstance(ctx context.Context, server lxd.InstanceServer, name string)
 	return nil
 }
 
+// RestoreInstanceSnapshot rolls an instance back to a snapshot. LXD stops
+// a running instance, restores its rootfs and config, and starts it again;
+// the instance is therefore unavailable during the operation and callers
+// must wait for readiness before using it. With stateful set, the
+// snapshot's saved memory is restored too (requires a stateful snapshot
+// and CRIU on the host) — without it LXD silently performs a plain
+// disk-only restore, discarding any saved memory state.
+func RestoreInstanceSnapshot(ctx context.Context, server lxd.InstanceServer, instanceName, snapshotName string, stateful bool) error {
+	instance, etag, err := server.GetInstance(instanceName)
+	if err != nil {
+		return fmt.Errorf("failed to get instance %s for restore: %w", instanceName, err)
+	}
+
+	req := instance.Writable()
+	req.Restore = snapshotName
+	req.Stateful = stateful
+
+	op, err := server.UpdateInstance(instanceName, req, etag)
+	if err != nil {
+		return fmt.Errorf("failed to restore snapshot %s on instance %s: %w", snapshotName, instanceName, err)
+	}
+	if err := op.Wait(); err != nil {
+		return fmt.Errorf("failed waiting for snapshot %s restore: %w", snapshotName, err)
+	}
+	return nil
+}
+
 // GetInstanceState returns the current state of an instance
 func GetInstanceState(ctx context.Context, server lxd.InstanceServer, name string) (*api.InstanceState, string, error) {
 	state, etag, err := server.GetInstanceState(name)

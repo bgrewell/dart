@@ -81,6 +81,18 @@ type NetworkInspector interface {
 	NetworkFacts() (map[string]string, error)
 }
 
+// Snapshotter is implemented by node types whose targets can be
+// snapshotted and rolled back, giving destructive tests cheap isolation:
+// snapshot in setup, break things, restore in teardown.
+type Snapshotter interface {
+	Snapshot(name string, stateful bool) error
+	// RestoreSnapshot rolls back to a snapshot and blocks until the target
+	// accepts commands again. With stateful set the snapshot's saved
+	// memory is restored too; the snapshot must have been taken stateful.
+	RestoreSnapshot(name string, stateful bool) error
+	DeleteSnapshot(name string) error
+}
+
 // Rebooter is implemented by node types that can restart their target and
 // block until it accepts commands again. With force set the restart models
 // a power cut (no clean shutdown). readyCommand overrides the node's

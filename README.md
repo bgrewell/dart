@@ -470,6 +470,89 @@ through their shell (requires standard POSIX tools on the node).
       ignore_errors: true    # missing file is not a failure
 ```
 
+#### File Transfer and Templating (`file_push`, `file_fetch`, `file_template`)
+Deploy repository files onto a node, pull artifacts back, or render one
+template per node. Local nodes use the filesystem directly; container and
+SSH nodes are driven through their shell.
+
+```yaml
+setup:
+  - name: deploy the service binary
+    node: app-server
+    step:
+      type: file_push
+      options:
+        source: build/myservice          # path on the machine running DART
+        dest: /usr/local/bin/myservice
+        overwrite: true
+        create_dir: true                 # mode defaults to the source's
+
+  - name: render per-node config
+    node: app-server
+    step:
+      type: file_template
+      options:
+        source: fixtures/app.conf.tmpl   # Go template: {{ .port }}
+        dest: /etc/myapp/app.conf
+        overwrite: true
+        mode: "0640"
+        values:
+          port: 8080
+          backend: "{{ fact \"db\" \"ipv4\" }}"
+
+teardown:
+  - name: keep the logs for triage
+    node: app-server
+    step:
+      type: file_fetch
+      options:
+        source: /var/log/myapp.log
+        dest: artifacts/myapp.log
+        create_dir: true
+```
+
+Templates are parsed at config load, so a broken one fails before the run
+starts, and a value that is missing or null is an error rather than a
+silently empty (or literal `<no value>`) config line. `file_fetch` refuses
+to overwrite an existing local file unless `overwrite: true`, so a fetched
+artifact cannot clobber a previous run's. Content to container and SSH
+nodes is written in chunks, so files are not limited by the shell's
+per-argument size cap.
+
+#### Snapshots (`snapshot`)
+Give destructive tests cheap isolation on LXD nodes: capture state in
+setup, break things, roll back in teardown — far faster than recreating
+a node.
+
+```yaml
+setup:
+  - name: capture clean state
+    node: iso-vm
+    step:
+      type: snapshot
+      options:
+        name: clean          # action defaults to create
+        # stateful: true     # include running memory (needs CRIU)
+
+Restoring a running instance stops and restarts it; DART blocks until the
+node accepts commands again, so a following step cannot race the reboot.
+
+teardown:
+  - name: roll back
+    node: iso-vm
+    step:
+      type: snapshot
+      options: { name: clean, action: restore }
+      # A snapshot taken with stateful: true must also be restored with
+      # stateful: true — otherwise LXD performs a disk-only restore and
+      # silently discards the saved memory.
+  - name: clean up the snapshot
+    node: iso-vm
+    step:
+      type: snapshot
+      options: { name: clean, action: delete }
+```
+
 #### Service Check (`service_check`)
 Verify a systemd service is active on the target node.
 
