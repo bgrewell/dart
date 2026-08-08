@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -29,6 +30,7 @@ type recordingFormatter struct {
 	skips   []string
 	tasks   []string
 	tests   []string
+	errors  []string
 	results struct {
 		pass, fail, skipped, ran int
 		printed                  bool
@@ -84,8 +86,10 @@ func (r *recordingFormatter) PrintSkip(name string, reason string) {
 	r.skips = append(r.skips, name)
 }
 
-func (r *recordingFormatter) PrintEmpty()          {}
-func (r *recordingFormatter) PrintError(err error) {}
+func (r *recordingFormatter) PrintEmpty() {}
+func (r *recordingFormatter) PrintError(err error) {
+	r.errors = append(r.errors, err.Error())
+}
 
 // fakePlatform records lifecycle calls.
 type fakePlatform struct {
@@ -111,10 +115,11 @@ func (p *fakePlatform) Teardown() error {
 // event log so ordering across nodes can be asserted.
 type trackingNode struct {
 	*nodetypes.MockNode
-	name     string
-	events   *[]string
-	mu       *sync.Mutex
-	setupErr error
+	name        string
+	events      *[]string
+	mu          *sync.Mutex
+	setupErr    error
+	teardownErr error
 }
 
 func (n *trackingNode) Setup() error {
@@ -128,7 +133,7 @@ func (n *trackingNode) Teardown() error {
 	n.mu.Lock()
 	*n.events = append(*n.events, "teardown:"+n.name)
 	n.mu.Unlock()
-	return nil
+	return n.teardownErr
 }
 
 type controllerFixture struct {
@@ -505,4 +510,69 @@ func TestControllerEmptyTagFilterFails(t *testing.T) {
 	err := tc.Run()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "excluded every test")
+}
+
+// A cleanup job that cannot report its own failure is worse than no cleanup
+// job: --teardown-only used to exit 0 no matter what went wrong.
+func TestControllerTeardownOnlyFailureExitsNonZero(t *testing.T) {
+	f := newFixture("n1")
+	f.nodes["n1"].(*trackingNode).teardownErr = errors.New("container still running")
+
+	teardownSteps := []*config.StepConfig{
+		{
+			Name: "failing cleanup",
+			Node: config.NodeReference{"n1"},
+			Step: config.StepDetails{
+				Type:    "execute",
+				Options: map[string]interface{}{"command": "exit 7"},
+			},
+		},
+		{
+			Name: "later cleanup",
+			Node: config.NodeReference{"n1"},
+			Step: config.StepDetails{
+				Type:    "execute",
+				Options: map[string]interface{}{"command": "echo ok"},
+			},
+		},
+	}
+
+	tc := NewTestController("suite", nil, f.nodes, f.configs, nil, teardownSteps, nil,
+		false, false, false, false, false, true, "", "", f.formatter)
+	err := tc.Run()
+
+	require.Error(t, err, "a failing teardown must not report success")
+	assert.Contains(t, err.Error(), "teardown failed")
+
+	// Best-effort is preserved: everything after the failure still ran
+	assert.Contains(t, f.formatter.tasks, "later cleanup@n1",
+		"cleanup must continue past a failing step")
+	assert.Contains(t, f.events, "teardown:n1",
+		"node teardown must run even after a step failed")
+
+	// Errors go through the formatter, which is what --log wraps. Printed
+	// with fmt.Printf they never reached the log file.
+	joined := strings.Join(f.formatter.errors, "\n")
+	assert.Contains(t, joined, "failing cleanup")
+	assert.Contains(t, joined, "cleaning up node n1")
+}
+
+// A clean teardown-only run still reports success.
+func TestControllerTeardownOnlyCleanExitsZero(t *testing.T) {
+	f := newFixture("n1")
+	teardownSteps := []*config.StepConfig{
+		{
+			Name: "tidy up",
+			Node: config.NodeReference{"n1"},
+			Step: config.StepDetails{
+				Type:    "execute",
+				Options: map[string]interface{}{"command": "echo ok"},
+			},
+		},
+	}
+
+	tc := NewTestController("suite", nil, f.nodes, f.configs, nil, teardownSteps, nil,
+		false, false, false, false, false, true, "", "", f.formatter)
+	require.NoError(t, tc.Run())
+	assert.Empty(t, f.formatter.errors)
 }

@@ -321,8 +321,9 @@ aborted runs, so a fixed expected-test-count assertion does not survive
 `--log` captures debug-streamed command output too, so `-d` and `-l` combine
 into a full transcript.
 
-Warning: `--teardown-only` is best-effort and always exits 0 — see
-[Exit Codes](#exit-codes) for what that hides and how to detect it.
+Note: `--teardown-only` is best-effort — it runs every cleanup operation even
+after one fails — and exits 1 if any of them did. See
+[Exit Codes](#exit-codes).
 
 ### Report Formats
 
@@ -473,41 +474,33 @@ test -s results.xml || { echo "dart did not run (bad invocation?)"; exit 1; }
 With `-i N` each iteration writes its own file (`results-1.xml`,
 `results-2.xml`, …), so the check covers the expected count of files.
 
-**Warning: `--teardown-only` is best-effort and always exits 0.** In
-teardown-only mode DART attempts every teardown step, then every node teardown,
-then every platform teardown, continuing past each failure so that one broken
-step cannot strand the rest of the cleanup. Failures are reported on the
-console — the task is marked `error` and the underlying error is printed, for
-example `Error running teardown step "drop test network": command failed with
-exit code 7` — but they are not propagated, and the command still exits 0. The
-only teardown-only failure that exits non-zero is a malformed `teardown:`
-section that cannot be constructed at all, such as an unknown step type, which
-fails before any cleanup runs.
+**`--teardown-only` is best-effort but reports its outcome.** DART attempts
+every teardown step, then every node teardown, then every platform teardown,
+continuing past each failure so one broken step cannot strand the rest of the
+cleanup. Each failure marks its task `error` and prints the reason; if
+anything failed, the run then exits 1 with a summary:
 
-Note: this differs from a normal run, where a failing teardown step aborts the
-remaining teardown and exits 1.
-
-Note: no report is written in teardown-only mode. `-r junit:…` and `-r json:…`
-are ignored on this path, so reports are not a substitute signal.
-
-A CI cleanup job that must fail when cleanup fails has to scrape the console
-stream, not the log file:
-
-```bash
-dart -c suite.yaml --teardown-only | tee teardown.log
-if grep -qE '^Error (running teardown step|cleaning up)' teardown.log; then exit 1; fi
+```
+Error: teardown failed: 1 of 4 cleanup operations did not complete;
+the first was: running teardown step "drop test network": command failed with exit code 7
 ```
 
-Warning: `--log` does not capture these messages. The three the teardown-only
-path emits — `Error running teardown step %q: …`, `Error cleaning up node
-%s: …`, and `Error cleaning up %s environment: …` — are printed directly to
-stdout rather than through the formatter that `--log` wraps, so a `-l` file
-contains the task lines and none of the errors. Piping the console output is
-the only way to see them.
+A CI cleanup job therefore needs no scraping — the exit status is the signal:
 
-Note the `if` rather than a trailing `grep … && exit 1`: as the last line of a
-script, a `grep` that matches nothing exits 1 and would fail the job precisely
-when cleanup succeeded.
+```bash
+dart -c suite.yaml --teardown-only     # non-zero if any cleanup failed
+```
+
+These messages go through the formatter, so `--log` captures them alongside
+the task lines.
+
+Note: this differs from a normal run only in how far cleanup gets. A normal
+run aborts the remaining teardown at the first failing step; teardown-only
+runs them all and reports at the end. Both exit 1.
+
+Note: no report is written in teardown-only mode. `-r junit:…` and `-r json:…`
+are ignored on this path, so the exit status is the only machine-readable
+signal.
 
 ---
 

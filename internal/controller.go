@@ -317,11 +317,24 @@ func (tc *TestController) Run() error {
 		tc.setFormattingWidths()
 
 		tc.formatter.PrintHeader("Running teardown only")
+
+		// Cleanup is best-effort: every stage runs even after an earlier
+		// failure, since leaving resources behind is worse than a partial
+		// teardown. Failures are collected and reported at the end so the
+		// exit status still reflects them.
+		var teardownFailures []error
+		report := func(err error) {
+			teardownFailures = append(teardownFailures, err)
+			// Through the formatter, so --log captures it: these messages
+			// are the only signal a cleanup job has
+			tc.formatter.PrintError(err)
+		}
+
 		for _, step := range tc.Teardown {
 			f := tc.formatter.StartTask(step.Title(), step.NodeName(), "running")
 			if err := step.Run(f); err != nil {
 				f.Error()
-				fmt.Printf("Error running teardown step %q: %s\n", step.Title(), err)
+				report(fmt.Errorf("running teardown step %q: %w", step.Title(), err))
 			}
 		}
 
@@ -329,7 +342,7 @@ func (tc *TestController) Run() error {
 			c := tc.formatter.StartTask(nodeTeardownMsg, name, "running")
 			if err := tc.Nodes[name].Teardown(); err != nil {
 				c.Error()
-				fmt.Printf("Error cleaning up node %s: %s\n", name, err)
+				report(fmt.Errorf("cleaning up node %s: %w", name, err))
 				continue
 			}
 			c.Complete()
@@ -343,13 +356,20 @@ func (tc *TestController) Run() error {
 			t := tc.formatter.StartTask(fmt.Sprintf("tearing down %s environment", platform.Name()), "", "running")
 			if err := platform.Teardown(); err != nil {
 				t.Error()
-				fmt.Printf("Error cleaning up %s environment: %s\n", platform.Name(), err)
+				report(fmt.Errorf("cleaning up %s environment: %w", platform.Name(), err))
 				continue
 			}
 			t.Complete()
 		}
 
 		cleanupComplete = true
+
+		// A cleanup job that cannot report its own failure is worse than no
+		// cleanup job, so the exit status carries the outcome
+		if len(teardownFailures) > 0 {
+			return fmt.Errorf("teardown failed: %d of %d cleanup operations did not complete; the first was: %w",
+				len(teardownFailures), len(tc.Teardown)+len(tc.Nodes)+len(tc.Platforms), teardownFailures[0])
+		}
 		return nil
 	}
 
