@@ -42,3 +42,11 @@ func TestGatherFactsFromMockNode(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "10.0.0.5", out)
 }
+
+// A command shared across nodes has no single "self": resolving it to the
+// first node would silently feed that node's data to all the others.
+func TestSelfAmbiguousWithoutCurrentNode(t *testing.T) {
+	_, err := RenderTemplate(`echo {{ fact "self" "ip" }}`, shieldStore, "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ambiguous")
+}

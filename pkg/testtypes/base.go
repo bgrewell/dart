@@ -25,6 +25,7 @@ const (
 	TypeServiceStatus = "service_status"
 	TypeReboot        = "reboot"
 	TypeTLSCert       = "tls_cert"
+	TypeConsistency   = config.TypeConsistency
 )
 
 // testFactory constructs a test from its base and raw options. Invalid
@@ -44,6 +45,7 @@ var testFactories = map[string]testFactory{
 	TypeServiceStatus: newServiceStatusTest,
 	TypeReboot:        newRebootTest,
 	TypeTLSCert:       newTLSCertTest,
+	TypeConsistency:   newConsistencyTest,
 }
 
 type BaseTest struct {
@@ -62,6 +64,10 @@ type BaseTest struct {
 	// Zero retryTimeout disables retrying.
 	retryTimeout  time.Duration
 	retryInterval time.Duration
+	// peerNodes/nodeNames serve test types that span nodes (consistency);
+	// single-node types use node/nodeName as before.
+	peerNodes map[string]ifaces.Node
+	nodeNames []string
 }
 
 func (t *BaseTest) Name() string {
@@ -306,6 +312,8 @@ func CreateTests(configs []*config.TestConfig, nodes map[string]ifaces.Node) (te
 			name:       cfg.Name,
 			nodeName:   nodeName,
 			node:       node,
+			peerNodes:  nodes,
+			nodeNames:  cfg.Node,
 			testType:   cfg.Type,
 			setup:      cfg.Setup,
 			teardown:   cfg.Teardown,
