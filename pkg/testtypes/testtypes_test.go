@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os/exec"
 	"strconv"
 	"strings"
 	"testing"
@@ -35,6 +36,23 @@ func makeTest(t *testing.T, node ifaces.Node, testType string, options map[strin
 	}
 	require.Len(t, tests, 1)
 	return tests[0], nil
+}
+
+// localNode returns a node that really executes commands, so node-side
+// probes are exercised end to end rather than mocked.
+func localNode(t *testing.T) ifaces.Node {
+	t.Helper()
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("a POSIX shell is required for node-side probes")
+	}
+	return nodetypes.NewLocalNode("test-node", nil)
+}
+
+func skipWithoutTool(t *testing.T, tool string) {
+	t.Helper()
+	if _, err := exec.LookPath(tool); err != nil {
+		t.Skipf("%s is required for this test", tool)
+	}
 }
 
 func runTest(t *testing.T, test ifaces.Test) map[string]*eval.EvaluateResult {
@@ -239,27 +257,56 @@ func TestHTTPRequestTest(t *testing.T) {
 	}))
 	defer server.Close()
 
-	node := nodetypes.NewMockNode()
-	test, err := makeTest(t, node, TypeHTTPRequest, map[string]interface{}{
-		"url":     server.URL + "/health",
-		"headers": map[string]interface{}{"User-Agent": "test-agent"},
-		"evaluate": map[string]interface{}{
-			"status_code": 200,
-			"contains":    "healthy",
-			"json_path":   map[string]interface{}{"path": "status", "equals": "healthy"},
-		},
-	})
-	require.NoError(t, err)
-	allPassed(t, runTest(t, test))
+	// The default vantage is the node; from: host must produce an
+	// identical result when the node is the local machine
+	for _, from := range []string{"", "node", "host"} {
+		t.Run("from="+from, func(t *testing.T) {
+			node := nodetypes.NewMockNode()
+			if from != "host" {
+				skipWithoutTool(t, "curl")
+				node = nil
+			}
+			options := map[string]interface{}{
+				"url":     server.URL + "/health",
+				"headers": map[string]interface{}{"User-Agent": "test-agent"},
+				"evaluate": map[string]interface{}{
+					"status_code": 200,
+					"contains":    "healthy",
+					"json_path":   map[string]interface{}{"path": "status", "equals": "healthy"},
+				},
+			}
+			if from != "" {
+				options["from"] = from
+			}
 
-	// Default evaluate asserts status 200; a 404 fails it
-	missing, err := makeTest(t, node, TypeHTTPRequest, map[string]interface{}{
-		"url":     server.URL + "/nope",
-		"headers": map[string]interface{}{"User-Agent": "test-agent"},
+			target := ifaces.Node(node)
+			if node == nil {
+				target = localNode(t)
+			}
+			test, err := makeTest(t, target, TypeHTTPRequest, options)
+			require.NoError(t, err)
+			allPassed(t, runTest(t, test))
+
+			// Default evaluate asserts status 200; a 404 fails it
+			missingOptions := map[string]interface{}{
+				"url":     server.URL + "/nope",
+				"headers": map[string]interface{}{"User-Agent": "test-agent"},
+			}
+			if from != "" {
+				missingOptions["from"] = from
+			}
+			missing, err := makeTest(t, target, TypeHTTPRequest, missingOptions)
+			require.NoError(t, err)
+			results := runTest(t, missing)
+			assert.False(t, results["status_code"].Passed)
+		})
+	}
+
+	_, err := makeTest(t, nodetypes.NewMockNode(), TypeHTTPRequest, map[string]interface{}{
+		"url":  "http://localhost/",
+		"from": "elsewhere",
 	})
-	require.NoError(t, err)
-	results := runTest(t, missing)
-	assert.False(t, results["status_code"].Passed)
+	assert.ErrorContains(t, err, `from must be "node" or "host"`)
 }
 
 func TestPortCheckTest(t *testing.T) {
@@ -271,7 +318,7 @@ func TestPortCheckTest(t *testing.T) {
 	openPort, err := strconv.Atoi(portStr)
 	require.NoError(t, err)
 
-	node := nodetypes.NewMockNode()
+	node := localNode(t)
 	open, err := makeTest(t, node, TypePortCheck, map[string]interface{}{
 		"host": "127.0.0.1",
 		"port": openPort,

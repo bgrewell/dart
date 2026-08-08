@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"net"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 	"github.com/bgrewell/dart/internal/eval"
 	"github.com/bgrewell/dart/internal/execution"
 	"github.com/bgrewell/dart/internal/formatters"
+	"github.com/bgrewell/dart/internal/probe"
 	"github.com/bgrewell/dart/internal/results"
 	"github.com/bgrewell/dart/pkg/ifaces"
 )
@@ -130,7 +132,31 @@ func newTLSCertTest(base BaseTest, opts map[string]interface{}) (ifaces.Test, er
 		evaluations["min_days_remaining"] = &certDaysCheck{minDays: 0}
 	}
 
+	from, err := parseVantage(base.name, opts)
+	if err != nil {
+		return nil, err
+	}
+
 	base.evaluations = evaluations
+	if from == VantageNode {
+		return &commandTest{
+			BaseTest: base,
+			build: func(resolve func(string) (string, error)) (string, error) {
+				resolvedHost, err := resolve(host)
+				if err != nil {
+					return "", err
+				}
+				resolvedName, err := resolve(serverName)
+				if err != nil {
+					return "", err
+				}
+				return probe.TLSCommand(resolvedHost, port, resolvedName), nil
+			},
+			timeout:   time.Duration((timeoutSeconds + 5) * float64(time.Second)),
+			transform: tlsProbeResult(serverName),
+		}, nil
+	}
+
 	return &TLSCertTest{
 		BaseTest:   base,
 		host:       host,
@@ -178,33 +204,8 @@ func (t *TLSCertTest) inspect() (*execution.ExecutionResult, error) {
 	if len(certs) == 0 {
 		return nil, fmt.Errorf("no peer certificates from %s", address)
 	}
-	leaf := certs[0]
 
-	intermediates := x509.NewCertPool()
-	for _, cert := range certs[1:] {
-		intermediates.AddCert(cert)
-	}
-	_, verifyErr := leaf.Verify(x509.VerifyOptions{
-		DNSName:       t.serverName,
-		Intermediates: intermediates,
-	})
-
-	ips := make([]string, 0, len(leaf.IPAddresses))
-	for _, ip := range leaf.IPAddresses {
-		ips = append(ips, ip.String())
-	}
-
-	facts := certFacts{
-		Subject:       leaf.Subject.String(),
-		Issuer:        leaf.Issuer.String(),
-		DNSNames:      leaf.DNSNames,
-		IPAddresses:   ips,
-		NotBefore:     leaf.NotBefore.UTC().Format(time.RFC3339),
-		NotAfter:      leaf.NotAfter.UTC().Format(time.RFC3339),
-		DaysRemaining: time.Until(leaf.NotAfter).Hours() / 24,
-		ChainValid:    verifyErr == nil,
-	}
-	payload, err := json.Marshal(facts)
+	payload, err := json.Marshal(certFactsFrom(certs, t.serverName))
 	if err != nil {
 		return nil, err
 	}
@@ -214,6 +215,85 @@ func (t *TLSCertTest) inspect() (*execution.ExecutionResult, error) {
 		Stdout:   strings.NewReader(string(payload)),
 		Stderr:   strings.NewReader(""),
 	}, nil
+}
+
+// tlsProbeResult parses the PEM chain the node returned into the same
+// facts the host-side handshake produces.
+func tlsProbeResult(serverName string) func(*execution.ExecutionResult) (*execution.ExecutionResult, error) {
+	return func(result *execution.ExecutionResult) (*execution.ExecutionResult, error) {
+		stdout, err := result.StdoutBytes()
+		if err != nil {
+			return nil, err
+		}
+		if result.ExitCode == probe.MissingToolExitCode {
+			stderr, _ := result.StderrBytes()
+			return nil, fmt.Errorf("%s", strings.TrimSpace(string(stderr)))
+		}
+
+		var certs []*x509.Certificate
+		rest := stdout
+		for {
+			var block *pem.Block
+			block, rest = pem.Decode(rest)
+			if block == nil {
+				break
+			}
+			if block.Type != "CERTIFICATE" {
+				continue
+			}
+			cert, parseErr := x509.ParseCertificate(block.Bytes)
+			if parseErr != nil {
+				return nil, fmt.Errorf("could not parse a certificate returned by the node: %w", parseErr)
+			}
+			certs = append(certs, cert)
+		}
+		if len(certs) == 0 {
+			return nil, fmt.Errorf("no certificate returned by the node (the endpoint may not be reachable from it)")
+		}
+
+		payload, err := json.Marshal(certFactsFrom(certs, serverName))
+		if err != nil {
+			return nil, err
+		}
+		return &execution.ExecutionResult{
+			ExitCode: 0,
+			Stdout:   strings.NewReader(string(payload)),
+			Stderr:   strings.NewReader(""),
+			Duration: result.Duration,
+		}, nil
+	}
+}
+
+// certFactsFrom summarizes a peer chain. Chain verification uses the
+// controller's root store in both modes, so the result does not depend on
+// which node happened to fetch the certificate.
+func certFactsFrom(certs []*x509.Certificate, serverName string) certFacts {
+	leaf := certs[0]
+
+	intermediates := x509.NewCertPool()
+	for _, cert := range certs[1:] {
+		intermediates.AddCert(cert)
+	}
+	_, verifyErr := leaf.Verify(x509.VerifyOptions{
+		DNSName:       serverName,
+		Intermediates: intermediates,
+	})
+
+	ips := make([]string, 0, len(leaf.IPAddresses))
+	for _, ip := range leaf.IPAddresses {
+		ips = append(ips, ip.String())
+	}
+
+	return certFacts{
+		Subject:       leaf.Subject.String(),
+		Issuer:        leaf.Issuer.String(),
+		DNSNames:      leaf.DNSNames,
+		IPAddresses:   ips,
+		NotBefore:     leaf.NotBefore.UTC().Format(time.RFC3339),
+		NotAfter:      leaf.NotAfter.UTC().Format(time.RFC3339),
+		DaysRemaining: time.Until(leaf.NotAfter).Hours() / 24,
+		ChainValid:    verifyErr == nil,
+	}
 }
 
 // parseCertFacts reloads the JSON facts from a result's stdout.

@@ -67,6 +67,14 @@ func startTLSServer(t *testing.T, notAfter time.Time, dnsNames []string, org str
 	return "127.0.0.1", addr.Port
 }
 
+// tlsNode returns a node that really runs the probe, so the default
+// vantage — the test's own node — is what the suite exercises.
+func tlsNode(t *testing.T) ifaces.Node {
+	t.Helper()
+	skipWithoutTool(t, "openssl")
+	return localNode(t)
+}
+
 func tlsTest(t *testing.T, host string, port int, evaluate map[string]interface{}) map[string]interface{} {
 	t.Helper()
 	options := map[string]interface{}{
@@ -84,7 +92,7 @@ func tlsTest(t *testing.T, host string, port int, evaluate map[string]interface{
 func TestTLSCertValidWindow(t *testing.T) {
 	host, port := startTLSServer(t, time.Now().Add(90*24*time.Hour), []string{"dart.test", "alt.dart.test"}, "DART Org")
 
-	test, err := makeTest(t, nodetypes.NewMockNode(), TypeTLSCert, tlsTest(t, host, port, map[string]interface{}{
+	test, err := makeTest(t, tlsNode(t), TypeTLSCert, tlsTest(t, host, port, map[string]interface{}{
 		"min_days_remaining": 30,
 		"dns_names":          []interface{}{"dart.test", "alt.dart.test"},
 		// Self-signed: the issuer is the certificate's own subject
@@ -100,7 +108,7 @@ func TestTLSCertValidWindow(t *testing.T) {
 func TestTLSCertExpiringSoonFails(t *testing.T) {
 	host, port := startTLSServer(t, time.Now().Add(5*24*time.Hour), []string{"dart.test"}, "DART Org")
 
-	test, err := makeTest(t, nodetypes.NewMockNode(), TypeTLSCert, tlsTest(t, host, port, map[string]interface{}{
+	test, err := makeTest(t, tlsNode(t), TypeTLSCert, tlsTest(t, host, port, map[string]interface{}{
 		"min_days_remaining": 30,
 	}))
 	require.NoError(t, err)
@@ -113,7 +121,7 @@ func TestTLSCertExpiringSoonFails(t *testing.T) {
 func TestTLSCertExpiredInspectable(t *testing.T) {
 	host, port := startTLSServer(t, time.Now().Add(-24*time.Hour), []string{"dart.test"}, "DART Org")
 
-	test, err := makeTest(t, nodetypes.NewMockNode(), TypeTLSCert, tlsTest(t, host, port, nil))
+	test, err := makeTest(t, tlsNode(t), TypeTLSCert, tlsTest(t, host, port, nil))
 	require.NoError(t, err)
 	results := runTest(t, test)
 	assert.False(t, results["min_days_remaining"].Passed, "default check is not-expired")
@@ -122,7 +130,7 @@ func TestTLSCertExpiredInspectable(t *testing.T) {
 func TestTLSCertMissingName(t *testing.T) {
 	host, port := startTLSServer(t, time.Now().Add(90*24*time.Hour), []string{"dart.test"}, "DART Org")
 
-	test, err := makeTest(t, nodetypes.NewMockNode(), TypeTLSCert, tlsTest(t, host, port, map[string]interface{}{
+	test, err := makeTest(t, tlsNode(t), TypeTLSCert, tlsTest(t, host, port, map[string]interface{}{
 		"dns_names": []interface{}{"other.example"},
 	}))
 	require.NoError(t, err)
@@ -135,13 +143,13 @@ func TestTLSCertMissingName(t *testing.T) {
 func TestTLSCertChainValidity(t *testing.T) {
 	host, port := startTLSServer(t, time.Now().Add(90*24*time.Hour), []string{"dart.test"}, "DART Org")
 
-	selfSigned, err := makeTest(t, nodetypes.NewMockNode(), TypeTLSCert, tlsTest(t, host, port, map[string]interface{}{
+	selfSigned, err := makeTest(t, tlsNode(t), TypeTLSCert, tlsTest(t, host, port, map[string]interface{}{
 		"chain_valid": false,
 	}))
 	require.NoError(t, err)
 	allPassed(t, runTest(t, selfSigned))
 
-	expectValid, err := makeTest(t, nodetypes.NewMockNode(), TypeTLSCert, tlsTest(t, host, port, map[string]interface{}{
+	expectValid, err := makeTest(t, tlsNode(t), TypeTLSCert, tlsTest(t, host, port, map[string]interface{}{
 		"chain_valid": true,
 	}))
 	require.NoError(t, err)
@@ -153,7 +161,7 @@ func TestTLSCertChainValidity(t *testing.T) {
 func TestTLSCertStandardEvaluators(t *testing.T) {
 	host, port := startTLSServer(t, time.Now().Add(90*24*time.Hour), []string{"dart.test"}, "DART Org")
 
-	test, err := makeTest(t, nodetypes.NewMockNode(), TypeTLSCert, tlsTest(t, host, port, map[string]interface{}{
+	test, err := makeTest(t, tlsNode(t), TypeTLSCert, tlsTest(t, host, port, map[string]interface{}{
 		"json_path": map[string]interface{}{"path": "chain_valid", "equals": false},
 		"contains":  "dart.test",
 	}))
@@ -168,17 +176,17 @@ func TestTLSCertUnreachable(t *testing.T) {
 	port, _ := strconv.Atoi(portStr)
 	listener.Close()
 
-	test, err := makeTest(t, nodetypes.NewMockNode(), TypeTLSCert, map[string]interface{}{
+	test, err := makeTest(t, tlsNode(t), TypeTLSCert, map[string]interface{}{
 		"host": "127.0.0.1", "port": port, "timeout": 1,
 	})
 	require.NoError(t, err)
 	_, runErr := test.Run(formatters.NewMockTestCompleter())
 	require.Error(t, runErr)
-	assert.Contains(t, runErr.Error(), "tls handshake")
+	assert.Contains(t, runErr.Error(), "no certificate returned by the node")
 }
 
 func TestTLSCertValidation(t *testing.T) {
-	node := nodetypes.NewMockNode()
+	node := tlsNode(t)
 	_, err := makeTest(t, node, TypeTLSCert, map[string]interface{}{})
 	assert.ErrorContains(t, err, "host is required")
 
@@ -261,11 +269,11 @@ func TestPortCheckFromNodeUnsupportedIsLoud(t *testing.T) {
 }
 
 func TestPortCheckFromValidation(t *testing.T) {
-	_, err := makeTest(t, nodetypes.NewMockNode(), TypePortCheck, map[string]interface{}{
+	_, err := makeTest(t, tlsNode(t), TypePortCheck, map[string]interface{}{
 		"host": "x", "port": 80, "from": "somewhere",
 	})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), `"host" or "node"`)
+	assert.Contains(t, err.Error(), `"node" or "host"`)
 }
 
 // The probe never inlines the host into an inner shell string.
@@ -285,6 +293,23 @@ func TestTLSCertIPSAN(t *testing.T) {
 		"host": host, "port": port, "server_name": "dart.test", "timeout": 5,
 		"evaluate": map[string]interface{}{"dns_names": []interface{}{"127.0.0.1"}},
 	}
+	test, err := makeTest(t, tlsNode(t), TypeTLSCert, options)
+	require.NoError(t, err)
+	allPassed(t, runTest(t, test))
+}
+
+// Host-side inspection reaches the same conclusions as node-side, so a
+// suite can switch vantage without rewriting its checks.
+func TestTLSCertFromHost(t *testing.T) {
+	host, port := startTLSServer(t, time.Now().Add(90*24*time.Hour), []string{"dart.test"}, "DART Org")
+
+	options := tlsTest(t, host, port, map[string]interface{}{
+		"min_days_remaining": 30,
+		"dns_names":          []interface{}{"dart.test"},
+		"issuer_contains":    "DART Org",
+	})
+	options["from"] = "host"
+
 	test, err := makeTest(t, nodetypes.NewMockNode(), TypeTLSCert, options)
 	require.NoError(t, err)
 	allPassed(t, runTest(t, test))
