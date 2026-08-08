@@ -167,7 +167,9 @@ func RestartInstance(ctx context.Context, server lxd.InstanceServer, name string
 
 // DeleteInstance deletes an instance
 func DeleteInstance(ctx context.Context, server lxd.InstanceServer, name string) error {
-	op, err := server.DeleteInstance(name)
+	// force=false reproduces the pre-upgrade request exactly; callers stop
+	// the instance before deleting it
+	op, err := server.DeleteInstance(name, false)
 	if err != nil {
 		return fmt.Errorf("failed to delete instance %s: %w", name, err)
 	}
@@ -434,7 +436,11 @@ func CreateInstanceSnapshot(ctx context.Context, server lxd.InstanceServer, inst
 
 // DeleteInstanceSnapshot deletes a snapshot
 func DeleteInstanceSnapshot(ctx context.Context, server lxd.InstanceServer, instanceName, snapshotName string) error {
-	op, err := server.DeleteInstanceSnapshot(instanceName, snapshotName)
+	// Snapshots are created without a disk-volumes mode, so they cover the
+	// root volume only; deleting with the matching mode keeps the pair
+	// symmetric and avoids requiring the instance_snapshots_multi_volume
+	// server extension that all-exclusive needs
+	op, err := server.DeleteInstanceSnapshot(instanceName, snapshotName, api.DiskVolumesModeRoot)
 	if err != nil {
 		return fmt.Errorf("failed to delete snapshot %s for instance %s: %w", snapshotName, instanceName, err)
 	}

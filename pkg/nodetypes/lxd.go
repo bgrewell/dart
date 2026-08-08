@@ -824,8 +824,9 @@ func (d *LxdNode) Teardown() error {
 		}
 	}
 
-	// Create a delete request
-	op, err = d.client.DeleteInstance(d.instanceName())
+	// Create a delete request. force=false reproduces the pre-upgrade
+	// request; the instance was stopped above.
+	op, err = d.client.DeleteInstance(d.instanceName(), false)
 	if err != nil {
 		return helpers.WrapError(fmt.Sprintf("error deleting instance: %v", err))
 	}
