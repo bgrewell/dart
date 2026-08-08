@@ -9,6 +9,7 @@ import (
 	"github.com/bgrewell/dart/internal/execution"
 	"github.com/bgrewell/dart/internal/formatters"
 	"github.com/bgrewell/dart/pkg/ifaces"
+	"github.com/bgrewell/dart/pkg/nodetypes"
 )
 
 var _ ifaces.Test = &RebootTest{}
@@ -32,7 +33,8 @@ type RebootTest struct {
 // default asserts the reboot completed.
 func newRebootTest(base BaseTest, opts map[string]interface{}) (ifaces.Test, error) {
 	if _, ok := base.node.(ifaces.Rebooter); !ok {
-		return nil, fmt.Errorf("node %q does not support reboot (supported: lxd, ssh) in test %q", base.nodeName, base.name)
+		return nil, fmt.Errorf("node %q does not support reboot (supported: %s) in test %q",
+			base.nodeName, nodetypes.SupportingTypes(nodetypes.CapabilityReboot), base.name)
 	}
 	// Retrying a reboot test would power-cycle the target on every failed
 	// evaluation — reject rather than surprise

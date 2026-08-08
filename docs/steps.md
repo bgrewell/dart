@@ -594,11 +594,10 @@ tolerated, so teardown is safe to re-run or to run after a restore that already
 consumed the snapshot. Note that DART does not verify the snapshot existed before
 deleting it.
 
-Note: `--check` currently rejects any suite containing a `snapshot` step, failing
-with `node "<name>" does not support snapshots (supported: lxd) in step "<name>"` even when the
-node really is an LXD instance. The `--check` harness substitutes a mock for
-every node and that mock does not implement the snapshot capability; it does
-implement reboot, so `reboot` steps and tests validate normally. On a real run
+`--check` substitutes a stand-in for every node that implements exactly the
+capabilities the declared type really has, so a `snapshot` step on an `lxd`
+node validates and the same step on a `docker` node is rejected — matching what
+a real run does in both directions. On a real run
 the capability check happens during step construction, after platform and node
 setup and fact gathering — so a suite that uses snapshots has to be validated by
 running it rather than by `--check`.
@@ -632,13 +631,13 @@ Options:
   Omitted or `0` means: on LXD, reuse the node's `boot_wait` timeout; on SSH,
   wait up to five minutes.
 
-The node must support rebooting, which only `lxd` and `ssh` nodes do. A node type
-that cannot reboot fails when the step is constructed — after platform and node
-setup, before the first setup step runs — with
-`node "<name>" does not support reboot (supported: lxd, ssh) in step "<name>"`.
-Warning: `--check` does not catch this. Its mock node implements reboot, so a
-suite that reboots a docker node validates clean and only fails on a real run,
-after the containers have been created. `reboot` is also available as a test type; see [Tests](tests.md), which
+The node must support rebooting, which only `lxd`, `lxd-vm`, and `ssh` nodes do.
+A node type that cannot reboot fails when the step is constructed — after
+platform and node setup, before the first setup step runs — with
+`node "<name>" does not support reboot (supported: lxd, lxd-vm, ssh) in step "<name>"`.
+`--check` catches it too, before any container is created.
+
+`reboot` is also available as a test type; see [Tests](tests.md), which
 covers the LXD and SSH readiness behaviour in more detail and notes that `retry:`
 is rejected on `reboot` tests.
 

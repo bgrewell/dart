@@ -494,15 +494,14 @@ Useful flags for pipelines:
 | `-s`, `--stop-on-error` | Stop at the first failure |
 | `-d`, `--debug` | Stream command output live while debugging a suite |
 
-Two limits on `--check` are worth knowing before it is wired into a
-pre-commit hook. It substitutes a stand-in node for every declared node, and
-that stand-in does not implement snapshots, so a suite containing a
-`snapshot` step is rejected with `node "..." does not support snapshots`
-even when the real node type supports them. It also validates only what step
-construction can check without a live node: `file_template` reads and parses
-its source when the step is built, so a missing or broken template is caught,
-whereas a missing
-`file_push` source is not — that surfaces mid-setup, after nodes exist.
+One limit on `--check` is worth knowing before it is wired into a pre-commit
+hook: it validates only what step construction can check without a live node.
+`file_template` reads and parses its source when the step is built, so a
+missing or broken template is caught, whereas a missing `file_push` source is
+not — that surfaces mid-setup, after nodes exist. The stand-in node it
+substitutes for each declared node implements exactly that type's real
+capabilities, so `reboot` and `snapshot` steps are accepted or rejected
+exactly as a real run would.
 
 Parameterize suites so one file serves every environment:
 
