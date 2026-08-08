@@ -1,3 +1,0 @@
-# Troubleshooting
-
-Start typing here...

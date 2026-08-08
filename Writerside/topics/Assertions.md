@@ -1,3 +1,0 @@
-# Assertions
-
-Start typing here...

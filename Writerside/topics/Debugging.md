@@ -1,3 +1,0 @@
-# Debugging
-
-Start typing here...
