@@ -69,8 +69,8 @@ Teardown steps behave differently depending on how DART was invoked:
   declaration order, platforms in reverse — reporting failures without aborting.
 - **`--teardown-only`** — teardown steps are best-effort. Every step runs even
   if earlier ones fail; failures are printed and the run continues into node and
-  platform teardown. This mode exists for cleaning up after an aborted run,
-  where some resources may already be gone.
+  platform teardown, then exits 1 if any of them failed. This mode exists for
+  cleaning up after an aborted run, where some resources may already be gone.
 
 Because a normal run stops at the first failure, order matters in a cleanup
 chain: the steps that must always run belong first, or each step is written to
