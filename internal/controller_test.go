@@ -492,3 +492,17 @@ func TestControllerUntilTargetFilteredByTags(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "excluded by the --only/--skip tag filter")
 }
+
+// A tag filter that excludes every test must fail: a green run that
+// executed nothing is the worst possible CI result.
+func TestControllerEmptyTagFilterFails(t *testing.T) {
+	f := newFixture("n1")
+	tc := f.controller([]*config.TestConfig{
+		taggedTest("only-slow", "n1", "slow"),
+	})
+	tc.SetTagFilters([]string{"nonexistent"}, nil)
+
+	err := tc.Run()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "excluded every test")
+}

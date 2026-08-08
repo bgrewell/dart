@@ -19,6 +19,12 @@ type EvaluateJSONPath struct {
 	Expected interface{}
 }
 
+// trimJSONPathPrefix accepts the JSONPath-style "$." / "$" prefix, so a
+// path written for extract: also works here.
+func trimJSONPathPrefix(path string) string {
+	return strings.TrimPrefix(strings.TrimPrefix(path, "$."), "$")
+}
+
 // newJSONPath accepts a {path, equals} map. The path is validated at
 // config-load time.
 func newJSONPath(value interface{}) (Evaluate, error) {
@@ -43,6 +49,7 @@ func newJSONPath(value interface{}) (Evaluate, error) {
 			return nil, fmt.Errorf("unknown key %q", key)
 		}
 	}
+	path = trimJSONPathPrefix(path)
 	if _, err := parseJSONPath(path); err != nil {
 		return nil, err
 	}
@@ -102,7 +109,7 @@ func (j *EvaluateJSONPath) Verify(execResult *execution.ExecutionResult) (result
 // "items[0].name"). A leading "$." or "$" (JSONPath style) is accepted
 // and ignored.
 func ExtractJSONPath(jsonText, path string) (interface{}, error) {
-	path = strings.TrimPrefix(strings.TrimPrefix(path, "$."), "$")
+	path = trimJSONPathPrefix(path)
 	var doc interface{}
 	decoder := json.NewDecoder(strings.NewReader(jsonText))
 	if err := decoder.Decode(&doc); err != nil {
@@ -113,7 +120,7 @@ func ExtractJSONPath(jsonText, path string) (interface{}, error) {
 
 // ValidateJSONPath reports whether path parses, for config-time validation.
 func ValidateJSONPath(path string) error {
-	path = strings.TrimPrefix(strings.TrimPrefix(path, "$."), "$")
+	path = trimJSONPathPrefix(path)
 	_, err := parseJSONPath(path)
 	return err
 }
