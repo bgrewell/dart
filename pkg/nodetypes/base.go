@@ -112,6 +112,18 @@ func ValidateNodeOptions(cfg *config.NodeConfig) error {
 		if err := opts.validate(); err != nil {
 			return err
 		}
+		for _, network := range opts.Networks {
+			// A node attaches to an existing bridge; it does not define
+			// one. subnet here consumed nothing, so a suite that set it
+			// read as though the node's addressing were configured.
+			if network.Subnet != "" {
+				return fmt.Errorf("network %q sets subnet, which a node cannot do: the subnet belongs on the suite's lxd.networks entry that creates the bridge",
+					network.Name)
+			}
+			if network.Name == "" {
+				return fmt.Errorf("a networks entry is missing name")
+			}
+		}
 	}
 	return nil
 }

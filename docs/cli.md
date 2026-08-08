@@ -50,9 +50,16 @@ DART accepts no positional arguments. The suite file is selected with
 `-c`/`--config`, which defaults to `config.yaml` in the working directory.
 
 Warning: `dart --help` still prints `[ARGUMENTS]` in its synopsis — that string
-is hardcoded by the underlying usage library — but a positional argument is not
-parsed. `dart suite.yaml` aborts with a runtime panic and exit code 2 instead of
-running the suite. The suite file always goes after `-c`: `dart -c suite.yaml`.
+is hardcoded by the underlying usage library — but DART takes no positional
+arguments. A stray one is rejected with exit code 2, and a suite path given
+without `-c` says so directly:
+
+```text
+Error: unexpected argument "suite.yaml"
+
+The suite file goes after -c:
+    dart -c suite.yaml
+```
 
 ### Flag Syntax
 

@@ -306,9 +306,14 @@ func (tc *TestController) Run() error {
 	// teardown sequence: teardown steps, then nodes, then platforms. Steps
 	// are best-effort — the remaining cleanup runs even if one fails.
 	if tc.teardownOnly {
-		// Create teardown steps without template processing (no facts available)
-		var err error
-		tc.Teardown, err = steptypes.CreateSteps(tc.TeardownConfigs, tc.Nodes)
+		// No facts are gathered on this path, but templates are still
+		// rendered against an empty store so a {{ fact ... }} reference
+		// reports the problem rather than reaching the shell verbatim
+		teardownConfigs, err := facts.ProcessStepConfigs(tc.TeardownConfigs, facts.FactStore{})
+		if err != nil {
+			return fmt.Errorf("processing teardown templates: %w", err)
+		}
+		tc.Teardown, err = steptypes.CreateSteps(teardownConfigs, tc.Nodes)
 		if err != nil {
 			return err
 		}
@@ -427,8 +432,12 @@ func (tc *TestController) Run() error {
 		}
 	}
 
-	// Gather facts from nodes (after node setup, before step/test creation)
-	var store facts.FactStore
+	// Gather facts from nodes (after node setup, before step/test creation).
+	// The store is always non-nil so templates are always rendered: a
+	// suite with no facts must still reject a {{ fact ... }} reference
+	// rather than pass the literal text into a command, where it reads as
+	// a passing test that asserted nothing.
+	store := facts.FactStore{}
 	if facts.HasAnyFacts(tc.Nodes, tc.NodeConfigs) {
 		// Built-in address facts are gathered for every capable node, but
 		// only suites that ask for facts get the reporting phase — node
@@ -438,11 +447,11 @@ func (tc *TestController) Run() error {
 			tc.formatter.PrintEmpty()
 			tc.formatter.PrintHeader("Gathering node facts")
 		}
-		var err error
-		store, err = facts.GatherFacts(tc.Nodes, tc.NodeConfigs)
+		gathered, err := facts.GatherFacts(tc.Nodes, tc.NodeConfigs)
 		if err != nil {
 			return err
 		}
+		store = gathered
 		if showFacts {
 			for _, cfg := range tc.NodeConfigs {
 				names := make([]string, 0, len(cfg.Facts))

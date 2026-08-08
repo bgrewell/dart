@@ -631,22 +631,24 @@ from those types and carrying no `facts:` block skips template processing
 entirely. Rendering happens once per run, after node setup and fact gathering
 and before any step or test object is built.
 
-Warning: in a fact-free suite a `{{ fact ... }}` reference is not an error —
-the literal text is passed through verbatim into commands, `file_template`
-values, and evaluator fields. A test such as
-`command: echo v={{ fact "db" "ipv4" }}` with `evaluate: {exit_code: 0}`
-passes while asserting nothing about the address. Adding a `facts:` block (or
-a docker/lxd node) to the same suite turns the identical reference into a hard
-failure: `processing test templates: ... no facts for node "db"`. Rationale:
-this asymmetry means a fact reference in a fact-free suite is a silent false
-pass rather than a caught misconfiguration.
+A `{{ fact ... }}` reference that cannot be resolved is an error wherever it
+appears, including in a suite that gathers no facts at all:
 
-`--teardown-only` skips node setup and fact gathering entirely, so teardown
-steps are built straight from the config with templates unrendered. A
-`{{ fact "db" "ipv4" }}` in a teardown step's options reaches the step as that
-literal text, with no error or warning. Teardown steps that must survive a
-`--teardown-only` run are better written with static values, or with a command
-that rediscovers the address on the node.
+```text
+Error: processing test templates: test "prints an address": ... error calling
+fact: no facts are available in this suite, so "db" cannot be resolved: facts
+come from a node's facts: block or from the built-in addresses of docker and
+lxd nodes
+```
+
+Rationale: the literal text used to pass through into the command, so
+`command: echo v={{ fact "db" "ipv4" }}` with `evaluate: {exit_code: 0}`
+succeeded while asserting nothing about the address.
+
+Note: `--teardown-only` gathers no facts, so a `{{ fact ... }}` reference in a
+teardown step fails on that path rather than resolving. Teardown steps meant to
+survive a `--teardown-only` run are better written with static values, or with
+a command that rediscovers the address on the node.
 
 **Where fact templates are rendered.** `{{ fact "node" "name" }}` is resolved
 only in step `options:`, test `options:` (including nested values such as

@@ -33,10 +33,16 @@ import (
 
 var _ ifaces.Node = &LxdNode{}
 
+// LxdNetworkOpts attaches a node to an existing network. The bridge itself
+// is created by the suite's lxd.networks block, which is where addressing
+// like subnet and gateway belongs; a node only names the network to join
+// and, optionally, the address to take on it.
 type LxdNetworkOpts struct {
-	Name   string `yaml:"name,omitempty" json:"name"`
+	Name string `yaml:"name,omitempty" json:"name"`
+	Ip   string `yaml:"ip,omitempty" json:"ip"`
+	// Subnet is accepted only so a suite that sets it gets a clear error
+	// instead of a silent no-op; see ValidateNodeOptions.
 	Subnet string `yaml:"subnet,omitempty" json:"subnet"`
-	Ip     string `yaml:"ip,omitempty" json:"ip"`
 }
 
 // LxdBootWaitOpts controls how long to wait for an instance to start accepting

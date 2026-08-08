@@ -94,3 +94,32 @@ func TestValidateNodeSet(t *testing.T) {
 		{Name: "b", Type: "docker"},
 	}))
 }
+
+// A node attaches to a network; it does not define one. subnet here
+// consumed nothing, so a suite that set it read as though the node's
+// addressing were configured.
+func TestNodeLevelSubnetIsRejected(t *testing.T) {
+	err := ValidateNodeOptions(&config.NodeConfig{
+		Name: "box", Type: "lxd",
+		Options: map[string]interface{}{
+			"image": "ubuntu:24.04",
+			"networks": []interface{}{
+				map[string]interface{}{"name": "testnet", "subnet": "10.5.0.0/24"},
+			},
+		},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "sets subnet")
+	assert.Contains(t, err.Error(), "lxd.networks")
+
+	// name and ip remain valid on a node-level entry
+	assert.NoError(t, ValidateNodeOptions(&config.NodeConfig{
+		Name: "box", Type: "lxd",
+		Options: map[string]interface{}{
+			"image": "ubuntu:24.04",
+			"networks": []interface{}{
+				map[string]interface{}{"name": "testnet", "ip": "10.5.0.9"},
+			},
+		},
+	}))
+}
