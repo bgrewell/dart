@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/bgrewell/dart/internal"
 	"github.com/bgrewell/dart/internal/config"
@@ -386,16 +385,6 @@ func main() {
 	os.Exit(shutdownSig.ExitCode)
 }
 
-// checkNode is a mock node satisfying every capability interface, so
-// --check can validate any test type without touching infrastructure.
-type checkNode struct {
-	*nodetypes.MockNode
-}
-
-func (c *checkNode) Reboot(force bool, readyCommand string, timeout time.Duration) error {
-	return nil
-}
-
 // runCheck validates the configuration — full option parsing for every
 // node, step, and test — and prints the plan without running anything.
 func runCheck(cfgPath, reportValue, varsValue, onlyValue, skipValue string) int {
@@ -461,7 +450,7 @@ func runCheck(cfgPath, reportValue, varsValue, onlyValue, skipValue string) int 
 			}))
 			return 1
 		}
-		mocks[node.Name] = &checkNode{MockNode: nodetypes.NewMockNode()}
+		mocks[node.Name] = nodetypes.NewCheckNode(node.Type)
 	}
 
 	fail := func(stage string, err error) int {

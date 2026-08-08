@@ -6,6 +6,7 @@ import (
 	"github.com/bgrewell/dart/internal/config"
 	"github.com/bgrewell/dart/internal/formatters"
 	"github.com/bgrewell/dart/pkg/ifaces"
+	"github.com/bgrewell/dart/pkg/nodetypes"
 )
 
 var _ ifaces.Step = &SnapshotStep{}
@@ -55,7 +56,8 @@ func newSnapshotStep(c *config.StepConfig, node ifaces.Node) (ifaces.Step, error
 	}
 
 	if _, ok := node.(ifaces.Snapshotter); !ok {
-		return nil, optionError(c, "node %q does not support snapshots (supported: lxd) in step %q", c.Node[0], c.Name)
+		return nil, optionError(c, "node %q does not support snapshots (supported: %s) in step %q",
+			c.Node[0], nodetypes.SupportingTypes(nodetypes.CapabilitySnapshot), c.Name)
 	}
 
 	return &SnapshotStep{

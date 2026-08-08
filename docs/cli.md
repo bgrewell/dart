@@ -295,7 +295,8 @@ adds the `ran` count and a machine-readable per-test `status` (`pass`, `fail`,
 a test with no `evaluate:` block is written there as a bare passing testcase.
 
 `--check` validates node types, report specs, tag filters, and the full option
-set of every step and test against mock nodes. It is a pre-commit or CI lint
+set of every step and test against stand-in nodes that carry each declared
+type's real capabilities. It is a pre-commit or CI lint
 that touches no infrastructure; node connectivity is not exercised.
 
 Once the test phase begins, a report is written on every exit: test failures,

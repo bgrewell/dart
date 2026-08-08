@@ -7,6 +7,7 @@ import (
 	"github.com/bgrewell/dart/internal/config"
 	"github.com/bgrewell/dart/internal/formatters"
 	"github.com/bgrewell/dart/pkg/ifaces"
+	"github.com/bgrewell/dart/pkg/nodetypes"
 )
 
 var _ ifaces.Step = &RebootStep{}
@@ -49,7 +50,8 @@ func newRebootStep(c *config.StepConfig, node ifaces.Node) (ifaces.Step, error) 
 	}
 
 	if _, ok := node.(ifaces.Rebooter); !ok {
-		return nil, optionError(c, "node %q does not support reboot (supported: lxd, ssh) in step %q", c.Node[0], c.Name)
+		return nil, optionError(c, "node %q does not support reboot (supported: %s) in step %q",
+			c.Node[0], nodetypes.SupportingTypes(nodetypes.CapabilityReboot), c.Name)
 	}
 
 	return &RebootStep{
