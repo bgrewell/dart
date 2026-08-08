@@ -24,6 +24,7 @@ type ExecuteStep struct {
 // newExecuteStep accepts a single command string or an array of commands.
 func newExecuteStep(c *config.StepConfig, node ifaces.Node) (ifaces.Step, error) {
 	var commands []string
+	noteOption("command")
 	switch cmd := c.Step.Options["command"].(type) {
 	case string:
 		commands = []string{cmd}

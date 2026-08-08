@@ -69,6 +69,7 @@ func newHTTPRequestStep(c *config.StepConfig, node ifaces.Node) (ifaces.Step, er
 	}
 
 	headers := map[string]string{}
+	noteOption("headers")
 	if raw, ok := c.Step.Options["headers"]; ok {
 		headerMap, ok := raw.(map[string]interface{})
 		if !ok {

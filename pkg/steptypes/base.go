@@ -110,9 +110,17 @@ func CreateSteps(configs []*config.StepConfig, nodes map[string]ifaces.Node) ([]
 			}
 		}
 
+		// The factory's option reads define the type's option set: whatever
+		// it never asked for is not an option of that type
+		finish := beginTracking()
 		step, err := factory(c, node)
+		accepted := acceptedKeys()
+		unknown := finish(c.Step.Options)
 		if err != nil {
 			return nil, err
+		}
+		if len(unknown) > 0 {
+			return nil, unknownOptionError(c, unknown, accepted)
 		}
 		steps = append(steps, step)
 	}
@@ -132,6 +140,7 @@ func optionError(c *config.StepConfig, format string, args ...interface{}) error
 // option is a config error, never a silent zero value.
 
 func optString(c *config.StepConfig, key string) (value string, present bool, err error) {
+	noteOption(key)
 	raw, ok := c.Step.Options[key]
 	if !ok {
 		return "", false, nil
@@ -155,6 +164,7 @@ func requiredString(c *config.StepConfig, key, missingMsg string) (string, error
 }
 
 func optBool(c *config.StepConfig, key string) (bool, error) {
+	noteOption(key)
 	raw, ok := c.Step.Options[key]
 	if !ok {
 		return false, nil
@@ -167,6 +177,7 @@ func optBool(c *config.StepConfig, key string) (bool, error) {
 }
 
 func optInt(c *config.StepConfig, key string, def int) (int, error) {
+	noteOption(key)
 	raw, ok := c.Step.Options[key]
 	if !ok {
 		return def, nil
@@ -187,6 +198,7 @@ func optInt(c *config.StepConfig, key string, def int) (int, error) {
 }
 
 func optFloat(c *config.StepConfig, key string, def float64) (float64, error) {
+	noteOption(key)
 	raw, ok := c.Step.Options[key]
 	if !ok {
 		return def, nil
@@ -204,6 +216,7 @@ func optFloat(c *config.StepConfig, key string, def float64) (float64, error) {
 }
 
 func optStringList(c *config.StepConfig, key string) (values []string, present bool, err error) {
+	noteOption(key)
 	raw, ok := c.Step.Options[key]
 	if !ok {
 		return nil, false, nil
@@ -233,6 +246,7 @@ func optStringList(c *config.StepConfig, key string) (values []string, present b
 // (e.g. `mode: 444`) cannot be detected and is taken at face value.
 // Returns 0 when absent.
 func optFileMode(c *config.StepConfig, key string) (os.FileMode, error) {
+	noteOption(key)
 	raw, ok := c.Step.Options[key]
 	if !ok {
 		return 0, nil

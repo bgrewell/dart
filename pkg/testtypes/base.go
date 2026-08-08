@@ -386,9 +386,17 @@ func CreateTests(configs []*config.TestConfig, nodes map[string]ifaces.Node) (te
 			base.retryInterval = time.Duration(interval * float64(time.Second))
 		}
 
+		// The factory's option reads define the type's option set: whatever
+		// it never asked for is not an option of that type
+		finish := beginTracking()
 		test, err := factory(base, cfg.Options)
+		accepted := acceptedKeys()
+		unknown := finish(cfg.Options)
 		if err != nil {
 			return nil, err
+		}
+		if len(unknown) > 0 {
+			return nil, unknownOptionError(cfg, unknown, accepted)
 		}
 		tests = append(tests, test)
 
@@ -401,6 +409,7 @@ func CreateTests(configs []*config.TestConfig, nodes map[string]ifaces.Node) (te
 // value. Keys are tried in order so documented aliases (path/filename) work.
 
 func optString(testName string, opts map[string]interface{}, keys ...string) (value string, present bool, err error) {
+	noteOption(keys...)
 	for _, key := range keys {
 		raw, ok := opts[key]
 		if !ok {
@@ -454,6 +463,7 @@ func coerceFloat(v interface{}) (float64, bool) {
 }
 
 func optInt(testName string, opts map[string]interface{}, key string, def int) (int, error) {
+	noteOption(key)
 	raw, ok := opts[key]
 	if !ok {
 		return def, nil
@@ -466,6 +476,7 @@ func optInt(testName string, opts map[string]interface{}, key string, def int) (
 }
 
 func optFloat(testName string, opts map[string]interface{}, key string, def float64) (float64, error) {
+	noteOption(key)
 	raw, ok := opts[key]
 	if !ok {
 		return def, nil
@@ -479,6 +490,7 @@ func optFloat(testName string, opts map[string]interface{}, key string, def floa
 
 // evaluateSpec returns the raw `evaluate` block, or an empty map when absent.
 func evaluateSpec(testName string, opts map[string]interface{}) (map[string]interface{}, error) {
+	noteOption("evaluate")
 	raw, ok := opts["evaluate"]
 	if !ok {
 		return map[string]interface{}{}, nil

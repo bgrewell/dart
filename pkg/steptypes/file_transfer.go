@@ -229,6 +229,7 @@ func newFileTemplateStep(c *config.StepConfig, node ifaces.Node) (ifaces.Step, e
 	}
 
 	values := map[string]interface{}{}
+	noteOption("values")
 	if raw, ok := c.Step.Options["values"]; ok {
 		valueMap, ok := raw.(map[string]interface{})
 		if !ok {

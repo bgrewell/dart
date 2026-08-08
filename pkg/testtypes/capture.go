@@ -73,6 +73,7 @@ type captureSpec struct {
 // parseCaptureSpecs accepts `capture: name` (whole trimmed stdout) or
 // `capture: {name: {jsonpath|regex: ...}, ...}` for extracted values.
 func parseCaptureSpecs(testName string, opts map[string]interface{}) ([]captureSpec, error) {
+	noteOption("capture")
 	raw, ok := opts["capture"]
 	if !ok {
 		return nil, nil
