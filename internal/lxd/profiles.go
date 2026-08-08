@@ -82,8 +82,13 @@ func UpdateProfile(ctx context.Context, server lxd.InstanceServer, name string, 
 		profile.Config[k] = v
 	}
 
-	err = server.UpdateProfile(name, profile.Writable(), currentEtag)
+	// UpdateProfile is asynchronous: the operation must complete before the
+	// profile is actually in the requested state
+	op, err := server.UpdateProfile(name, profile.Writable(), currentEtag)
 	if err != nil {
+		return fmt.Errorf("failed to update profile %s: %w", name, err)
+	}
+	if err := op.Wait(); err != nil {
 		return fmt.Errorf("failed to update profile %s: %w", name, err)
 	}
 
@@ -128,8 +133,11 @@ func AddDeviceToProfile(ctx context.Context, server lxd.InstanceServer, profileN
 
 	profile.Devices[deviceName] = deviceMap
 
-	err = server.UpdateProfile(profileName, profile.Writable(), etag)
+	op, err := server.UpdateProfile(profileName, profile.Writable(), etag)
 	if err != nil {
+		return fmt.Errorf("failed to add device %s to profile %s: %w", deviceName, profileName, err)
+	}
+	if err := op.Wait(); err != nil {
 		return fmt.Errorf("failed to add device %s to profile %s: %w", deviceName, profileName, err)
 	}
 
@@ -149,8 +157,11 @@ func RemoveDeviceFromProfile(ctx context.Context, server lxd.InstanceServer, pro
 
 	delete(profile.Devices, deviceName)
 
-	err = server.UpdateProfile(profileName, profile.Writable(), etag)
+	op, err := server.UpdateProfile(profileName, profile.Writable(), etag)
 	if err != nil {
+		return fmt.Errorf("failed to remove device %s from profile %s: %w", deviceName, profileName, err)
+	}
+	if err := op.Wait(); err != nil {
 		return fmt.Errorf("failed to remove device %s from profile %s: %w", deviceName, profileName, err)
 	}
 

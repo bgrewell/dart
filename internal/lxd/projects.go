@@ -92,8 +92,13 @@ func UpdateProject(ctx context.Context, server lxd.InstanceServer, name string, 
 
 // DeleteProject deletes a project
 func DeleteProject(ctx context.Context, server lxd.InstanceServer, name string) error {
-	err := server.DeleteProject(name)
+	// force=false reproduces the pre-upgrade request; DeleteProject is now
+	// asynchronous and its operation must be waited on
+	op, err := server.DeleteProject(name, false)
 	if err != nil {
+		return fmt.Errorf("failed to delete project %s: %w", name, err)
+	}
+	if err := op.Wait(); err != nil {
 		return fmt.Errorf("failed to delete project %s: %w", name, err)
 	}
 	return nil
