@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	dartconfig "github.com/bgrewell/dart/internal/config"
 	"github.com/bgrewell/dart/internal/execution"
 	"github.com/bgrewell/dart/internal/helpers"
 	"github.com/bgrewell/dart/internal/stream"
@@ -55,7 +56,7 @@ type SshBastionOpts struct {
 	Bastion *SshBastionOpts `yaml:"bastion,omitempty" json:"bastion"`
 }
 
-func NewSshNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err error) {
+func NewSshNode(name string, opts ifaces.NodeOptions, suiteDir string) (node ifaces.Node, err error) {
 
 	jsonData, err := json.Marshal(opts)
 	if err != nil {
@@ -73,6 +74,23 @@ func NewSshNode(name string, opts ifaces.NodeOptions) (node ifaces.Node, err err
 	}
 
 	addr := fmt.Sprintf("%s:%d", nodeopts.Host, nodeopts.Port)
+
+	// Credential paths belong to the machine running DART, so they follow
+	// the suite-relative rule like every other local path
+	if nodeopts.KeyFile, err = dartconfig.ResolveLocalPath(suiteDir, nodeopts.KeyFile); err != nil {
+		return nil, err
+	}
+	if nodeopts.KnownHosts, err = dartconfig.ResolveLocalPath(suiteDir, nodeopts.KnownHosts); err != nil {
+		return nil, err
+	}
+	if nodeopts.Bastion != nil {
+		if nodeopts.Bastion.KeyFile, err = dartconfig.ResolveLocalPath(suiteDir, nodeopts.Bastion.KeyFile); err != nil {
+			return nil, err
+		}
+		if nodeopts.Bastion.KnownHosts, err = dartconfig.ResolveLocalPath(suiteDir, nodeopts.Bastion.KnownHosts); err != nil {
+			return nil, err
+		}
+	}
 
 	authMethods, err := sshAuthMethods(nodeopts.KeyFile, nodeopts.Pass)
 	if err != nil {

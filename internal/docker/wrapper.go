@@ -158,9 +158,11 @@ func (w *Wrapper) CreateContainer(name, hostname, image string, options ...Conta
 	}
 
 	containerCfg := &container.Config{
-		Image:    image,
-		Hostname: hostname,
-		Env:      c.env,
+		Image:      image,
+		Hostname:   hostname,
+		Env:        c.env,
+		Cmd:        c.command,
+		Entrypoint: c.entrypoint,
 	}
 	hostCfg := &container.HostConfig{
 		Privileged:  c.priviliged,

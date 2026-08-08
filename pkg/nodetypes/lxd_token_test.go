@@ -139,7 +139,7 @@ func TestLxdNodeRejectsUnusableTrustTokens(t *testing.T) {
 				"image":       "ubuntu:24.04",
 			}
 
-			_, err := NewLxdNode("test-node", ifaces.NodeOptions(&opts))
+			_, err := NewLxdNode("test-node", ifaces.NodeOptions(&opts), "")
 			if err == nil {
 				t.Fatal("expected an error")
 			}

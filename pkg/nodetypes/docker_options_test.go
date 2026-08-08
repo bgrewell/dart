@@ -15,7 +15,7 @@ import (
 // non-absolute source as a NAMED VOLUME, silently mounting an empty
 // volume instead of the directory.
 func TestResolveVolumesMakesHostPathsAbsolute(t *testing.T) {
-	resolved, err := resolveVolumes([]string{"./fixtures:/fixtures:ro"})
+	resolved, err := resolveVolumes([]string{"./fixtures:/fixtures:ro"}, "")
 	require.NoError(t, err)
 	require.Len(t, resolved, 1)
 	assert.True(t, filepath.IsAbs(strings.SplitN(resolved[0], ":", 2)[0]),
@@ -24,7 +24,7 @@ func TestResolveVolumesMakesHostPathsAbsolute(t *testing.T) {
 }
 
 func TestResolveVolumesKeepsNamedVolumes(t *testing.T) {
-	resolved, err := resolveVolumes([]string{"cache-data:/var/cache"})
+	resolved, err := resolveVolumes([]string{"cache-data:/var/cache"}, "")
 	require.NoError(t, err)
 	assert.Equal(t, "cache-data:/var/cache", resolved[0], "a bare name stays a named volume")
 }
@@ -32,28 +32,48 @@ func TestResolveVolumesKeepsNamedVolumes(t *testing.T) {
 func TestResolveVolumesExpandsHome(t *testing.T) {
 	home, err := os.UserHomeDir()
 	require.NoError(t, err)
-	resolved, err := resolveVolumes([]string{"~/data:/data"})
+	resolved, err := resolveVolumes([]string{"~/data:/data"}, "")
 	require.NoError(t, err)
 	assert.True(t, strings.HasPrefix(resolved[0], home))
 }
 
 func TestResolveVolumesRejectsMalformed(t *testing.T) {
-	_, err := resolveVolumes([]string{"/no-container-side"})
+	_, err := resolveVolumes([]string{"/no-container-side"}, "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "host:container")
+}
+
+// --check must catch missing required fields, so a suite does not get all
+// the way to a dial or a container create before reporting the real mistake.
+func TestValidateNodeOptionsRequiresRequiredFields(t *testing.T) {
+	err := ValidateNodeOptions(&config.NodeConfig{
+		Name: "web", Type: "docker", Options: map[string]interface{}{},
+	})
+	assert.ErrorContains(t, err, "image is required")
+
+	err = ValidateNodeOptions(&config.NodeConfig{
+		Name: "remote", Type: "ssh",
+		Options: map[string]interface{}{"user": "root", "insecure_skip_host_key": true, "pass": "x"},
+	})
+	assert.ErrorContains(t, err, "host is required")
+
+	err = ValidateNodeOptions(&config.NodeConfig{
+		Name: "stack", Type: "docker-compose", Options: map[string]interface{}{},
+	})
+	assert.ErrorContains(t, err, "compose_file is required")
 }
 
 // --check must catch option problems that need no daemon or network.
 func TestValidateNodeOptionsCatchesLocalProblems(t *testing.T) {
 	err := ValidateNodeOptions(&config.NodeConfig{
 		Name: "web", Type: "docker",
-		Options: map[string]interface{}{"ports": []interface{}{"not-a-port-spec:::"}},
+		Options: map[string]interface{}{"image": "nginx", "ports": []interface{}{"not-a-port-spec:::"}},
 	})
 	assert.Error(t, err)
 
 	err = ValidateNodeOptions(&config.NodeConfig{
 		Name: "web", Type: "docker",
-		Options: map[string]interface{}{"volumes": []interface{}{"/bad-spec"}},
+		Options: map[string]interface{}{"image": "nginx", "volumes": []interface{}{"/bad-spec"}},
 	})
 	assert.ErrorContains(t, err, "host:container")
 

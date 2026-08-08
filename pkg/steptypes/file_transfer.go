@@ -27,9 +27,23 @@ type FilePushStep struct {
 	createDir bool
 }
 
+// localPath resolves a path the suite wrote for the machine running DART.
+// Relative paths are relative to the suite file, so a suite behaves the same
+// regardless of the directory DART is invoked from.
+func localPath(c *config.StepConfig, raw string) (string, error) {
+	resolved, err := config.ResolveLocalPath(c.SuiteDir, raw)
+	if err != nil {
+		return "", optionError(c, "%v in step %q", err, c.Name)
+	}
+	return resolved, nil
+}
+
 func newFilePushStep(c *config.StepConfig, node ifaces.Node) (ifaces.Step, error) {
 	source, err := requiredString(c, "source", "source is required")
 	if err != nil {
+		return nil, err
+	}
+	if source, err = localPath(c, source); err != nil {
 		return nil, err
 	}
 	dest, err := requiredString(c, "dest", "dest is required")
@@ -107,6 +121,9 @@ func newFileFetchStep(c *config.StepConfig, node ifaces.Node) (ifaces.Step, erro
 	}
 	dest, err := requiredString(c, "dest", "dest is required")
 	if err != nil {
+		return nil, err
+	}
+	if dest, err = localPath(c, dest); err != nil {
 		return nil, err
 	}
 	overwrite, err := optBool(c, "overwrite")
@@ -189,6 +206,9 @@ type FileTemplateStep struct {
 func newFileTemplateStep(c *config.StepConfig, node ifaces.Node) (ifaces.Step, error) {
 	source, err := requiredString(c, "source", "source is required")
 	if err != nil {
+		return nil, err
+	}
+	if source, err = localPath(c, source); err != nil {
 		return nil, err
 	}
 	dest, err := requiredString(c, "dest", "dest is required")

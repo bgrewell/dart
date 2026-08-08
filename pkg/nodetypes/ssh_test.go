@@ -155,7 +155,7 @@ func testSSHNode(t *testing.T) ifaces.Node {
 		"pass":                   "testpass",
 		"insecure_skip_host_key": true,
 	}
-	node, err := NewSshNode("ssh-test", ifaces.NodeOptions(&opts))
+	node, err := NewSshNode("ssh-test", ifaces.NodeOptions(&opts), "")
 	require.NoError(t, err)
 	t.Cleanup(func() { node.Close() })
 	return node
@@ -212,7 +212,7 @@ func TestSSHBadCredentials(t *testing.T) {
 		"pass":                   "wrong",
 		"insecure_skip_host_key": true,
 	}
-	_, err := NewSshNode("ssh-test", ifaces.NodeOptions(&opts))
+	_, err := NewSshNode("ssh-test", ifaces.NodeOptions(&opts), "")
 	assert.Error(t, err)
 }
 
@@ -227,7 +227,7 @@ func TestSSHUnknownHostKeyRefused(t *testing.T) {
 		"host": host, "port": port, "user": "testuser", "pass": "testpass",
 		"known_hosts": emptyKnownHosts,
 	}
-	_, err := NewSshNode("ssh-test", ifaces.NodeOptions(&opts))
+	_, err := NewSshNode("ssh-test", ifaces.NodeOptions(&opts), "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "knownhosts")
 }
@@ -243,7 +243,7 @@ func TestSSHKnownHostAccepted(t *testing.T) {
 		"host": host, "port": port, "user": "testuser", "pass": "testpass",
 		"known_hosts": knownHostsPath,
 	}
-	node, err := NewSshNode("ssh-test", ifaces.NodeOptions(&opts))
+	node, err := NewSshNode("ssh-test", ifaces.NodeOptions(&opts), "")
 	require.NoError(t, err)
 	defer node.Close()
 
@@ -260,7 +260,7 @@ func TestSSHMissingKnownHostsExplains(t *testing.T) {
 		"host": host, "port": port, "user": "testuser", "pass": "testpass",
 		"known_hosts": filepath.Join(t.TempDir(), "absent"),
 	}
-	_, err := NewSshNode("ssh-test", ifaces.NodeOptions(&opts))
+	_, err := NewSshNode("ssh-test", ifaces.NodeOptions(&opts), "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "insecure_skip_host_key")
 }
@@ -271,7 +271,7 @@ func TestSSHNoCredentials(t *testing.T) {
 		"host": host, "port": port, "user": "testuser",
 		"insecure_skip_host_key": true,
 	}
-	_, err := NewSshNode("ssh-test", ifaces.NodeOptions(&opts))
+	_, err := NewSshNode("ssh-test", ifaces.NodeOptions(&opts), "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no ssh credentials")
 }
@@ -291,7 +291,7 @@ func TestSSHThroughBastion(t *testing.T) {
 			"user": "testuser", "pass": "testpass",
 		},
 	}
-	node, err := NewSshNode("ssh-test", ifaces.NodeOptions(&opts))
+	node, err := NewSshNode("ssh-test", ifaces.NodeOptions(&opts), "")
 	require.NoError(t, err)
 	defer node.Close()
 
@@ -308,7 +308,7 @@ func TestSSHBastionValidation(t *testing.T) {
 		"insecure_skip_host_key": true,
 		"bastion":                map[string]interface{}{"user": "testuser", "pass": "x"},
 	}
-	_, err := NewSshNode("ssh-test", ifaces.NodeOptions(&opts))
+	_, err := NewSshNode("ssh-test", ifaces.NodeOptions(&opts), "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "bastion host is required")
 }
@@ -321,7 +321,7 @@ func TestSSHRebootAfterClosedClientDoesNotPanic(t *testing.T) {
 		"host": host, "port": port, "user": "testuser", "pass": "testpass",
 		"insecure_skip_host_key": true,
 	}
-	node, err := NewSshNode("ssh-test", ifaces.NodeOptions(&opts))
+	node, err := NewSshNode("ssh-test", ifaces.NodeOptions(&opts), "")
 	require.NoError(t, err)
 
 	sshNode := node.(*SshNode)
@@ -350,7 +350,7 @@ func TestSSHHostKeyErrorsNameTheNodeAndOptions(t *testing.T) {
 		"host": host, "port": port, "user": "testuser", "pass": "testpass",
 		"known_hosts": emptyKnownHosts,
 	}
-	_, err := NewSshNode("prod-web", ifaces.NodeOptions(&opts))
+	_, err := NewSshNode("prod-web", ifaces.NodeOptions(&opts), "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "prod-web", "the failing node must be named")
 	assert.Contains(t, err.Error(), "insecure_skip_host_key", "the way out must be named")
@@ -370,7 +370,7 @@ func TestSSHHostKeyMismatchExplains(t *testing.T) {
 		"host": host, "port": port, "user": "testuser", "pass": "testpass",
 		"known_hosts": knownHostsPath,
 	}
-	_, err := NewSshNode("prod-web", ifaces.NodeOptions(&opts))
+	_, err := NewSshNode("prod-web", ifaces.NodeOptions(&opts), "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "does not match known_hosts")
 	assert.Contains(t, err.Error(), "intercepted")
@@ -386,7 +386,7 @@ func TestSSHChainedBastionRejected(t *testing.T) {
 			"bastion": map[string]interface{}{"host": "jump2", "user": "u", "pass": "p"},
 		},
 	}
-	_, err := NewSshNode("ssh-test", ifaces.NodeOptions(&opts))
+	_, err := NewSshNode("ssh-test", ifaces.NodeOptions(&opts), "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "chained bastions are not supported")
 }
@@ -407,7 +407,7 @@ func TestSSHBastionKeepsOwnHostKeyPolicy(t *testing.T) {
 			"known_hosts": emptyKnownHosts, "insecure_skip_host_key": insecure,
 		},
 	}
-	_, err := NewSshNode("ssh-test", ifaces.NodeOptions(&opts))
+	_, err := NewSshNode("ssh-test", ifaces.NodeOptions(&opts), "")
 	require.Error(t, err, "the bastion must still verify even though the target does not")
 	assert.Contains(t, err.Error(), "bastion")
 }

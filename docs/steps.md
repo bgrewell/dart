@@ -507,20 +507,18 @@ bit, and an existing destination overwritten with `overwrite: true` keeps its
 current mode. A following `execute` step with `chmod` covers the cases where that
 is not what is wanted.
 
-Warning: local paths in these steps — `source` for `file_push` and
-`file_template`, `dest` for `file_fetch` — resolve against the working directory
-DART is invoked from, not against the directory holding the suite file. This
-differs from `docker.images[].dockerfile` and `load_from`, which the loader
-rewrites relative to the config file's directory. Running
-`dart -c examples/foo/suite.yaml` from the repository root therefore looks for
-`fixtures/app.conf.tmpl` at `./fixtures/app.conf.tmpl`, not at
-`examples/foo/fixtures/app.conf.tmpl`. The two failures surface at different
-times: a missing `file_template` source fails at step construction with
+Local paths in these steps — `source` for `file_push` and `file_template`,
+`dest` for `file_fetch` — follow the same rule as every other local path a
+suite writes: absolute paths are used as-is, `~` expands to the invoking user's
+home directory, and anything else is relative to the directory holding the
+suite file. Running `dart -c examples/foo/suite.yaml` from the repository root
+therefore reads `fixtures/app.conf.tmpl` at `examples/foo/fixtures/app.conf.tmpl`,
+and the same command works unchanged from any directory.
+
+Note: a missing source still surfaces at different times by step type. A
+missing `file_template` source fails at step construction with
 `cannot read template <path> in step "<name>"`, before any step runs, while a
-missing `file_push` source fails mid-run with `failed to read source <path>`, and
-a `file_fetch` `dest` is simply created relative to the working directory.
-Absolute paths, `{{env.*}}`/`{{var.*}}` substitution used to build them, or
-always invoking DART from a fixed directory all avoid the ambiguity.
+missing `file_push` source fails mid-run with `failed to read source <path>`.
 
 Content to container and SSH nodes is written in 32 KiB base64 chunks, so files
 are not limited by the shell's per-argument size cap. That write is not atomic:

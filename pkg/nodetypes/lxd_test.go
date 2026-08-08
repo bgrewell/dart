@@ -93,7 +93,7 @@ func TestLxdNodeRemoteValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := NewLxdNode("test-node", ifaces.NodeOptions(&tt.opts))
+			_, err := NewLxdNode("test-node", ifaces.NodeOptions(&tt.opts), "")
 
 			if tt.shouldError {
 				if err == nil {
@@ -165,7 +165,7 @@ func TestLxdNodeSocketOption(t *testing.T) {
 			// We expect the NewLxdNode to fail when trying to connect to the socket
 			// but we can verify the option was parsed correctly by checking the error
 			// doesn't indicate a validation issue
-			_, err := NewLxdNode("test-node", ifaces.NodeOptions(&tt.opts))
+			_, err := NewLxdNode("test-node", ifaces.NodeOptions(&tt.opts), "")
 
 			// We expect a connection error, not a validation error
 			if err != nil {
