@@ -87,5 +87,9 @@ func unknownOptionError(cfg *config.TestConfig, unknown, accepted []string) erro
 		message += fmt.Sprintf(" (%s %s test takes no options)", article, cfg.Type)
 	}
 
-	return &config.ConfigError{Message: message, Location: cfg.Loc}
+	location := cfg.Loc
+	if loc, ok := cfg.OptionLocs[unknown[0]]; ok {
+		location = loc
+	}
+	return &config.ConfigError{Message: message, Location: location, Key: unknown[0]}
 }

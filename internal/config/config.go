@@ -88,6 +88,10 @@ type StepConfig struct {
 	// local paths in options resolve against it rather than the working
 	// directory.
 	SuiteDir string `json:"-" yaml:"-"`
+	// OptionLocs maps each option key to where it is written, so an error
+	// about one option marks that option's line rather than the start of
+	// the enclosing block.
+	OptionLocs map[string]SourceLocation `json:"-" yaml:"-"`
 }
 
 // StepDetails is the details of a single step
@@ -109,6 +113,10 @@ type NodeConfig struct {
 	// local paths in options resolve against it rather than the working
 	// directory.
 	SuiteDir string `json:"-" yaml:"-"`
+	// OptionLocs maps each option key to where it is written, so an error
+	// about one option marks that option's line rather than the start of
+	// the enclosing block.
+	OptionLocs map[string]SourceLocation `json:"-" yaml:"-"`
 }
 
 // TestConfig is the configuration for a single test
@@ -133,6 +141,10 @@ type TestConfig struct {
 	Loc     SourceLocation `json:"-" yaml:"-"`
 	NodeLoc SourceLocation `json:"-" yaml:"-"`
 	TypeLoc SourceLocation `json:"-" yaml:"-"`
+	// OptionLocs maps each option key to where it is written, so an error
+	// about one option marks that option's line rather than the start of
+	// the enclosing block.
+	OptionLocs map[string]SourceLocation `json:"-" yaml:"-"`
 }
 
 // RetryConfig configures eventually-consistent retry for a test.
@@ -235,7 +247,20 @@ func ParseConfiguration(data []byte, location string, filePath ...string) (confi
 // {{var.name}} and {{env.NAME}} references. Variables come from the
 // suite's vars block, overridden by cliVars (--var on the command line).
 func ParseConfigurationWithVars(data []byte, location string, cliVars map[string]string, filePath ...string) (config *Configuration, err error) {
-	processed, usedLoadFrom, err := processLoadFromDirectives(data, location)
+	// Any error carrying a YAML position becomes a located ConfigError on
+	// the way out, so a syntax problem gets the same snippet a semantic one
+	// gets. load_from shifts line numbers away from the file on disk, so
+	// the conversion is skipped once it has been used: a snippet pointing
+	// at the wrong line is worse than none.
+	var usedLoadFrom bool
+	defer func() {
+		if err != nil && !usedLoadFrom && len(filePath) > 0 && filePath[0] != "" {
+			err = AsConfigError(err, filePath[0])
+		}
+	}()
+
+	processed, loadFromUsed, err := processLoadFromDirectives(data, location)
+	usedLoadFrom = loadFromUsed
 	if err != nil {
 		return nil, err
 	}
@@ -618,11 +643,12 @@ func expandStepConfigs(configs []*StepConfig) []*StepConfig {
 			for _, nodeName := range cfg.Node {
 				// Create a copy of the config
 				newCfg := &StepConfig{
-					Name:    cfg.Name,
-					Node:    NodeReference{nodeName},
-					Step:    cfg.Step,
-					Loc:     cfg.Loc,
-					NodeLoc: cfg.NodeLoc,
+					Name:       cfg.Name,
+					Node:       NodeReference{nodeName},
+					Step:       cfg.Step,
+					Loc:        cfg.Loc,
+					NodeLoc:    cfg.NodeLoc,
+					OptionLocs: cfg.OptionLocs,
 				}
 				expanded = append(expanded, newCfg)
 			}
@@ -663,6 +689,7 @@ func expandTestConfigs(configs []*TestConfig) []*TestConfig {
 					Loc:        cfg.Loc,
 					NodeLoc:    cfg.NodeLoc,
 					TypeLoc:    cfg.TypeLoc,
+					OptionLocs: cfg.OptionLocs,
 				}
 				expanded = append(expanded, newCfg)
 			}

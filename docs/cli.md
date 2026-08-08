@@ -332,6 +332,51 @@ Note: `--teardown-only` is best-effort — it runs every cleanup operation even
 after one fails — and exits 1 if any of them did. See
 [Exit Codes](#exit-codes).
 
+### Configuration Errors
+
+A problem in a suite file is reported against the line that causes it, with
+the surrounding lines for context:
+
+```text
+Error: unknown option "evaluatte" in test "check the service"
+(an execute test accepts: capture, command, evaluate, extract, timeout)
+
+  suite.yaml
+
+  ─────────────────────────────────────
+     8 |     type: execute
+     9 |     options:
+    10 |       command: "true"
+  > 11 |       evaluatte:
+    12 |         exit_code: 0
+  ─────────────────────────────────────
+```
+
+The marked line is the one to change — an error about an option marks that
+option's key, not the first line of the test or step containing it. Syntax
+errors are reported the same way, with the position recovered from the
+parser:
+
+```text
+Error: did not find expected '-' indicator
+
+  suite.yaml
+
+  ─────────────────────────────────────
+    1 | suite: bad yaml
+  > 2 | nodes:
+    3 |   - name: local
+  ─────────────────────────────────────
+```
+
+Note: a suite that uses `!!load_from` gets the message without a snippet.
+Inlining shifts line numbers away from the files on disk, and a snippet
+pointing at the wrong line is worse than none.
+
+`--color` controls the colouring: `auto` (the default) colours when stdout is
+a terminal and honours the `NO_COLOR` environment variable, `always` forces it
+on for a pipe that renders ANSI, and `never` turns it off.
+
 ### Report Formats
 
 `--report` (`-r`) takes one or more `format:path` specs, comma-separated:

@@ -493,6 +493,7 @@ Useful flags for pipelines:
 | `--only tag=smoke` | Run a subset; `--skip tag=slow` excludes. A filter that excludes every test is an error and exits non-zero |
 | `-s`, `--stop-on-error` | Stop at the first failure |
 | `-d`, `--debug` | Stream command output live while debugging a suite |
+| `-co`, `--color` | `auto` (default), `always`, or `never` — `auto` colors when stdout is a terminal and honours `NO_COLOR` |
 
 One limit on `--check` is worth knowing before it is wired into a pre-commit
 hook: it validates only what step construction can check without a live node.
