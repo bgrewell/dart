@@ -136,6 +136,9 @@ func RenderTemplate(text string, store FactStore, currentNode string) (string, e
 			}
 			nodeFacts, ok := store[nodeName]
 			if !ok {
+				if len(store) == 0 {
+					return "", fmt.Errorf("no facts are available in this suite, so %q cannot be resolved: facts come from a node's facts: block or from the built-in addresses of docker and lxd nodes", nodeName)
+				}
 				return "", fmt.Errorf("no facts for node %q", nodeName)
 			}
 			value, ok := nodeFacts[factName]

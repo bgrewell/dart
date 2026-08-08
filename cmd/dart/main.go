@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -311,6 +312,23 @@ func main() {
 	cfgFlags.Vars = u.AddStringOption("var", "vars", "", "Override suite variables: key=value[,key=value...]", "", nil)
 	cfgFlags.Only = u.AddStringOption("o", "only", "", "Run only tests carrying one of these tags: tag=name[,name...]", "", nil)
 	cfgFlags.SkipTags = u.AddStringOption("sk", "skip", "", "Exclude tests carrying any of these tags: tag=name[,name...]", "", nil)
+
+	// DART declares no positional arguments, and the usage library indexes
+	// its (empty) argument list for every leftover it finds — so a stray
+	// argument panics inside Parse before anything can report it. Parsing
+	// the flags here first makes the leftovers visible while they can still
+	// be turned into a message. The overwhelmingly likely mistake is a
+	// suite path given without -c.
+	flag.Parse()
+	if extra := flag.Args(); len(extra) > 0 {
+		fmt.Fprintf(os.Stderr, "\n%s unexpected argument %q\n", errorStyle.Sprint("Error:"), extra[0])
+		if strings.HasSuffix(extra[0], ".yaml") || strings.HasSuffix(extra[0], ".yml") {
+			fmt.Fprintf(os.Stderr, "\nThe suite file goes after -c:\n    dart -c %s\n\n", extra[0])
+		} else {
+			fmt.Fprintf(os.Stderr, "\ndart takes options only; see dart --help.\n\n")
+		}
+		os.Exit(2)
+	}
 
 	if !u.Parse() {
 		u.PrintError(fmt.Errorf("Failed to parse command line arguments"))

@@ -633,8 +633,9 @@ nodes:
           ip: 10.100.0.10
 ```
 
-Note: an entry also accepts a `subnet` field, but nothing reads it. The subnet
-belongs on `lxd.networks[].subnet`, which is what actually creates the bridge.
+Note: a node attaches to an existing network; it does not define one. Setting
+`subnet` on a node-level entry is a configuration error naming the right place
+for it — `lxd.networks[].subnet`, which is what actually creates the bridge.
 
 The generated NICs are applied first, and any same-named key under `devices`
 overwrites them, which is what makes `devices` usable for overriding a generated
