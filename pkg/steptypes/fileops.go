@@ -171,9 +171,13 @@ func (o execFileOps) WriteFile(p, contents string, mode os.FileMode, overwrite, 
 	}
 
 	// Content travels base64-encoded so arbitrary bytes survive the shell.
+	// The payload is written in chunks: the whole command is a single
+	// argv element to the node's shell, and Linux caps that at
+	// MAX_ARG_STRLEN (128 KiB), so a one-shot write fails on files of
+	// roughly 95 KB with an opaque "argument list too long" from the
+	// container runtime.
 	encoded := base64.StdEncoding.EncodeToString([]byte(contents))
-	cmd := fmt.Sprintf("printf '%%s' %s | base64 -d > %s", encoded, shellQuote(p))
-	if _, err := execChecked(o.node, cmd); err != nil {
+	if err := o.writeEncoded(p, encoded); err != nil {
 		return fmt.Errorf("failed to write %s: %w", p, err)
 	}
 
@@ -181,6 +185,38 @@ func (o execFileOps) WriteFile(p, contents string, mode os.FileMode, overwrite, 
 		if _, err := execChecked(o.node, fmt.Sprintf("chmod %o %s", mode, shellQuote(p))); err != nil {
 			return fmt.Errorf("failed to set mode on %s: %w", p, err)
 		}
+	}
+	return nil
+}
+
+// maxEncodedChunk bounds each chunk's base64 payload. The surrounding
+// command adds well under 200 bytes, leaving ample headroom below the
+// 128 KiB per-argument kernel limit.
+const maxEncodedChunk = 32 * 1024
+
+// writeEncoded streams a base64 payload to a remote path in chunks,
+// truncating on the first chunk and appending after. A failure mid-stream
+// leaves a partial file, which is reported rather than silently accepted.
+func (o execFileOps) writeEncoded(path, encoded string) error {
+	quoted := shellQuote(path)
+
+	// An empty payload still has to create (or truncate) the file
+	if encoded == "" {
+		_, err := execChecked(o.node, fmt.Sprintf(": > %s", quoted))
+		return err
+	}
+
+	redirect := ">"
+	for start := 0; start < len(encoded); start += maxEncodedChunk {
+		end := start + maxEncodedChunk
+		if end > len(encoded) {
+			end = len(encoded)
+		}
+		cmd := fmt.Sprintf("printf '%%s' %s | base64 -d %s %s", encoded[start:end], redirect, quoted)
+		if _, err := execChecked(o.node, cmd); err != nil {
+			return fmt.Errorf("chunk at offset %d of %d: %w", start, len(encoded), err)
+		}
+		redirect = ">>"
 	}
 	return nil
 }

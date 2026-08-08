@@ -405,6 +405,12 @@ func (w *Wrapper) CreateSnapshot(instanceName, snapshotName string, stateful boo
 	return CreateInstanceSnapshot(ctx, w.server, instanceName, snapshotName, stateful)
 }
 
+// RestoreSnapshot rolls an instance back to a snapshot
+func (w *Wrapper) RestoreSnapshot(instanceName, snapshotName string, stateful bool) error {
+	ctx := context.Background()
+	return RestoreInstanceSnapshot(ctx, w.server, instanceName, snapshotName, stateful)
+}
+
 // DeleteSnapshot deletes a snapshot
 func (w *Wrapper) DeleteSnapshot(instanceName, snapshotName string) error {
 	ctx := context.Background()
