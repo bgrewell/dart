@@ -34,6 +34,7 @@ func newExecuteTest(base BaseTest, opts map[string]interface{}) (ifaces.Test, er
 	}
 
 	extractors := map[string]extractor{}
+	noteOption("extract")
 	if raw, ok := opts["extract"]; ok {
 		spec, ok := raw.(map[string]interface{})
 		if !ok {

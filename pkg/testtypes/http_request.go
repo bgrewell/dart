@@ -58,6 +58,7 @@ func newHTTPRequestTest(base BaseTest, opts map[string]interface{}) (ifaces.Test
 	}
 
 	headers := map[string]string{}
+	noteOption("headers")
 	if raw, ok := opts["headers"]; ok {
 		headerMap, ok := raw.(map[string]interface{})
 		if !ok {

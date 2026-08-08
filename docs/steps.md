@@ -43,6 +43,21 @@ and still tears down nodes and platforms. Note: that path gathers no facts, so
 `{{ fact ... }}` references inside teardown steps are left unrendered — teardown
 steps meant for this recovery route should not depend on facts.
 
+### Unrecognised Options
+
+An unrecognized key inside a step's `options:` is a configuration error naming
+the offending key and the full accepted set, caught by `--check` before
+anything is created:
+
+```text
+Error: unknown option "timout" in step "wait a moment"
+(an execute step accepts: command, timeout)
+```
+
+Rationale: options were previously read by name and anything unread was
+dropped in silence, so a misspelling left the option at its default while the
+suite read as though it were set.
+
 ### When a teardown step fails
 
 Teardown steps behave differently depending on how DART was invoked:
@@ -235,10 +250,13 @@ Add controlled delays in the setup/teardown process. Useful for:
   step:
     type: simulated
     options:
-      time: 5  # Seconds; fractional values like 0.5 are allowed
+      time: 5                        # Seconds; fractional values like 0.5 are allowed
+      message: waiting for the API   # Optional; shown while the step waits
 ```
 
-The delay elapses on the machine running DART; the named node is used only to
+`message` is displayed as the step's status for the duration of the delay,
+describing what is being stood in for. The delay elapses on the machine
+running DART; the named node is used only to
 label the step in console output and reports. `node:` is still required and must
 name a declared node — see [Targeting nodes](#targeting-nodes). A fixed sleep is
 a blunt instrument, so waiting on an observable condition with `wait_for` is

@@ -70,6 +70,7 @@ func newConsistencyTest(base BaseTest, opts map[string]interface{}) (ifaces.Test
 	}
 
 	nodeNames := base.nodeNames
+	noteOption("nodes")
 	if listed, ok := opts["nodes"]; ok {
 		names, ok := toStringList(listed)
 		if !ok || len(names) == 0 {

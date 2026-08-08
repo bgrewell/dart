@@ -51,28 +51,41 @@ passed. Note that `gte`/`lte` are not registry evaluators — they are accepted
 only inside the comparator maps described under Value Extraction and Numeric
 Assertions.
 
-Warning: unrecognized keys are ignored rather than rejected. The suite is
-decoded with a non-strict YAML decoder and no factory inspects the key set of
-an `options:` map, so a misspelled or misplaced key is dropped silently —
-nothing is reported at config load or by `dart --check`. This covers
-misspelled option names (`timout: 30` instead of `timeout`), options that
-exist only on another type (`capture:` and `extract:` are honoured by
-`execute` only), stray keys alongside `name:`/`node:`/`type:`, and misspelled
-top-level keys (`test:` instead of `tests:` yields a suite with zero tests).
-The most common form is placing `evaluate:` — or a single evaluator such as
-`contains:` — at the test level rather than nested inside `options:`. A test
-whose `evaluate` block never reached the factory runs with zero evaluations
-and is reported as `ran` rather than passed or failed, so the suite still
-exits 0. A test reported as `ran` that was expected to assert something is the
-signal to check where `evaluate:` is nested.
+An unrecognized key inside `options:` is a configuration error naming the
+offending key and the full accepted set, caught by `--check` before anything
+is created:
 
-Keys *inside* `evaluate:` are the exception: they are checked against the
-evaluator registry, so `exit_cod: 0` fails at load with
-`unknown evaluation type "exit_cod"` and `--check` catches it before a run.
+```text
+Error: unknown option "evaluatte" in test "service responds"
+(an execute test accepts: capture, command, evaluate, extract, timeout)
+```
+
+That covers misspelled option names (`timout` for `timeout`), options that
+exist only on another type (`capture:` and `extract:` are honoured by
+`execute` only), and — the most damaging form — an evaluator written at the
+option level rather than nested inside `evaluate:`:
+
+```yaml
+    options:
+      command: systemctl is-active nginx
+      exit_code: 0        # error: belongs inside evaluate:
+```
+
+Rationale: a dropped `evaluate` block left the test with zero checks, which
+is reported as `ran` rather than passed or failed, so the suite exited 0
+having asserted nothing.
+
+Keys *inside* `evaluate:` are checked the same way against the evaluator
+registry, so `exit_cod: 0` fails with `unknown evaluation type "exit_cod"`.
 Missing *required* options (`command is required in test "t"`) and
-unrecognised `type:` values are caught the same way. Because a dropped key is
-invisible, the plan printed by `--check` is worth comparing against the suite
-file.
+unrecognised `type:` values are caught alongside them.
+
+Warning: one gap remains. Keys at the *test* level rather than inside
+`options:` — a stray key next to `name:`/`node:`/`type:`, or a misspelled
+top-level `test:` instead of `tests:`, which yields a suite with zero tests —
+are still dropped by the YAML decoder before any of this runs. The suite
+summary printed by `--check` is what catches those: a test count lower than
+expected means a test never parsed.
 
 ### Default Checks
 
