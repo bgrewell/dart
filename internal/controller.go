@@ -62,30 +62,31 @@ func NewTestController(
 }
 
 type TestController struct {
-	Suite           string
-	Nodes           map[string]ifaces.Node
-	NodeConfigs     []*config.NodeConfig
-	SetupConfigs    []*config.StepConfig
-	TeardownConfigs []*config.StepConfig
-	TestConfigs     []*config.TestConfig
-	Setup           []ifaces.Step
-	Tests           []ifaces.Test
-	Teardown        []ifaces.Step
-	Platforms       []ifaces.PlatformManager
-	formatter       formatters.Formatter
-	reports         []report.Spec
-	reportIteration int
-	onlyTags        []string
-	skipTags        []string
-	filteredTests   []string
-	verbose         bool
-	debug           bool
-	stopOnFail      bool
-	pauseOnFail     bool
-	setupOnly       bool
-	teardownOnly    bool
-	until           string
-	untilBehavior   string
+	Suite             string
+	Nodes             map[string]ifaces.Node
+	NodeConfigs       []*config.NodeConfig
+	SetupConfigs      []*config.StepConfig
+	TeardownConfigs   []*config.StepConfig
+	TestConfigs       []*config.TestConfig
+	Setup             []ifaces.Step
+	Tests             []ifaces.Test
+	Teardown          []ifaces.Step
+	Platforms         []ifaces.PlatformManager
+	formatter         formatters.Formatter
+	reports           []report.Spec
+	reportIteration   int
+	onlyTags          []string
+	skipTags          []string
+	filteredTests     []string
+	filterExcludedAll bool
+	verbose           bool
+	debug             bool
+	stopOnFail        bool
+	pauseOnFail       bool
+	setupOnly         bool
+	teardownOnly      bool
+	until             string
+	untilBehavior     string
 }
 
 // SetReports configures machine-readable result outputs written after the
@@ -239,6 +240,9 @@ func (tc *TestController) Run() error {
 
 	// Tag filters shape the test list before anything references it
 	tc.applyTagFilters()
+	if tc.filterExcludedAll {
+		return fmt.Errorf("the --only/--skip tag filter excluded every test; nothing ran (check the tag names against the suite)")
+	}
 
 	// Validate --until target before doing any work
 	if err := tc.validateUntilTarget(); err != nil {
@@ -782,6 +786,10 @@ func (tc *TestController) applyTagFilters() {
 	if excluded := len(tc.TestConfigs) - len(kept); excluded > 0 {
 		tc.formatter.PrintHeader(fmt.Sprintf("Tag filter: running %d of %d tests (%d excluded)", len(kept), len(tc.TestConfigs), excluded))
 	}
+	// Filtering everything away is almost always a mistyped tag. Reporting
+	// success for a run that executed nothing is the worst kind of green,
+	// so it is recorded here and turned into an error by Run.
+	tc.filterExcludedAll = len(tc.TestConfigs) > 0 && len(kept) == 0
 	tc.TestConfigs = kept
 }
 

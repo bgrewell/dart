@@ -1,0 +1,33 @@
+/* DART palette: a warm accent against Starlight's neutral greys, chosen to
+   stay legible in both themes rather than to match a brand. */
+:root {
+  --sl-color-accent-low: #2a1608;
+  --sl-color-accent: #c2620f;
+  --sl-color-accent-high: #f3c396;
+  --sl-color-white: #ffffff;
+}
+
+:root[data-theme="light"] {
+  --sl-color-accent-low: #fbe3cd;
+  --sl-color-accent: #a8510a;
+  --sl-color-accent-high: #4a2405;
+}
+
+/* The docs are dense with YAML; give code blocks a little more room to
+   breathe and keep long suites scrollable rather than wrapped. */
+.expressive-code .frame pre {
+  padding-block: 0.9rem;
+}
+
+/* Console transcripts read better without the language chip. */
+.expressive-code figcaption.header .title:empty {
+  display: none;
+}
+
+/* Wide option tables in the reference pages must scroll on their own
+   instead of pushing the page sideways on narrow screens. */
+.sl-markdown-content table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}

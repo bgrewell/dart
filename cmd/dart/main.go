@@ -48,6 +48,7 @@ type CmdlineFlags struct {
 	UntilBehavior *string
 	Report        *string
 	Check         *bool
+	Version       *bool
 	LogFile       *string
 	Vars          *string
 	Only          *string
@@ -305,6 +306,7 @@ func main() {
 	cfgFlags.Until = u.AddStringOption("u", "until", "", "Run up to and including this step or test, then stop", "", nil)
 	cfgFlags.UntilBehavior = u.AddStringOption("ub", "until-behavior", "exit", "Behavior when --until target is reached: exit (default) or pause", "", nil)
 	cfgFlags.Report = u.AddStringOption("r", "report", "", "Write machine-readable results: format:path (junit:results.xml, json:results.json; comma-separate for both)", "", nil)
+	cfgFlags.Version = u.AddBooleanOption("V", "version", false, "Print version information and exit", "", nil)
 	cfgFlags.Check = u.AddBooleanOption("ck", "check", false, "Validate the configuration and print the plan without running anything", "", nil)
 	cfgFlags.LogFile = u.AddStringOption("l", "log", "", "Write a clean (color-free) transcript of the run to this file", "", nil)
 	cfgFlags.Vars = u.AddStringOption("var", "vars", "", "Override suite variables: key=value[,key=value...]", "", nil)
@@ -325,6 +327,11 @@ func main() {
 	if *cfgFlags.UntilBehavior != "exit" && *cfgFlags.UntilBehavior != "pause" {
 		fmt.Fprintf(os.Stderr, "\n%s until-behavior must be \"exit\" or \"pause\" (got %q)\n\n", errorStyle.Sprint("Error:"), *cfgFlags.UntilBehavior)
 		os.Exit(1)
+	}
+
+	if *cfgFlags.Version {
+		fmt.Printf("dart %s (%s, branch %s, built %s)\n", version, rev, branch, date)
+		os.Exit(0)
 	}
 
 	if *cfgFlags.Check {

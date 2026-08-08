@@ -203,3 +203,13 @@ func TestExitCodeAcceptsNativeInts(t *testing.T) {
 	list := mustNew(t, "exit_code", []interface{}{0, 1})
 	assert.True(t, list.Verify(execResult(1, "", "")).Passed)
 }
+
+// A json_path written in JSONPath style ("$.a.b") works in evaluate as
+// well as in extract, so a path can be moved between them unchanged.
+func TestJSONPathAcceptsDollarPrefix(t *testing.T) {
+	doc := `{"result": {"status": "ok"}}`
+	for _, path := range []string{"result.status", "$.result.status", "$result.status"} {
+		evaluator := mustNew(t, "json_path", map[string]interface{}{"path": path, "equals": "ok"})
+		assert.True(t, evaluator.Verify(execResult(0, doc, "")).Passed, path)
+	}
+}

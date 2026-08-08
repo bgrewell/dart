@@ -11,6 +11,9 @@ You describe the environment and the assertions in YAML; DART builds the
 environment (containers, VMs, or remote hosts), runs the checks, tears
 everything down, and returns a CI-friendly exit code with a JUnit report.
 
+📖 **[Documentation](https://bgrewell.github.io/dart/)** — guides, every
+test and step type, and the full evaluation reference.
+
 > **Note:** DART is in active development. Behaviour and configuration
 > may change between releases.
 
@@ -399,7 +402,8 @@ tests:
 
 ## Documentation
 
-The [full documentation](docs/) covers everything in detail:
+The **[documentation site](https://bgrewell.github.io/dart/)** has
+everything in a searchable form. The same pages live in the repository:
 
 - **[Node types](docs/node-types.md)** — local, Docker, Docker Compose,
   LXD/Incus, SSH; remote daemons, ISO boot, security defaults
