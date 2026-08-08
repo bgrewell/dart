@@ -7,12 +7,18 @@ nodes:
       host: 10.114.143.151
       user: ubuntu
       key: /home/ben/.ssh/id_dart
+      # Host keys are verified against ~/.ssh/known_hosts by default.
+      # Point elsewhere with known_hosts: <path>, or opt out for
+      # throwaway lab targets with insecure_skip_host_key: true.
   - name: server
     type: ssh
     options:
       host: 10.114.143.9
       user: ubuntu
       key: /home/ben/.ssh/id_dart
+      # Host keys are verified against ~/.ssh/known_hosts by default.
+      # Point elsewhere with known_hosts: <path>, or opt out for
+      # throwaway lab targets with insecure_skip_host_key: true.
 setup:
   - name: step 1
     node: client

@@ -2,6 +2,11 @@ package nodetypes
 
 import (
 	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/bgrewell/dart/internal/docker"
 	"github.com/bgrewell/dart/internal/execution"
 	"github.com/bgrewell/dart/internal/helpers"
@@ -20,6 +25,16 @@ type DockerNodeOpts struct {
 	Image       string                 `yaml:"image,omitempty" json:"image"`
 	ExecOptions map[string]interface{} `yaml:"exec_opts,omitempty" json:"exec_opts"`
 	Networks    []DockerNetworkOpts    `yaml:"networks,omitempty" json:"networks"`
+	// Privileged grants the container full host capabilities. It is
+	// opt-in: DART used to set it unconditionally, which quietly gave
+	// every test container far more access than a test needs.
+	Privileged bool     `yaml:"privileged,omitempty" json:"privileged"`
+	Volumes    []string `yaml:"volumes,omitempty" json:"volumes"` // host:container[:ro]
+	Env        []string `yaml:"env,omitempty" json:"env"`         // KEY=VALUE
+	Ports      []string `yaml:"ports,omitempty" json:"ports"`     // host:container[/proto]
+	// Capabilities adds specific Linux capabilities without going
+	// privileged (e.g. NET_ADMIN for network tests).
+	Capabilities []string `yaml:"capabilities,omitempty" json:"capabilities"`
 }
 
 func NewDockerNode(wrapper *docker.Wrapper, name string, opts ifaces.NodeOptions) (node ifaces.Node, err error) {
@@ -48,9 +63,62 @@ type DockerNode struct {
 	options DockerNodeOpts
 }
 
+// resolveVolumes turns relative host paths into absolute ones. The Engine
+// API treats a non-absolute source as a NAMED VOLUME, so "./fixtures"
+// would silently mount an empty volume instead of the directory —
+// a passing-looking test against missing data.
+func resolveVolumes(volumes []string) ([]string, error) {
+	resolved := make([]string, 0, len(volumes))
+	for _, spec := range volumes {
+		parts := strings.SplitN(spec, ":", 2)
+		if len(parts) != 2 || parts[0] == "" {
+			return nil, fmt.Errorf("volume %q must be host:container[:options]", spec)
+		}
+		source := parts[0]
+		// A bare name (no separator) is a named volume by intent; a path
+		// is anything containing a separator or starting with . or ~
+		if strings.HasPrefix(source, "~") {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return nil, fmt.Errorf("volume %q: cannot resolve ~: %w", spec, err)
+			}
+			source = filepath.Join(home, strings.TrimPrefix(source, "~"))
+		}
+		if strings.ContainsAny(source, "/.") && !filepath.IsAbs(source) {
+			absolute, err := filepath.Abs(source)
+			if err != nil {
+				return nil, fmt.Errorf("volume %q: cannot resolve host path: %w", spec, err)
+			}
+			source = absolute
+		}
+		resolved = append(resolved, source+":"+parts[1])
+	}
+	return resolved, nil
+}
+
 func (d *DockerNode) Setup() error {
-	priv := docker.WithPrivileged()
-	if err := d.wrapper.CreateContainer(d.name, d.name, d.options.Image, priv); err != nil {
+	var opts []docker.ContainerOptions
+	if d.options.Privileged {
+		opts = append(opts, docker.WithPrivileged())
+	}
+	if len(d.options.Capabilities) > 0 {
+		opts = append(opts, docker.WithCapabilities(d.options.Capabilities))
+	}
+	if len(d.options.Volumes) > 0 {
+		volumes, err := resolveVolumes(d.options.Volumes)
+		if err != nil {
+			return err
+		}
+		opts = append(opts, docker.WithVolumes(volumes))
+	}
+	if len(d.options.Env) > 0 {
+		opts = append(opts, docker.WithEnv(d.options.Env))
+	}
+	if len(d.options.Ports) > 0 {
+		opts = append(opts, docker.WithPorts(d.options.Ports))
+	}
+
+	if err := d.wrapper.CreateContainer(d.name, d.name, d.options.Image, opts...); err != nil {
 		return err
 	}
 	if err := d.wrapper.StartContainer(d.name); err != nil {

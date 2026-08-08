@@ -433,6 +433,15 @@ func runCheck(cfgPath, reportValue, varsValue, onlyValue, skipValue string) int 
 			}))
 			return 1
 		}
+		// Option shapes that need no connection are checked here, so a
+		// green --check means the real run gets past construction
+		if err := nodetypes.ValidateNodeOptions(node); err != nil {
+			fmt.Fprint(os.Stderr, config.RenderConfigError(&config.ConfigError{
+				Message:  fmt.Sprintf("node %q: %v", node.Name, err),
+				Location: node.Loc,
+			}))
+			return 1
+		}
 		mocks[node.Name] = &checkNode{MockNode: nodetypes.NewMockNode()}
 	}
 

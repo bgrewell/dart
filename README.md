@@ -90,11 +90,19 @@ nodes:
       port: 22
       user: testuser
       key: ~/.ssh/id_rsa
+      # Host keys are verified against ~/.ssh/known_hosts by default;
+      # set known_hosts: <path> or insecure_skip_host_key: true to change it.
+      # bastion: { host: jump.example.com, user: jumpuser, key: ~/.ssh/id_rsa }
 
   - name: test-container
     type: docker
     options:
       image: ubuntu:latest
+      env: ["LOG_LEVEL=debug"]
+      volumes: ["./fixtures:/fixtures:ro"]
+      ports: ["8080:80"]
+      # privileged: true          # opt-in; capabilities are usually enough
+      # capabilities: [NET_ADMIN]
       networks:
         - name: test-net
           subnet: "172.20.0.0/16"
@@ -125,6 +133,34 @@ nodes:
       image: ubuntu:24.04
       instance_type: container
 ```
+
+### Node Security Defaults
+
+Two defaults changed in favour of least privilege — suites relying on the
+old behaviour need one line each:
+
+- **Docker containers are no longer privileged.** DART used to set
+  `--privileged` on every container. Add `privileged: true` if a test
+  genuinely needs it, or prefer `capabilities: [NET_ADMIN]` for the common
+  network-testing case.
+- **SSH host keys are verified.** DART used to accept any key. Verification
+  uses `~/.ssh/known_hosts` by default; point `known_hosts:` elsewhere, or
+  set `insecure_skip_host_key: true` for throwaway lab targets. A missing
+  or unmatched key is an error naming both options.
+
+SSH nodes also accept a `bastion:` block to reach targets through a jump
+host. The bastion inherits the target's host-key policy but may set its
+own (`known_hosts` / `insecure_skip_host_key`), so relaxing verification
+for an ephemeral target need not relax it for the long-lived jump host;
+reconnects after `reboot` route through the bastion too, and chained
+bastions are rejected rather than silently dropped.
+
+`--check` validates everything that needs no connection — SSH
+credentials, `known_hosts` readability, bastion shape, and docker
+`ports`/`volumes` specifications — so these breaking changes surface
+before a run rather than during one. Relative volume host paths
+(`./fixtures:/fixtures`) are resolved to absolute paths, since the Engine
+API would otherwise treat them as *named volumes* and mount an empty one.
 
 ### Remote Docker Support
 
