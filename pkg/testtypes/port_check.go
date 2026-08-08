@@ -19,8 +19,8 @@ import (
 var _ ifaces.Test = &PortCheckTest{}
 
 // PortCheckTest attempts a TCP connection and reports the port as "open"
-// or "closed". Note: the connection is attempted from the host running
-// DART, not from the test's node.
+// or "closed". The probe runs on the test's node by default; from: host
+// attempts it from the machine running DART instead.
 type PortCheckTest struct {
 	BaseTest
 	host    string
@@ -29,10 +29,10 @@ type PortCheckTest struct {
 }
 
 // newPortCheckTest parses host and port (required), timeout seconds
-// (default 5), and from ("host" or "node", default "host"). from: node
-// probes from the test's node instead of the DART host — the mode that
-// answers firewall/ACL questions ("can node A reach B:5432, is node C
-// blocked?"). Evaluate: status ("open" or "closed", default "open");
+// (default 5), and from (node|host, default node). Probing from the node
+// is what answers firewall and ACL questions ("can node A reach B:5432,
+// is node C blocked?"); from: host asks whether the controller can reach
+// the address instead. Evaluate: status ("open" or "closed", default "open");
 // other keys fall through to the standard evaluators (the observed status
 // is the result's stdout, closed also sets a non-zero exit code).
 func newPortCheckTest(base BaseTest, opts map[string]interface{}) (ifaces.Test, error) {
@@ -40,15 +40,9 @@ func newPortCheckTest(base BaseTest, opts map[string]interface{}) (ifaces.Test, 
 	if err != nil {
 		return nil, err
 	}
-	from, present, err := optString(base.name, opts, "from")
+	from, err := parseVantage(base.name, opts)
 	if err != nil {
 		return nil, err
-	}
-	if !present || from == "" {
-		from = "host"
-	}
-	if from != "host" && from != "node" {
-		return nil, fmt.Errorf("from must be \"host\" or \"node\" in test %q (got %q)", base.name, from)
 	}
 	port, err := optInt(base.name, opts, "port", 0)
 	if err != nil {
@@ -91,10 +85,18 @@ func newPortCheckTest(base BaseTest, opts map[string]interface{}) (ifaces.Test, 
 
 	base.evaluations = evaluations
 
-	if from == "node" {
+	if from == VantageNode {
 		return &commandTest{
 			BaseTest: base,
-			command:  nodePortProbe(host, port, timeoutSeconds),
+			// Built at run time so a captured host is quoted after
+			// substitution rather than injected into a quoted command
+			build: func(resolve func(string) (string, error)) (string, error) {
+				resolvedHost, err := resolve(host)
+				if err != nil {
+					return "", err
+				}
+				return nodePortProbe(resolvedHost, port, timeoutSeconds), nil
+			},
 			// DART bounds the probe itself, so a node without a working
 			// `timeout` binary still cannot hang the suite
 			timeout: time.Duration((timeoutSeconds + 5) * float64(time.Second)),

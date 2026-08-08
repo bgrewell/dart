@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bgrewell/dart/internal/config"
 	"github.com/bgrewell/dart/pkg/ifaces"
 	"github.com/bgrewell/dart/pkg/nodetypes"
 	"github.com/stretchr/testify/assert"
@@ -14,23 +13,7 @@ import (
 
 func makeStep(t *testing.T, stepType string, options map[string]interface{}) (ifaces.Step, error) {
 	t.Helper()
-	nodes := map[string]ifaces.Node{"test-node": nodetypes.NewMockNode()}
-	configs := []*config.StepConfig{
-		{
-			Name: "factory test",
-			Node: config.NodeReference{"test-node"},
-			Step: config.StepDetails{
-				Type:    stepType,
-				Options: options,
-			},
-		},
-	}
-	steps, err := CreateSteps(configs, nodes)
-	if err != nil {
-		return nil, err
-	}
-	require.Len(t, steps, 1)
-	return steps[0], nil
+	return makeStepOn(t, nodetypes.NewMockNode(), stepType, options)
 }
 
 // Every documented step type must be constructible.

@@ -11,6 +11,7 @@ import (
 	"github.com/bgrewell/dart/internal/eval"
 	"github.com/bgrewell/dart/internal/execution"
 	"github.com/bgrewell/dart/internal/formatters"
+	"github.com/bgrewell/dart/internal/probe"
 	"github.com/bgrewell/dart/pkg/ifaces"
 )
 
@@ -19,8 +20,8 @@ var _ ifaces.Test = &HTTPRequestTest{}
 // HTTPRequestTest performs an HTTP request and applies evaluations to the
 // response: the status code maps to the result's exit code and the body to
 // its stdout, so status_code, contains, match, regex, json_path, and
-// max_duration all work. Note: the request is made from the host running
-// DART, not from the test's node.
+// max_duration all work. The request is made from the test's node by
+// default (from: host asks it from the machine running DART instead).
 type HTTPRequestTest struct {
 	BaseTest
 	method  string
@@ -30,8 +31,10 @@ type HTTPRequestTest struct {
 }
 
 // newHTTPRequestTest parses url (required), method (default GET), headers
-// (map), and timeout seconds (default 30). Evaluate: status_code (default
-// 200 when no evaluate block is given) plus the standard evaluators.
+// (map), timeout seconds (default 30), and from (node|host, default node).
+// Evaluate: status_code (default 200 when no evaluate block is given) plus
+// the standard evaluators. Node-side requests are issued with curl, which
+// the node must provide.
 func newHTTPRequestTest(base BaseTest, opts map[string]interface{}) (ifaces.Test, error) {
 	url, err := requiredString(base.name, opts, "url")
 	if err != nil {
@@ -94,13 +97,72 @@ func newHTTPRequestTest(base BaseTest, opts map[string]interface{}) (ifaces.Test
 		evaluations["status_code"] = &eval.EvaluateExitCode{Expected: []int{http.StatusOK}}
 	}
 
+	from, err := parseVantage(base.name, opts)
+	if err != nil {
+		return nil, err
+	}
+
 	base.evaluations = evaluations
+	if from == VantageNode {
+		return &commandTest{
+			BaseTest: base,
+			// Built at run time so captured values are quoted after
+			// substitution rather than injected into a quoted command
+			build: func(resolve func(string) (string, error)) (string, error) {
+				resolvedURL, err := resolve(url)
+				if err != nil {
+					return "", err
+				}
+				resolvedHeaders := make(map[string]string, len(headers))
+				for name, value := range headers {
+					resolvedHeaders[name], err = resolve(value)
+					if err != nil {
+						return "", err
+					}
+				}
+				return probe.HTTPCommand(method, resolvedURL, resolvedHeaders, timeoutSeconds), nil
+			},
+			timeout: time.Duration((timeoutSeconds + 5) * float64(time.Second)),
+			// The probe prints the body, then the status code on its own
+			// line; the wrapper turns that into the same result shape the
+			// host-side request produces
+			transform: httpProbeResult,
+		}, nil
+	}
+
 	return &HTTPRequestTest{
 		BaseTest: base,
 		method:   method,
 		url:      url,
 		headers:  headers,
 		timeout:  time.Duration(timeoutSeconds * float64(time.Second)),
+	}, nil
+}
+
+// httpProbeResult reshapes the probe's output into the result the
+// evaluators expect: the response body on stdout and the HTTP status as
+// the exit code, matching the host-side request exactly.
+func httpProbeResult(result *execution.ExecutionResult) (*execution.ExecutionResult, error) {
+	stdout, err := result.StdoutBytes()
+	if err != nil {
+		return nil, err
+	}
+	stderr, _ := result.StderrBytes()
+
+	if result.ExitCode == probe.MissingToolExitCode {
+		return nil, fmt.Errorf("%s", strings.TrimSpace(string(stderr)))
+	}
+
+	body, status, err := probe.ParseHTTPOutput(string(stdout), string(stderr))
+	if err != nil {
+		return nil, err
+	}
+
+	return &execution.ExecutionResult{
+		ExitCode: status,
+		Stdout:   strings.NewReader(body),
+		Stderr:   strings.NewReader(""),
+		Duration: result.Duration,
 	}, nil
 }
 

@@ -268,10 +268,48 @@ type commandTest struct {
 	BaseTest
 	command string
 	timeout time.Duration
+	// build produces the command at run time from values the caller has
+	// already resolved. Probes use it so shell quoting is applied to the
+	// substituted value: interpolating a capture into a command that was
+	// quoted at construction time would let a value containing a quote
+	// escape into the shell.
+	build func(resolve func(string) (string, error)) (string, error)
+	// transform reshapes the node's raw result before evaluation, so a
+	// probe run on the node can present exactly what the equivalent
+	// host-side implementation would.
+	transform func(*execution.ExecutionResult) (*execution.ExecutionResult, error)
 }
 
 func (t *commandTest) Run(updater formatters.TestCompleter) (map[string]*eval.EvaluateResult, error) {
-	return t.runCommand(t.command, t.timeout, updater)
+	if t.transform == nil && t.build == nil {
+		return t.runCommand(t.command, t.timeout, updater)
+	}
+
+	command, err := t.resolveCommand()
+	if err != nil {
+		updater.Error()
+		return nil, err
+	}
+	if t.transform == nil {
+		return t.runCommand(command, t.timeout, updater)
+	}
+	produce := ifaces.BoundedCommand(t.node, command, t.timeout)
+	return t.runProducer(func() (*execution.ExecutionResult, error) {
+		result, err := produce()
+		if err != nil {
+			return nil, err
+		}
+		return t.transform(result)
+	}, updater)
+}
+
+// resolveCommand yields the command to run, resolving capture references
+// before any shell quoting so a captured value is always data.
+func (t *commandTest) resolveCommand() (string, error) {
+	if t.build != nil {
+		return t.build(t.interpolateCaptures)
+	}
+	return t.interpolateCaptures(t.command)
 }
 
 // CreateTests creates a slice of Test objects from a slice of TestConfig objects
