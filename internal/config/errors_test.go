@@ -73,3 +73,31 @@ tests:
 	assert.Equal(t, 11, loc.Line)
 	assert.Equal(t, 6, cfg.Tests[0].Loc.Line, "the test's own location is still the block start")
 }
+
+// A value error must mark the option it is about, not the first line of the
+// enclosing test — the same rule that applies to an unknown option.
+func TestValueErrorMarksItsOwnOption(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "suite.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(`suite: value errors
+nodes:
+  - name: web
+    type: local
+tests:
+  - name: health endpoint answers
+    node: web
+    type: http_request
+    options:
+      url: http://localhost:8080/health
+      timeout: -5
+`), 0o644))
+
+	cfg, err := LoadConfiguration(path)
+	require.NoError(t, err)
+
+	// `timeout:` is on line 11; the test block starts on line 6
+	loc, ok := cfg.Tests[0].OptionLocs["timeout"]
+	require.True(t, ok)
+	assert.Equal(t, 11, loc.Line)
+	assert.Equal(t, 6, cfg.Tests[0].Loc.Line)
+}
