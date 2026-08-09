@@ -162,7 +162,7 @@ func newFixture(nodeNames ...string) *controllerFixture {
 
 func (f *controllerFixture) controller(tests []*config.TestConfig, opts ...func(*TestController)) *TestController {
 	tc := NewTestController("suite", nil, f.nodes, f.configs, nil, nil, tests,
-		false, false, false, false, false, false, "", "", f.formatter)
+		false, false, false, false, false, false, false, "", "", f.formatter)
 	for _, opt := range opts {
 		opt(tc)
 	}
@@ -315,7 +315,7 @@ func TestControllerTeardownOnlyRunsTeardownSteps(t *testing.T) {
 		},
 	}
 	tc := NewTestController("suite", nil, f.nodes, f.configs, nil, teardownSteps, nil,
-		false, false, false, false, false, true, "", "", f.formatter)
+		false, false, false, false, false, true, false, "", "", f.formatter)
 	require.NoError(t, tc.Run())
 
 	assert.Contains(t, f.formatter.tasks, "cleanup files@n1", "teardown steps must run in teardown-only mode")
@@ -342,7 +342,7 @@ func TestControllerPlatformLifecycle(t *testing.T) {
 	platform := &fakePlatform{name: "fake", configured: true}
 	tc := NewTestController("suite", []ifaces.PlatformManager{platform}, f.nodes, f.configs,
 		nil, nil, []*config.TestConfig{execTest("t", "n1", "echo ok", nil)},
-		false, false, false, false, false, false, "", "", f.formatter)
+		false, false, false, false, false, false, false, "", "", f.formatter)
 
 	require.NoError(t, tc.Run())
 	assert.Equal(t, 1, platform.setups)
@@ -355,7 +355,7 @@ func TestControllerPlatformSetupErrorTornDown(t *testing.T) {
 	bad := &fakePlatform{name: "bad", configured: true, setupErr: errors.New("no daemon")}
 	tc := NewTestController("suite", []ifaces.PlatformManager{good, bad}, f.nodes, f.configs,
 		nil, nil, nil,
-		false, false, false, false, false, false, "", "", f.formatter)
+		false, false, false, false, false, false, false, "", "", f.formatter)
 
 	err := tc.Run()
 	require.Error(t, err)
@@ -392,7 +392,7 @@ func TestControllerReportWrittenOnTeardownFailure(t *testing.T) {
 	}}
 	tc := NewTestController("suite", nil, f.nodes, f.configs, nil, teardownSteps,
 		[]*config.TestConfig{execTest("passes", "n1", "echo ok", map[string]interface{}{"exit_code": 0})},
-		false, false, false, false, false, false, "", "", f.formatter)
+		false, false, false, false, false, false, false, "", "", f.formatter)
 	tc.SetReports([]report.Spec{{Format: "json", Path: reportPath}})
 
 	err := tc.Run()
@@ -538,7 +538,7 @@ func TestControllerTeardownOnlyFailureExitsNonZero(t *testing.T) {
 	}
 
 	tc := NewTestController("suite", nil, f.nodes, f.configs, nil, teardownSteps, nil,
-		false, false, false, false, false, true, "", "", f.formatter)
+		false, false, false, false, false, true, false, "", "", f.formatter)
 	err := tc.Run()
 
 	require.Error(t, err, "a failing teardown must not report success")
@@ -572,7 +572,7 @@ func TestControllerTeardownOnlyCleanExitsZero(t *testing.T) {
 	}
 
 	tc := NewTestController("suite", nil, f.nodes, f.configs, nil, teardownSteps, nil,
-		false, false, false, false, false, true, "", "", f.formatter)
+		false, false, false, false, false, true, false, "", "", f.formatter)
 	require.NoError(t, tc.Run())
 	assert.Empty(t, f.formatter.errors)
 }
