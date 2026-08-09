@@ -123,3 +123,52 @@ func TestNodeLevelSubnetIsRejected(t *testing.T) {
 		},
 	}))
 }
+
+// A suite with a top-level lxd: block manages projects, networks, and
+// profiles on one server. A node that selects a different one used to be
+// created locally anyway, so the tests passed against a machine the suite
+// never named.
+func TestLxdConnectionOptionsConflictWithPlatformBlock(t *testing.T) {
+	remote := &config.NodeConfig{
+		Name: "remote-box", Type: "lxd",
+		Options: map[string]interface{}{
+			"image":       "ubuntu:24.04",
+			"remote_addr": "https://10.0.0.1:8443",
+			"trust_token": "abc123",
+		},
+	}
+
+	err := ValidateNodeSet([]*config.NodeConfig{remote}, NodeSetOptions{HasLxdPlatform: true})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "remote_addr, trust_token")
+	assert.Contains(t, err.Error(), "lxd: block already connects to one")
+
+	// Without the platform block the node manages its own connection
+	assert.NoError(t, ValidateNodeSet([]*config.NodeConfig{remote}, NodeSetOptions{HasLxdPlatform: false}))
+
+	// A node that selects no server is fine either way
+	plain := &config.NodeConfig{
+		Name: "box", Type: "lxd",
+		Options: map[string]interface{}{"image": "ubuntu:24.04"},
+	}
+	assert.NoError(t, ValidateNodeSet([]*config.NodeConfig{plain}, NodeSetOptions{HasLxdPlatform: true}))
+}
+
+// Every option that selects a server is reported, so a suite setting several
+// is told about all of them at once.
+func TestLxdConnectionOptionsAreAllReported(t *testing.T) {
+	opts := LxdNodeOpts{
+		RemoteAddr: "https://10.0.0.1:8443",
+		Socket:     "/var/lib/incus/unix.socket",
+		ClientCert: "c.crt",
+		ClientKey:  "c.key",
+		ServerCert: "s.crt",
+		TrustToken: "t",
+		SkipVerify: true,
+	}
+	assert.Equal(t,
+		[]string{"remote_addr", "socket", "client_cert", "client_key", "server_cert", "trust_token", "skip_verify"},
+		opts.connectionOptions())
+
+	assert.Empty(t, LxdNodeOpts{Image: "ubuntu:24.04"}.connectionOptions())
+}

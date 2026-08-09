@@ -236,7 +236,12 @@ func CreateNodes(configs []*config.NodeConfig, wrapper *docker.Wrapper) (map[str
 // rather than a single node: names must be unique, and at most one node may
 // be of type local. Keeping them here rather than inline in the factory is
 // what lets --check report them without constructing anything.
-func ValidateNodeSet(configs []*config.NodeConfig) error {
+func ValidateNodeSet(configs []*config.NodeConfig, opts ...NodeSetOptions) error {
+	var setOpts NodeSetOptions
+	if len(opts) > 0 {
+		setOpts = opts[0]
+	}
+
 	seen := make(map[string]bool, len(configs))
 	localNode := ""
 
@@ -258,8 +263,28 @@ func ValidateNodeSet(configs []*config.NodeConfig) error {
 			}
 			localNode = cfg.Name
 		}
+
+		// A suite with a top-level lxd: block connects to one server and
+		// manages its projects, networks, and profiles there, so a node
+		// cannot select a different one
+		if setOpts.HasLxdPlatform && (cfg.Type == "lxd" || cfg.Type == "lxd-vm") {
+			var lxdOpts LxdNodeOpts
+			if err := decodeNodeOptions(cfg.Options, &lxdOpts); err != nil {
+				return err
+			}
+			if err := ErrConnectionOptionsWithPlatformBlock(cfg.Name, lxdOpts); err != nil {
+				return &config.ConfigError{Message: err.Error(), Location: cfg.Loc}
+			}
+		}
 	}
 	return nil
+}
+
+// NodeSetOptions carries suite-level facts the cross-node checks need.
+type NodeSetOptions struct {
+	// HasLxdPlatform reports whether the suite declares a top-level lxd:
+	// block, which fixes the server every lxd node is created on.
+	HasLxdPlatform bool
 }
 
 // CreateNodesWithWrappers creates nodes using both Docker and LXD wrappers

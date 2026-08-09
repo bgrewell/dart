@@ -92,6 +92,31 @@ type LxdNodeOpts struct {
 	InstanceName string `yaml:"instance_name,omitempty" json:"instance_name"`
 }
 
+// connectionOptions lists the node-level options that select which server the
+// instance is created on. They are meaningful only when the node builds its
+// own connection; a suite with a top-level lxd: block connects through the
+// shared wrapper instead.
+func (o LxdNodeOpts) connectionOptions() []string {
+	var set []string
+	for _, opt := range []struct {
+		name  string
+		isSet bool
+	}{
+		{"remote_addr", o.RemoteAddr != ""},
+		{"socket", o.Socket != ""},
+		{"client_cert", o.ClientCert != ""},
+		{"client_key", o.ClientKey != ""},
+		{"server_cert", o.ServerCert != ""},
+		{"trust_token", o.TrustToken != ""},
+		{"skip_verify", o.SkipVerify},
+	} {
+		if opt.isSet {
+			set = append(set, opt.name)
+		}
+	}
+	return set
+}
+
 // emptyInstance reports whether the instance should be created without an image.
 // An instance is empty when it is explicitly marked as such or when no image was given.
 func (o LxdNodeOpts) emptyInstance() bool {
@@ -367,10 +392,11 @@ func NewLxdNode(name string, opts ifaces.NodeOptions, suiteDir string) (node ifa
 
 }
 
-// NewLxdNodeWithWrapper creates a new LXD node using the provided wrapper
-// Note: When using a wrapper, the connection to the LXD server is managed by the wrapper itself.
-// Remote connection configuration in node options will be ignored.
-// Use NewWrapper or NewWrapperWithOptions to configure remote connections when using wrappers.
+// NewLxdNodeWithWrapper creates a new LXD node on the shared wrapper's
+// connection. A suite with a top-level lxd: block manages projects, networks,
+// and profiles on that one server, so a node cannot select a different one:
+// the instance would be created somewhere those resources do not exist. Node
+// options that select a server are rejected rather than ignored.
 func NewLxdNodeWithWrapper(wrapper *lxd.Wrapper, name string, opts ifaces.NodeOptions, suiteDir string) (node ifaces.Node, err error) {
 
 	jsonData, err := json.Marshal(opts)
@@ -385,6 +411,9 @@ func NewLxdNodeWithWrapper(wrapper *lxd.Wrapper, name string, opts ifaces.NodeOp
 	}
 
 	if err = nodeopts.validate(); err != nil {
+		return nil, err
+	}
+	if err = ErrConnectionOptionsWithPlatformBlock(name, nodeopts); err != nil {
 		return nil, err
 	}
 
@@ -1064,4 +1093,18 @@ func Fields(s string) ([]string, error) {
 	}
 
 	return fields, nil
+}
+
+// ErrConnectionOptionsWithPlatformBlock reports node options that select a
+// server when the suite's lxd: block already fixed one. Silently creating the
+// instance elsewhere is the outcome worth preventing: the tests then pass
+// against a machine the suite never named.
+func ErrConnectionOptionsWithPlatformBlock(nodeName string, opts LxdNodeOpts) error {
+	set := opts.connectionOptions()
+	if len(set) == 0 {
+		return nil
+	}
+	return fmt.Errorf("node %q sets %s, which selects an LXD server, but the suite's lxd: block already connects to one — "+
+		"move the connection settings to the lxd: block, or remove the lxd: block so the node manages its own connection",
+		nodeName, strings.Join(set, ", "))
 }

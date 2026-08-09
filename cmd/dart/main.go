@@ -460,7 +460,9 @@ func runCheck(cfgPath, reportValue, varsValue, onlyValue, skipValue string) int 
 
 	// Constraints across the whole node list — duplicate names, more than
 	// one local node — are the same ones a real run enforces
-	if err := nodetypes.ValidateNodeSet(cfg.Nodes); err != nil {
+	if err := nodetypes.ValidateNodeSet(cfg.Nodes, nodetypes.NodeSetOptions{
+		HasLxdPlatform: cfg.Lxd != nil,
+	}); err != nil {
 		var cfgErr *config.ConfigError
 		if errors.As(err, &cfgErr) {
 			fmt.Fprint(os.Stderr, config.RenderConfigError(cfgErr))
