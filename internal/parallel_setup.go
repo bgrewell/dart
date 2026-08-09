@@ -62,7 +62,7 @@ func parallelSetupSafe(pauseOnFail bool, until string) (bool, string) {
 // Every group runs to completion even after another fails: a half-configured
 // node is harder to clean up than a fully configured one, and teardown runs
 // either way.
-func runSetupGroupsParallel(groups []setupGroup, formatter formatters.Formatter, line func(task, node string) string,
+func runSetupGroupsParallel(groups []setupGroup, line func(task, node string) string,
 	newCompleter func(message string) formatters.TaskCompleter) []error {
 
 	errs := make([]error, len(groups))
@@ -77,7 +77,13 @@ func runSetupGroupsParallel(groups []setupGroup, formatter formatters.Formatter,
 				if err := step.Run(completer); err != nil {
 					completer.Error()
 					// The rest of this node's chain is skipped: later steps
-					// assume the earlier ones succeeded
+					// assume the earlier ones succeeded.
+					//
+					// The node is named in the error because failures are
+					// reported together after every group finishes, detached
+					// from the task lines that show which node each belongs
+					// to. The sequential path prints its error immediately
+					// under that line and so does not need the prefix.
 					errs[i] = fmt.Errorf("node %s: %w", group.node, err)
 					return
 				}
@@ -110,7 +116,7 @@ func (tc *TestController) runParallelSetup() []error {
 	}
 
 	var mu sync.Mutex
-	return runSetupGroupsParallel(groups, tc.formatter,
+	return runSetupGroupsParallel(groups,
 		standard.QuietTaskLine,
 		func(message string) formatters.TaskCompleter {
 			return formatters.NewQuietTaskCompleter(standard.Out(), &mu, message)

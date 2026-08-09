@@ -63,7 +63,7 @@ func runGroups(t *testing.T, steps []ifaces.Step) ([]error, string) {
 	var out bytes.Buffer
 	var mu sync.Mutex
 	groups := groupSetupByNode(steps)
-	errs := runSetupGroupsParallel(groups, nil,
+	errs := runSetupGroupsParallel(groups,
 		func(task, node string) string { return fmt.Sprintf("  [ %s ] %s ... ", node, task) },
 		func(message string) formatters.TaskCompleter {
 			return formatters.NewQuietTaskCompleter(&out, &mu, message)
