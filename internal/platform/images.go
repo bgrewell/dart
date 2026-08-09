@@ -5,28 +5,39 @@ import (
 	"strings"
 )
 
-// TranslateImage converts LXD-style image references to runtime-appropriate format.
-// For LXD, images are returned unchanged.
-// For Incus, images are translated: "ubuntu:24.04" becomes "images:ubuntu/24.04/cloud"
-// to ensure the cloud variant is selected.
+// ubuntuRemote is the only remote that needs rewriting on Incus. Canonical's
+// simplestreams endpoint behind `ubuntu:` does not serve Incus clients, so an
+// `ubuntu:` reference is redirected to the equivalent image on the
+// linuxcontainers server, where Ubuntu images live under `ubuntu/<release>`
+// and the cloud variant carries the `/cloud` suffix.
+const ubuntuRemote = "ubuntu"
+
+// cloudVariant is the suffix identifying the cloud-init enabled build.
+const cloudVariant = "/cloud"
+
+// TranslateImage adapts an LXD-style image reference for the running runtime.
+//
+// For LXD the reference is used as written. For Incus only `ubuntu:` is
+// rewritten — `ubuntu:24.04` becomes `images:ubuntu/24.04/cloud`. Every other
+// remote is left alone: rewriting them redirected `lxc:` and any private or
+// self-hosted remote to the public linuxcontainers server, and appended a
+// `/cloud` variant that most image families do not publish, so the image
+// could not be found.
 func TranslateImage(ref string, runtime Runtime) string {
 	if runtime == RuntimeLXD {
 		return ref
 	}
 
-	// Incus translation: ubuntu:24.04 → images:ubuntu/24.04/cloud
-	parts := strings.SplitN(ref, ":", 2)
-	if len(parts) != 2 {
-		// Can't parse, return as-is
+	remote, alias, found := strings.Cut(ref, ":")
+	if !found || remote != ubuntuRemote {
 		return ref
 	}
 
-	remote, alias := parts[0], parts[1]
-
-	// If already using the images remote, no translation needed
-	if remote == "images" {
-		return ref
+	// A reference that already names the variant is left as it is, so an
+	// explicit `ubuntu:24.04/cloud` does not become `.../cloud/cloud`
+	if strings.HasSuffix(alias, cloudVariant) {
+		return fmt.Sprintf("images:%s/%s", ubuntuRemote, alias)
 	}
 
-	return fmt.Sprintf("images:%s/%s/cloud", remote, alias)
+	return fmt.Sprintf("images:%s/%s%s", ubuntuRemote, alias, cloudVariant)
 }

@@ -923,19 +923,19 @@ three listed paths and does classify the runtime correctly.
 
 **Image Name Translation:**
 
-When Incus is detected, DART rewrites image references that contain a `:`.
-References without a colon are passed through untouched, as are all references when
-the runtime is LXD. A reference of the form `<remote>:<alias>` becomes
-`images:<remote>/<alias>/cloud`, selecting the cloud variant:
+When Incus is detected, DART rewrites `ubuntu:` references only. Canonical's
+simplestreams endpoint behind `ubuntu:` does not serve Incus clients, so the
+reference is redirected to the equivalent image on the linuxcontainers server,
+where Ubuntu images live under `ubuntu/<release>` and the cloud-init build
+carries a `/cloud` suffix:
 
 - `ubuntu:24.04` becomes `images:ubuntu/24.04/cloud`
-- `images:debian/12` remains unchanged (references already on the `images` remote
-  are never rewritten)
+- `ubuntu:24.04/cloud` becomes `images:ubuntu/24.04/cloud` — an explicit
+  variant is not doubled
 
-Warning: the rewrite applies to every remote prefix, not just `ubuntu`. A reference
-such as `lxc:alpine/3.18` becomes `images:lxc/alpine/3.18/cloud`, which is not a
-real alias. Non-`ubuntu` remotes should be written in Incus-native form
-(`images:alpine/3.18`) so they pass through unchanged.
+Every other reference is passed through as written, including `images:`,
+`lxc:`, a private or self-hosted remote, and any reference with no remote at
+all. All references are passed through when the runtime is LXD.
 
 **Image sources:**
 
