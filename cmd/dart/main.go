@@ -54,6 +54,7 @@ type CmdlineFlags struct {
 	Only          *string
 	SkipTags      *string
 	Color         *string
+	ParallelSetup *bool
 }
 
 type ControllerParams struct {
@@ -208,6 +209,7 @@ func Controller(params ControllerParams) (ctrl *internal.TestController, err err
 		*params.Flags.PauseOnError,
 		*params.Flags.SetupOnly,
 		*params.Flags.TeardownOnly,
+		*params.Flags.ParallelSetup,
 		*params.Flags.Until,
 		*params.Flags.UntilBehavior,
 		params.Formatter)
@@ -314,6 +316,7 @@ func main() {
 	cfgFlags.Only = u.AddStringOption("o", "only", "", "Run only tests carrying one of these tags: tag=name[,name...]", "", nil)
 	cfgFlags.SkipTags = u.AddStringOption("sk", "skip", "", "Exclude tests carrying any of these tags: tag=name[,name...]", "", nil)
 	cfgFlags.Color = u.AddStringOption("co", "color", "auto", "Colorize output: auto (a terminal), always, or never", "", nil)
+	cfgFlags.ParallelSetup = u.AddBooleanOption("ps", "parallel-setup", false, "Run each node's setup steps concurrently with the other nodes'", "", nil)
 
 	// DART declares no positional arguments, and the usage library indexes
 	// its (empty) argument list for every leftover it finds — so a stray

@@ -34,6 +34,7 @@ func NewTestController(
 	pauseOnFail bool,
 	setupOnly bool,
 	teardownOnly bool,
+	parallelSetup bool,
 	until string,
 	untilBehavior string,
 	formatter formatters.Formatter) *TestController {
@@ -56,6 +57,7 @@ func NewTestController(
 		pauseOnFail:     pauseOnFail,
 		setupOnly:       setupOnly,
 		teardownOnly:    teardownOnly,
+		parallelSetup:   parallelSetup,
 		until:           until,
 		untilBehavior:   untilBehavior,
 	}
@@ -85,6 +87,7 @@ type TestController struct {
 	pauseOnFail       bool
 	setupOnly         bool
 	teardownOnly      bool
+	parallelSetup     bool
 	until             string
 	untilBehavior     string
 }
@@ -477,6 +480,21 @@ func (tc *TestController) Run() error {
 
 	if len(tc.Setup) > 0 {
 		untilReachedInSetup := false
+		if tc.parallelSetup {
+			if safe, reason := parallelSetupSafe(tc.pauseOnFail, tc.until); !safe {
+				tc.formatter.PrintError(fmt.Errorf("running setup sequentially: %s", reason))
+			} else if errs := tc.runParallelSetup(); len(errs) > 0 {
+				// handleSetupError is not consulted here: it prompts, and
+				// the guard above already established that prompting is off
+				for _, err := range errs {
+					tc.formatter.PrintError(err)
+				}
+				return errs[0]
+			} else {
+				goto setupDone
+			}
+		}
+
 		for _, step := range tc.Setup {
 		stepRetry:
 			for {
@@ -501,6 +519,7 @@ func (tc *TestController) Run() error {
 				break
 			}
 		}
+	setupDone:
 		tc.formatter.PrintEmpty()
 		if untilReachedInSetup {
 			if tc.applyUntilBehavior() {

@@ -332,6 +332,43 @@ Note: `--teardown-only` is best-effort — it runs every cleanup operation even
 after one fails — and exits 1 if any of them did. See
 [Exit Codes](#exit-codes).
 
+### Parallel Setup
+
+`-ps`/`--parallel-setup` runs each node's setup chain concurrently with the
+other nodes'. Steps for one node stay in order — a node's own steps routinely
+depend on each other — so only different nodes overlap.
+
+```bash
+dart -c suite.yaml --parallel-setup
+```
+
+Warning: it is **opt-in**, and deliberately so. Sequential order across nodes
+is the only ordering mechanism a suite has today, so a suite whose step on one
+node depends on a step having finished on another — starting a database before
+an application connects to it — is relying on that order without saying so.
+Turning this on breaks such a suite. Express the dependency with a `wait_for`
+step on the dependent node before enabling it.
+
+Three flags force setup back to sequential, reporting why rather than failing:
+
+| Flag | Reason |
+|---|---|
+| `--pause-on-error` | reads stdin, and concurrent prompts cannot share it |
+| `--until` | stops at a named step, which needs an order to stop in |
+
+Two further differences apply while it is on:
+
+- **Output is not animated.** Each task prints one line when it finishes,
+  rather than a live spinner, because a spinner owns a terminal line and two
+  of them overwrite each other. Lines therefore appear in completion order,
+  not declaration order.
+- **A failure does not stop sibling nodes.** The failing node skips the rest
+  of its own chain, since later steps assume the earlier ones succeeded, but
+  other nodes run to completion — a half-configured node is harder to clean up
+  than a fully configured one. Every failure is reported, and the run exits
+  with the first one in node-declaration order, so the result does not depend
+  on which node finished first.
+
 ### Configuration Errors
 
 A problem in a suite file is reported against the line that causes it, with
