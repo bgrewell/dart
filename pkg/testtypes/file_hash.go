@@ -69,8 +69,8 @@ func newFileHashTest(base BaseTest, opts map[string]interface{}) (ifaces.Test, e
 			// result's stdout is the digest line, so `contains: hello` would
 			// assert against "<digest>  <path>" rather than the file.
 			// Assertions about contents belong on file_content.
-			return nil, fmt.Errorf("check %q is not available in a file_hash test %q: this type accepts only md5, sha1, and sha256, "+
-				"because its output is the checksum line rather than the file's contents — use file_content to assert on contents",
+			return nil, fmt.Errorf("check %q is not available in a file_hash test %q: a matching digest already proves the contents, "+
+				"so this type accepts only md5, sha1, and sha256 — use file_content to assert on contents",
 				name, base.name)
 		}
 	}
