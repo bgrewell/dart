@@ -38,10 +38,13 @@ func TestTranslateImage(t *testing.T) {
 			expected: "images:debian/12",
 		},
 		{
-			name:     "Incus lxc remote translated",
+			// The lxc remote serves the same linuxcontainers images; it is
+			// not the ubuntu remote and needs no rewriting. Redirecting it
+			// pointed at images:lxc/... on a server that has no such path.
+			name:     "Incus lxc remote unchanged",
 			image:    "lxc:alpine/3.18",
 			runtime:  RuntimeIncus,
-			expected: "images:lxc/alpine/3.18/cloud",
+			expected: "lxc:alpine/3.18",
 		},
 		{
 			name:     "No colon returns unchanged for LXD",
