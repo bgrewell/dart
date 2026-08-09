@@ -101,6 +101,13 @@ func resolveVolumes(volumes []string, suiteDir string) ([]string, error) {
 }
 
 func (d *DockerNode) Setup() error {
+	// Fetch the image first: creating a container from an absent image fails
+	// with the daemon's "No such image", which describes the symptom rather
+	// than the cause
+	if err := d.wrapper.EnsureImage(d.options.Image); err != nil {
+		return err
+	}
+
 	var opts []docker.ContainerOptions
 	if d.options.Privileged {
 		opts = append(opts, docker.WithPrivileged())

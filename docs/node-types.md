@@ -430,13 +430,22 @@ setup, and before any setup step runs. Consequences worth knowing:
 | `entrypoint` | list of strings | Overrides the image's `ENTRYPOINT`. |
 | `container_name` | string | The container's name on the daemon; defaults to the node name. |
 
-Note: DART does not pull Docker images. The `image:` a docker node references must
-already exist in the local daemon — pulled beforehand (`docker pull nginx:alpine`)
-or built from the suite's `docker.images` block, which runs `docker build` against
-a Dockerfile and is therefore not a substitute for a pull. A missing image fails
-node setup with `could not create container: ...` followed by the daemon's
-`No such image`. This applies to `type: docker` nodes only: `docker-compose` nodes
-pull through Compose, and LXD/Incus nodes fetch images through the LXD client.
+DART fetches a missing image before creating the container, so a node can
+reference `nginx:alpine` without a preceding `docker pull`. Two cases are left
+alone:
+
+- an image already present is **not** re-fetched, so a suite keeps the copy it
+  has rather than silently moving to a newer build behind the same tag;
+- an image the suite builds through `docker.images` is never pulled — it has no
+  registry to pull from.
+
+A pull that fails (no such image, unauthorized, no network) fails node setup
+with `could not pull image <ref>: ...` naming the image, rather than the
+daemon's later `No such image` at container creation.
+
+Note: pull progress is not displayed. Node setup renders through a spinner
+that raw daemon output would overwrite, so a large first pull looks like a
+slow setup step.
 
 The container is created from the image's own `CMD`/`ENTRYPOINT` unless
 `command:` or `entrypoint:` overrides them. DART allocates no TTY and attaches no

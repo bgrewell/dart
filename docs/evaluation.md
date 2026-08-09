@@ -43,12 +43,14 @@ Three ways the block itself can go wrong:
   before the message appears, so the failure surfaces later than a config syntax
   error, though no setup step or test ever runs.
 
-  `file_hash` is the exception. Its `evaluate` block accepts only `md5`,
-  `sha1`, and `sha256`; every other key — misspelled or not — reports
-  `unknown hash algorithm "<name>" in test "<test name>" (supported: md5,
-  sha1, sha256)`. That closure covers the whole vocabulary on this page, so
-  `evaluate: {sha256: <digest>, contains: "x"}` is a configuration error
-  rather than two checks.
+  `file_hash` is the exception, deliberately. Its `evaluate` block accepts
+  only `md5`, `sha1`, and `sha256`, because the check runs `sha256sum` and
+  friends: the result's stdout is the **checksum line**, not the file's
+  contents. A `contains: "hello"` there would read like a content assertion
+  while actually matching against `"<digest>  <path>"` — so the whole
+  vocabulary on this page is refused rather than silently meaning something
+  else. Assertions about contents belong on `file_content`, and anything
+  richer on `execute`.
 
   These names belong to one test type and are recognized only there; using one
   under a different type reports the same unknown-evaluation-type error:

@@ -341,3 +341,45 @@ func (w *Wrapper) ExecuteInContainer(containerName, command string) (exitCode in
 func (w *Wrapper) ExecuteInContainerStreaming(containerName, command string, debugEnabled bool) (exitCode int, stdout, stderr io.Reader, err error) {
 	return RunCommandInContainerStreaming(w.cli, w.containerRef(containerName), containerName, command, debugEnabled)
 }
+
+// suiteBuilds reports whether the suite's docker.images block builds this
+// image itself. A locally built image has no registry to pull from, so
+// attempting one would fail on an image that is about to exist.
+func (w *Wrapper) suiteBuilds(imageRef string) bool {
+	if w.cfg == nil {
+		return false
+	}
+	for _, img := range w.cfg.Images {
+		tag := img.Tag
+		if tag == "" {
+			tag = "latest"
+		}
+		if imageRef == img.Name+":"+tag || imageRef == img.Name {
+			return true
+		}
+	}
+	return false
+}
+
+// EnsureImage makes the image available before a container is created from
+// it. Images the suite builds are left alone, and an image already present is
+// not re-fetched, so a suite pinning a digest keeps the copy it has.
+func (w *Wrapper) EnsureImage(imageRef string) error {
+	if imageRef == "" || w.suiteBuilds(imageRef) {
+		return nil
+	}
+
+	ctx := context.Background()
+	present, err := ImageExists(ctx, w.cli, imageRef)
+	if err != nil {
+		return fmt.Errorf("could not check for image %s: %w", imageRef, err)
+	}
+	if present {
+		return nil
+	}
+
+	if err := PullImage(ctx, w.cli, imageRef); err != nil {
+		return fmt.Errorf("could not pull image %s: %w", imageRef, err)
+	}
+	return nil
+}
