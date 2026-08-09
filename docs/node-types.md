@@ -713,8 +713,8 @@ through `sh -c` and ignore `exec_opts` entirely.
 
 LXD nodes support remote connections using modern trust token authentication or traditional certificate-based authentication.
 
-Warning: node-level remote LXD options only apply when the configuration has no
-top-level `lxd:` block.
+Note: node-level connection options and a top-level `lxd:` block are mutually
+exclusive, and setting both is a configuration error caught by `--check`.
 
 When a suite defines an `lxd:` block, DART builds a shared LXD platform wrapper.
 That wrapper connects over a local Unix socket only — either the path in
@@ -723,10 +723,21 @@ remote-connection fields; it accepts only `socket`, `project`, `networks`,
 `profiles`, and `images`.
 
 Once that wrapper exists, every `lxd` and `lxd-vm` node is constructed through it
-and reuses its local connection. The node options `remote_addr`, `trust_token`,
-`client_cert`, `client_key`, `server_cert`, `skip_verify`, and `socket` are then
-ignored — no warning is emitted, `--check` does not flag it, and instances are
-created on the local host instead of the remote server.
+and reuses its connection. A node that also sets `remote_addr`, `trust_token`,
+`client_cert`, `client_key`, `server_cert`, `skip_verify`, or `socket` is
+rejected, naming every conflicting option:
+
+```text
+Error: node "remote-box" sets remote_addr, trust_token, which selects an LXD
+server, but the suite's lxd: block already connects to one — move the
+connection settings to the lxd: block, or remove the lxd: block so the node
+manages its own connection
+```
+
+Rationale: the wrapper creates the suite's projects, networks, and profiles on
+one server. An instance created somewhere else would reference resources that
+do not exist there — and previously it was created locally in silence, so the
+tests passed against a machine the suite never named.
 
 Targeting a remote LXD server therefore means omitting the top-level `lxd:` block
 entirely and configuring the connection per node. The project, network, and profile
