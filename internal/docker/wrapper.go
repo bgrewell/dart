@@ -38,7 +38,9 @@ func NewWrapper(cfg *config.Configuration) (wrapper *Wrapper, err error) {
 }
 
 type Wrapper struct {
-	cli                *client.Client
+	// cli is the interface rather than the concrete client so the wrapper's
+	// call sequences can be asserted without a daemon
+	cli                client.APIClient
 	cfg                *config.DockerConfig
 	networkNamesToId   map[string]string
 	containerNamesToId map[string]string
@@ -56,7 +58,7 @@ func (w *Wrapper) Name() string {
 }
 
 // GetClient returns the Docker client
-func (w *Wrapper) GetClient() *client.Client {
+func (w *Wrapper) GetClient() client.APIClient {
 	return w.cli
 }
 
@@ -179,14 +181,37 @@ func (w *Wrapper) CreateContainer(name, hostname, image string, options ...Conta
 		containerCfg.ExposedPorts = exposed
 		hostCfg.PortBindings = bindings
 	}
+	// Docker accepts a single endpoint at creation; the rest are connected
+	// once the container exists
 	networkCfg := &network.NetworkingConfig{}
+	if len(c.networks) > 0 {
+		networkCfg.EndpointsConfig = map[string]*network.EndpointSettings{
+			c.networks[0].Name: endpointSettings(c.networks[0]),
+		}
+	}
 
 	id, err := CreateContainer(ctx, w.cli, containerCfg, hostCfg, networkCfg, name)
 	if err != nil {
 		return fmt.Errorf("could not create container: %v", err)
 	}
 	w.containerNamesToId[name] = id
+
+	for _, attachment := range c.networks[min(1, len(c.networks)):] {
+		if err := AttachNetwork(ctx, w.cli, attachment.Name, id, endpointSettings(attachment)); err != nil {
+			return fmt.Errorf("could not attach container %s to network %s: %w", name, attachment.Name, err)
+		}
+	}
 	return nil
+}
+
+// endpointSettings renders one attachment, carrying a fixed address when the
+// suite asked for one.
+func endpointSettings(attachment NetworkAttachment) *network.EndpointSettings {
+	settings := &network.EndpointSettings{}
+	if attachment.IPv4 != "" {
+		settings.IPAMConfig = &network.EndpointIPAMConfig{IPv4Address: attachment.IPv4}
+	}
+	return settings
 }
 
 func (w *Wrapper) StartContainer(name string) error {

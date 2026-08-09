@@ -32,6 +32,15 @@ type containerOptions struct {
 	ports        []string
 	command      []string
 	entrypoint   []string
+	networks     []NetworkAttachment
+}
+
+// NetworkAttachment names a network the container joins, optionally with a
+// fixed address on it. A static address requires the network to define a
+// subnet, which the suite's docker.networks block is what provides.
+type NetworkAttachment struct {
+	Name string
+	IPv4 string
 }
 
 // WithDetach is a function that sets the detach option for creating a container.
@@ -98,6 +107,17 @@ func WithCommand(command []string) ContainerOptions {
 func WithEntrypoint(entrypoint []string) ContainerOptions {
 	return func(o *containerOptions) {
 		o.entrypoint = entrypoint
+	}
+}
+
+// WithNetworks attaches the container to user-defined networks. Docker
+// accepts one endpoint at creation time, so the first is applied there and
+// any others are connected immediately afterwards. Attaching to a
+// user-defined network also takes the container off the default bridge,
+// which is what makes network isolation between nodes real.
+func WithNetworks(networks []NetworkAttachment) ContainerOptions {
+	return func(o *containerOptions) {
+		o.networks = networks
 	}
 }
 

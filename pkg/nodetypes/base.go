@@ -74,6 +74,9 @@ func ValidateNodeOptions(cfg *config.NodeConfig) error {
 		if opts.Image == "" {
 			return fmt.Errorf("image is required")
 		}
+		if err := validateNetworkAttachments(opts.Networks); err != nil {
+			return err
+		}
 		if _, err := resolveVolumes(opts.Volumes, cfg.SuiteDir); err != nil {
 			return err
 		}
@@ -196,6 +199,22 @@ func validateOptionNames(cfg *config.NodeConfig) error {
 
 	return fmt.Errorf("unknown option %q for a %s node (accepted: %s)",
 		unknown[0], cfg.Type, strings.Join(accepted, ", "))
+}
+
+// validateNetworkAttachments checks the docker node-level networks list. A
+// node joins a network the suite already declared; it does not define one,
+// so addressing keys belong on the platform block that creates it.
+func validateNetworkAttachments(networks []DockerNetworkOpts) error {
+	for _, net := range networks {
+		if net.Name == "" {
+			return fmt.Errorf("a networks entry is missing name")
+		}
+		if net.Subnet != "" {
+			return fmt.Errorf("network %q sets subnet, which a node cannot do: the subnet belongs on the suite's docker.networks entry that creates the network",
+				net.Name)
+		}
+	}
+	return nil
 }
 
 // decodeNodeOptions reuses the same JSON round-trip the factories use, so
