@@ -44,13 +44,12 @@ Three ways the block itself can go wrong:
   error, though no setup step or test ever runs.
 
   `file_hash` is the exception, deliberately. Its `evaluate` block accepts
-  only `md5`, `sha1`, and `sha256`, because the check runs `sha256sum` and
-  friends: the result's stdout is the **checksum line**, not the file's
-  contents. A `contains: "hello"` there would read like a content assertion
-  while actually matching against `"<digest>  <path>"` — so the whole
-  vocabulary on this page is refused rather than silently meaning something
-  else. Assertions about contents belong on `file_content`, and anything
-  richer on `execute`.
+  only `md5`, `sha1`, and `sha256`. A matching digest already proves the
+  file's contents byte for byte, so any further check on the same file can
+  only be redundant or contradictory — and it would not mean what it appears
+  to either, since the result's stdout is the **checksum line**: a
+  `contains: "hello"` would assert against `"<digest>  <path>"` rather than
+  the file. Assertions about contents belong on `file_content`.
 
   These names belong to one test type and are recognized only there; using one
   under a different type reports the same unknown-evaluation-type error:

@@ -63,12 +63,12 @@ func newFileHashTest(base BaseTest, opts map[string]interface{}) (ifaces.Test, e
 			}
 		}
 		if !known {
-			// The check runs md5sum/sha1sum/sha256sum, so the result's
-			// stdout is the digest line, not the file's contents. A generic
-			// check here would silently assert against "<digest>  <path>" —
-			// `contains: hello` would look like a content assertion and test
-			// nothing of the sort. Assertions about content belong on
-			// file_content, and anything richer on execute.
+			// A matching digest already proves the contents byte for byte,
+			// so a further check on the same file can only be redundant or
+			// contradictory. It would also not mean what it appears to: the
+			// result's stdout is the digest line, so `contains: hello` would
+			// assert against "<digest>  <path>" rather than the file.
+			// Assertions about contents belong on file_content.
 			return nil, fmt.Errorf("check %q is not available in a file_hash test %q: this type accepts only md5, sha1, and sha256, "+
 				"because its output is the checksum line rather than the file's contents — use file_content to assert on contents",
 				name, base.name)
