@@ -561,11 +561,16 @@ inside a fragment is not expanded. A directive missing its closing
 parenthesis fails with `malformed !!load_from directive on line N`, and a
 missing or unreadable directory fails the load.
 
+Note: a fragment may open with a `---` document separator (and close with
+`...`); both are stripped when the fragment is spliced in, so a file copied
+from an example works unchanged.
+
 Warning: once a suite uses `!!load_from`, DART stops recording source
-locations for it, so configuration errors print the message alone — no file
-name, line number, or highlighted snippet. Rationale: inlining shifts line
-numbers away from the files on disk, and a snippet pointing at the wrong
-line is worse than none.
+locations for it, so configuration errors print the message alone — no
+highlighted snippet. Rationale: inlining shifts line numbers away from the
+files on disk, and a snippet pointing at the wrong line is worse than none.
+The error does list every fragment that was spliced, so the reported position
+can be traced back to a file by hand.
 
 A worked example lives in
 [`examples/merged/`](examples/merged/) — `main.yaml` is the entry point, the
