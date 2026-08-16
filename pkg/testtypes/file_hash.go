@@ -63,7 +63,15 @@ func newFileHashTest(base BaseTest, opts map[string]interface{}) (ifaces.Test, e
 			}
 		}
 		if !known {
-			return nil, fmt.Errorf("unknown hash algorithm %q in test %q (supported: md5, sha1, sha256)", name, base.name)
+			// A matching digest already proves the contents byte for byte,
+			// so a further check on the same file can only be redundant or
+			// contradictory. It would also not mean what it appears to: the
+			// result's stdout is the digest line, so `contains: hello` would
+			// assert against "<digest>  <path>" rather than the file.
+			// Assertions about contents belong on file_content.
+			return nil, fmt.Errorf("check %q is not available in a file_hash test %q: a matching digest already proves the contents, "+
+				"so this type accepts only md5, sha1, and sha256 — use file_content to assert on contents",
+				name, base.name)
 		}
 	}
 

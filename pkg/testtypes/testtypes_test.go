@@ -171,7 +171,7 @@ func TestFileHashTest(t *testing.T) {
 	assert.ErrorContains(t, err, "hex digest")
 	_, err = makeTest(t, node, TypeFileHash, map[string]interface{}{
 		"filename": "/tmp/f", "evaluate": map[string]interface{}{"crc32": "abcd"}})
-	assert.ErrorContains(t, err, "unknown hash algorithm")
+	assert.ErrorContains(t, err, "is not available in a file_hash test")
 }
 
 func TestServiceStatusTest(t *testing.T) {

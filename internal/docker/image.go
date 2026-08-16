@@ -7,7 +7,6 @@ import (
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 	"io"
-	"os"
 )
 
 // BuildImage builds an image from a Dockerfile.
@@ -21,19 +20,33 @@ func BuildImage(ctx context.Context, cli *client.Client, dockerfile, imageName s
 }
 
 // PullImage pulls an image from a registry.
-func PullImage(ctx context.Context, cli *client.Client, imageName string) error {
+func PullImage(ctx context.Context, cli client.APIClient, imageName string) error {
 	reader, err := cli.ImagePull(ctx, imageName, image.PullOptions{})
 	if err != nil {
 		return err
 	}
-
 	defer reader.Close()
-	// cli.ImagePull is asynchronous.
-	// The reader needs to be read completely for the pull operation to complete.
-	// If stdout is not required, consider using io.Discard instead of os.Stdout.
-	io.Copy(os.Stdout, reader)
 
+	// ImagePull is asynchronous: the stream must be drained for the pull to
+	// finish. The progress output is discarded rather than printed, because
+	// node setup renders through a spinner that raw daemon output would
+	// scribble over.
+	if _, err := io.Copy(io.Discard, reader); err != nil {
+		return fmt.Errorf("pulling %s: %w", imageName, err)
+	}
 	return nil
+}
+
+// ImageExists reports whether the daemon already holds the image.
+func ImageExists(ctx context.Context, cli client.APIClient, imageName string) (bool, error) {
+	_, err := cli.ImageInspect(ctx, imageName)
+	if err == nil {
+		return true, nil
+	}
+	if IsNotFound(err) {
+		return false, nil
+	}
+	return false, err
 }
 
 // ListImages returns a list of images on the Docker host.
