@@ -252,15 +252,28 @@ func ParseConfigurationWithVars(data []byte, location string, cliVars map[string
 	// gets. load_from shifts line numbers away from the file on disk, so
 	// the conversion is skipped once it has been used: a snippet pointing
 	// at the wrong line is worse than none.
+	var fragments []string
 	var usedLoadFrom bool
 	defer func() {
-		if err != nil && !usedLoadFrom && len(filePath) > 0 && filePath[0] != "" {
-			err = AsConfigError(err, filePath[0])
+		if err == nil {
+			return
 		}
+		if !usedLoadFrom {
+			if len(filePath) > 0 && filePath[0] != "" {
+				err = AsConfigError(err, filePath[0])
+			}
+			return
+		}
+		// Line numbers refer to the assembled document rather than any file
+		// on disk, so a snippet would point at nothing. Naming the spliced
+		// fragments at least says where to look.
+		err = fmt.Errorf("%w\n\nThis suite assembles fragments with !!load_from, so the position above refers to the combined document rather than a file on disk. The fragments are:\n  %s",
+			err, strings.Join(fragments, "\n  "))
 	}()
 
-	processed, loadFromUsed, err := processLoadFromDirectives(data, location)
-	usedLoadFrom = loadFromUsed
+	processed, loaded, err := processLoadFromDirectives(data, location)
+	fragments = loaded
+	usedLoadFrom = len(loaded) > 0
 	if err != nil {
 		return nil, err
 	}
@@ -568,7 +581,7 @@ func validateConfiguration(cfg *Configuration) error {
 	return nil
 }
 
-func processLoadFromDirectives(data []byte, location string) (processed []byte, usedLoadFrom bool, err error) {
+func processLoadFromDirectives(data []byte, location string) (processed []byte, fragments []string, err error) {
 	lines := strings.Split(string(data), "\n")
 	var outputLines []string
 
@@ -577,15 +590,15 @@ func processLoadFromDirectives(data []byte, location string) (processed []byte, 
 			startIdx := strings.Index(line, "!!load_from(") + len("!!load_from(")
 			endIdx := strings.Index(line[startIdx:], ")")
 			if endIdx < 0 {
-				return nil, false, fmt.Errorf("malformed !!load_from directive on line %d: missing closing parenthesis", lineNum+1)
+				return nil, nil, fmt.Errorf("malformed !!load_from directive on line %d: missing closing parenthesis", lineNum+1)
 			}
 			dir := line[startIdx : startIdx+endIdx]
 
-			loadedData, err := loadFromDirectory(filepath.Join(location, dir))
+			loadedData, loaded, err := loadFromDirectory(filepath.Join(location, dir))
 			if err != nil {
-				return nil, false, err
+				return nil, nil, err
 			}
-			usedLoadFrom = true
+			fragments = append(fragments, loaded...)
 			indentedLoadedData := indent(loadedData, "  ") // Indent the loaded data
 			outputLines = append(outputLines, fmt.Sprintf("%s\n%s", line[:startIdx-len("!!load_from(")], indentedLoadedData))
 		} else {
@@ -593,11 +606,12 @@ func processLoadFromDirectives(data []byte, location string) (processed []byte, 
 		}
 	}
 
-	return []byte(strings.Join(outputLines, "\n")), usedLoadFrom, nil
+	return []byte(strings.Join(outputLines, "\n")), fragments, nil
 }
 
-func loadFromDirectory(dir string) ([]byte, error) {
+func loadFromDirectory(dir string) ([]byte, []string, error) {
 	var buffer bytes.Buffer
+	var fragments []string
 
 	err := filepath.Walk(dir, func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
@@ -608,17 +622,55 @@ func loadFromDirectory(dir string) ([]byte, error) {
 			if err != nil {
 				return err
 			}
-			buffer.Write(data)
+			buffer.Write(stripDocumentMarkers(data))
 			buffer.WriteString("\n")
+			fragments = append(fragments, path)
 		}
 		return nil
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return buffer.Bytes(), nil
+	return buffer.Bytes(), fragments, nil
+}
+
+// stripDocumentMarkers removes the leading `---` and trailing `...` that mark
+// a standalone YAML document.
+//
+// Fragments are spliced into an enclosing document and then indented, so a
+// separator would land as an indented `  ---` mid-document and break the
+// parse. Every suite example in this repository opens with `---`, so copying
+// one into a load_from directory hit this immediately.
+func stripDocumentMarkers(data []byte) []byte {
+	lines := strings.Split(string(data), "\n")
+
+	// Leading separator, after any blank or comment lines that precede it
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if trimmed == "---" {
+			lines = append(lines[:i], lines[i+1:]...)
+		}
+		break
+	}
+
+	// Trailing end-of-document marker
+	for i := len(lines) - 1; i >= 0; i-- {
+		trimmed := strings.TrimSpace(lines[i])
+		if trimmed == "" {
+			continue
+		}
+		if trimmed == "..." {
+			lines = append(lines[:i], lines[i+1:]...)
+		}
+		break
+	}
+
+	return []byte(strings.Join(lines, "\n"))
 }
 
 func indent(data []byte, prefix string) string {
