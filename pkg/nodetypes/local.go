@@ -26,7 +26,7 @@ var _ ifaces.Node = &LocalNode{}
 // through a shell (docker `sh -c`, lxd `bash -c`, ssh's remote shell), and
 // a shell-less local node made pipes, conditionals, and multi-line
 // commands fail with a confusing exec error.
-func NewLocalNode(name string, opts ifaces.NodeOptions) ifaces.Node {
+func NewLocalNode(name string, opts ifaces.NodeOptions, suiteDir string) ifaces.Node {
 
 	var options []execution.ExecutionOption
 	shellConfigured := false
@@ -48,6 +48,14 @@ func NewLocalNode(name string, opts ifaces.NodeOptions) ifaces.Node {
 	}
 	if !shellConfigured {
 		options = append(options, execution.WithShell(defaultLocalShell()))
+	}
+
+	// Commands run from the suite's directory, so a relative path means the
+	// same thing in a command as it does in a file step's source. Without
+	// this the command inherited DART's working directory, and a suite that
+	// worked from the repository root broke when run from anywhere else.
+	if suiteDir != "" {
+		options = append(options, execution.WithWorkingDir(suiteDir))
 	}
 
 	return &LocalNode{

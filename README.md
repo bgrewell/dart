@@ -245,7 +245,9 @@ destination already exists.
 
 Note: every local path a suite writes follows one rule — absolute paths are
 used as-is, `~` is the invoking user's home directory, and anything else is
-relative to the directory holding the suite file. That covers file-step
+relative to the directory holding the suite file. Commands on a `local` node
+run from that directory too, so `command: cat data/app.txt` and
+`source: data/app.txt` name the same file. That covers file-step
 sources and destinations, docker `volumes`, LXD disk `source`s, SSH keys and
 `known_hosts`, LXD certificates, `compose_file`, `docker.images[].dockerfile`,
 and `!!load_from`. A suite is therefore portable: it behaves the same run from

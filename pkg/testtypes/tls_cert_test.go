@@ -207,7 +207,7 @@ func TestTLSCertValidation(t *testing.T) {
 func runNodeProbe(t *testing.T, host string, port int, evaluate map[string]interface{}) map[string]*eval.EvaluateResult {
 	t.Helper()
 	shellOpts := map[string]interface{}{"shell": "/bin/sh"}
-	node := nodetypes.NewLocalNode("probe", ifaces.NodeOptions(&shellOpts))
+	node := nodetypes.NewLocalNode("probe", ifaces.NodeOptions(&shellOpts), "")
 	options := map[string]interface{}{
 		"host": host, "port": port, "from": "node", "timeout": 2,
 	}
@@ -258,7 +258,7 @@ func TestPortCheckFromNodeUnsupportedIsLoud(t *testing.T) {
 		"shell": "/bin/sh",
 		"env":   []interface{}{"PATH=" + emptyDir},
 	}
-	node := nodetypes.NewLocalNode("probe", ifaces.NodeOptions(&shellOpts))
+	node := nodetypes.NewLocalNode("probe", ifaces.NodeOptions(&shellOpts), "")
 	test, err := makeTest(t, node, TypePortCheck, map[string]interface{}{
 		"host": "127.0.0.1", "port": 9, "from": "node", "timeout": 2,
 	})

@@ -8,6 +8,7 @@ import (
 
 	"github.com/bgrewell/dart/internal/config"
 	"github.com/bgrewell/dart/internal/formatters"
+	"github.com/bgrewell/dart/internal/helpers"
 	"github.com/bgrewell/dart/pkg/ifaces"
 )
 
@@ -41,12 +42,26 @@ func newExecuteStep(c *config.StepConfig, node ifaces.Node) (ifaces.Step, error)
 		return nil, optionError(c, "command must be a string or array of strings in step %q", c.Name)
 	}
 
+	workdir, _, err := optString(c, "workdir")
+	if err != nil {
+		return nil, err
+	}
+
 	timeoutSeconds, err := optFloat(c, "timeout", 0)
 	if err != nil {
 		return nil, err
 	}
 	if timeoutSeconds < 0 {
 		return nil, optionError(c, "timeout must be non-negative in step %q", c.Name)
+	}
+
+	if workdir != "" {
+		// Applied as a shell prefix rather than an executor setting so it
+		// works the same on every node type: the directory belongs to the
+		// node, and every node runs commands through a shell.
+		for i, command := range commands {
+			commands[i] = fmt.Sprintf("cd -- %s && %s", helpers.ShellQuote(workdir), command)
+		}
 	}
 
 	return &ExecuteStep{

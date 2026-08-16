@@ -301,7 +301,7 @@ func CreateNodesWithWrappers(configs []*config.NodeConfig, dockerWrapper *docker
 
 		switch cfg.Type {
 		case "local":
-			node = NewLocalNode(cfg.Name, &cfg.Options)
+			node = NewLocalNode(cfg.Name, &cfg.Options, cfg.SuiteDir)
 		case "docker":
 			node, err = NewDockerNode(dockerWrapper, cfg.Name, &cfg.Options, cfg.SuiteDir)
 		case "docker-compose":
