@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/bgrewell/dart/internal/eval"
+	"github.com/bgrewell/dart/internal/helpers"
 	"github.com/bgrewell/dart/pkg/ifaces"
 )
 
@@ -31,6 +32,15 @@ func newExecuteTest(base BaseTest, opts map[string]interface{}) (ifaces.Test, er
 	}
 	if timeoutSeconds < 0 {
 		return nil, fmt.Errorf("timeout must be non-negative in test %q", base.name)
+	}
+	workdir, _, err := optString(base.name, opts, "workdir")
+	if err != nil {
+		return nil, err
+	}
+	if workdir != "" {
+		// A shell prefix rather than an executor setting, so it behaves the
+		// same on every node type
+		command = fmt.Sprintf("cd -- %s && %s", helpers.ShellQuote(workdir), command)
 	}
 
 	extractors := map[string]extractor{}

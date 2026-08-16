@@ -147,6 +147,15 @@ func WithShell(shell string) ExecutionOption {
 	}
 }
 
+// WithWorkingDir sets the directory a command runs in.
+func WithWorkingDir(dir string) ExecutionOption {
+	return ExecutionOption{
+		apply: func(exec execute.Executor) {
+			exec.SetWorkingDir(dir)
+		},
+	}
+}
+
 func WithSudo(pass string) ExecutionOption {
 	return ExecutionOption{
 		apply: func(exec execute.Executor) {

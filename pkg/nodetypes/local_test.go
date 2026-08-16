@@ -25,7 +25,7 @@ func TestLocalNodeDefaultShell(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX shell expectations")
 	}
-	node := NewLocalNode("default-shell", nil)
+	node := NewLocalNode("default-shell", nil, "")
 	assert.Equal(t, "HELLO", execStdout(t, node, "echo hello | tr a-z A-Z"))
 	assert.Equal(t, "yes", execStdout(t, node, "if true; then echo yes; fi"))
 }
@@ -36,7 +36,7 @@ func TestLocalNodeTopLevelShell(t *testing.T) {
 		t.Skip("POSIX shell expectations")
 	}
 	opts := map[string]interface{}{"shell": "/bin/bash"}
-	node := NewLocalNode("top-level", ifaces.NodeOptions(&opts))
+	node := NewLocalNode("top-level", ifaces.NodeOptions(&opts), "")
 	assert.NotEmpty(t, execStdout(t, node, "echo $BASH_VERSION"))
 }
 
@@ -48,6 +48,6 @@ func TestLocalNodeExecOptsShell(t *testing.T) {
 	opts := map[string]interface{}{
 		"exec_opts": map[string]interface{}{"shell": "/bin/bash"},
 	}
-	node := NewLocalNode("exec-opts", ifaces.NodeOptions(&opts))
+	node := NewLocalNode("exec-opts", ifaces.NodeOptions(&opts), "")
 	assert.NotEmpty(t, execStdout(t, node, "echo $BASH_VERSION"))
 }

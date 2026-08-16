@@ -45,7 +45,7 @@ func localNode(t *testing.T) ifaces.Node {
 	if _, err := exec.LookPath("sh"); err != nil {
 		t.Skip("a POSIX shell is required for node-side probes")
 	}
-	return nodetypes.NewLocalNode("test-node", nil)
+	return nodetypes.NewLocalNode("test-node", nil, "")
 }
 
 func skipWithoutTool(t *testing.T, tool string) {

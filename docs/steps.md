@@ -151,6 +151,23 @@ Run shell commands on the target node. Ideal for custom setup operations.
         mysql -u root -e "GRANT ALL ON testdb.* TO 'testuser'@'%';"
 ```
 
+`workdir` runs the commands from a directory on the node:
+
+```yaml
+- name: build the binary
+  node: builder
+  step:
+    type: execute
+    options:
+      workdir: cmd/app
+      command: go build -o ../../dist/app .
+```
+
+It applies to every node type — the directory is a path on the node, and
+every node runs commands through a shell. On a `local` node the default is
+already the suite file's directory, so `workdir` there is for reaching a
+subdirectory rather than for escaping the invocation directory.
+
 `command` accepts either a single string — including a YAML block scalar, as
 above — or a list of strings. List entries run in order on the same node and the
 step stops at the first entry that exits non-zero; the remaining entries do not

@@ -23,7 +23,7 @@ func allFileOps(t *testing.T) map[string]fileOps {
 	}
 	if runtime.GOOS != "windows" {
 		nodeOpts := map[string]interface{}{"shell": "/bin/sh"}
-		ops["exec"] = execFileOps{node: nodetypes.NewLocalNode("fileops-test", ifaces.NodeOptions(&nodeOpts))}
+		ops["exec"] = execFileOps{node: nodetypes.NewLocalNode("fileops-test", ifaces.NodeOptions(&nodeOpts), "")}
 	}
 	return ops
 }
@@ -114,7 +114,7 @@ func TestFileOpsQuotedPaths(t *testing.T) {
 
 func TestFileOpsForSelection(t *testing.T) {
 	assert.IsType(t, localFileOps{}, fileOpsFor(nil))
-	assert.IsType(t, localFileOps{}, fileOpsFor(nodetypes.NewLocalNode("local", nil)))
+	assert.IsType(t, localFileOps{}, fileOpsFor(nodetypes.NewLocalNode("local", nil, "")))
 	assert.IsType(t, execFileOps{}, fileOpsFor(nodetypes.NewMockNode()))
 }
 

@@ -1,6 +1,10 @@
 package steptypes
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -61,4 +65,51 @@ func TestSimulatedStepMessage(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "standing in for a package install", step.(*SimulatedStep).message)
+}
+
+// workdir applies to any node type, since every node runs commands through a
+// shell — so it is a prefix on the command rather than an executor setting.
+func TestExecuteStepWorkdir(t *testing.T) {
+	step, err := makeStep(t, TypeExecute, map[string]interface{}{
+		"command": "cat app.txt",
+		"workdir": "data",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"cd -- 'data' && cat app.txt"}, step.(*ExecuteStep).commands)
+}
+
+// A directory carrying shell metacharacters must reach cd as data. The check
+// is behavioural: the generated command runs for real and the payload's side
+// effect must not occur.
+func TestExecuteStepWorkdirIsQuoted(t *testing.T) {
+	shell, err := exec.LookPath("sh")
+	if err != nil {
+		t.Skip("a POSIX shell is required")
+	}
+	marker := filepath.Join(t.TempDir(), "pwned")
+
+	step, err := makeStep(t, TypeExecute, map[string]interface{}{
+		"command": "true",
+		"workdir": "evil'; touch " + marker + "; echo '",
+	})
+	require.NoError(t, err)
+
+	// The cd itself fails — there is no such directory — but nothing else
+	// may run
+	_ = exec.Command(shell, "-c", step.(*ExecuteStep).commands[0]).Run()
+
+	_, statErr := os.Stat(marker)
+	assert.True(t, os.IsNotExist(statErr), "the workdir escaped its quoting")
+}
+
+// Every command in a multi-command step gets the directory.
+func TestExecuteStepWorkdirAppliesToEveryCommand(t *testing.T) {
+	step, err := makeStep(t, TypeExecute, map[string]interface{}{
+		"command": []interface{}{"one", "two"},
+		"workdir": "data",
+	})
+	require.NoError(t, err)
+	for _, cmd := range step.(*ExecuteStep).commands {
+		assert.True(t, strings.HasPrefix(cmd, "cd -- 'data' && "), cmd)
+	}
 }

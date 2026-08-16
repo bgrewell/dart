@@ -35,7 +35,7 @@ func makeStepOn(t *testing.T, node ifaces.Node, stepType string, options map[str
 func localNode(t *testing.T) ifaces.Node {
 	t.Helper()
 	opts := map[string]interface{}{"shell": "/bin/sh"}
-	return nodetypes.NewLocalNode("transfer", ifaces.NodeOptions(&opts))
+	return nodetypes.NewLocalNode("transfer", ifaces.NodeOptions(&opts), "")
 }
 
 func TestFilePushCopiesContentAndMode(t *testing.T) {
@@ -220,7 +220,7 @@ func TestFileTemplateNullValueRejected(t *testing.T) {
 // the chunked remote writer.
 func TestRemoteWriteLargeContent(t *testing.T) {
 	shellOpts := map[string]interface{}{"shell": "/bin/sh"}
-	node := nodetypes.NewLocalNode("chunked", ifaces.NodeOptions(&shellOpts))
+	node := nodetypes.NewLocalNode("chunked", ifaces.NodeOptions(&shellOpts), "")
 	ops := execFileOps{node: node}
 
 	dir := t.TempDir()
@@ -245,7 +245,7 @@ func TestRemoteWriteLargeContent(t *testing.T) {
 // Binary content with NUL bytes and an empty file both survive.
 func TestRemoteWriteBinaryAndEmpty(t *testing.T) {
 	shellOpts := map[string]interface{}{"shell": "/bin/sh"}
-	node := nodetypes.NewLocalNode("binary", ifaces.NodeOptions(&shellOpts))
+	node := nodetypes.NewLocalNode("binary", ifaces.NodeOptions(&shellOpts), "")
 	ops := execFileOps{node: node}
 	dir := t.TempDir()
 

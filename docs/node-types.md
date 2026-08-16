@@ -7,7 +7,9 @@ Every test and step runs on a *node*: the machine, container, or VM under test. 
 DART supports several types of nodes that can be used as test targets:
 
 - **Local Node (`local`)**  
-  Execute tests on the local machine where DART is running.
+  Execute tests on the local machine where DART is running. Commands run from
+  the suite file's directory, so a relative path means the same thing in a
+  command as it does in a file step's `source`.
   Invariant: at most one `local` node per suite. A second one fails configuration
   with `only one local node allowed; "<name>" duplicates "<first>"`, reported
   against that node's line in the YAML and caught by `--check`. The limit applies only to `local`; other types may
