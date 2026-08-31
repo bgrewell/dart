@@ -1,0 +1,40 @@
+# Dependency updates. Security alerts are raised without this file; what it
+# adds is routine version updates, which is how the docs toolchain drifted
+# behind without anything surfacing it.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # One PR per batch rather than per module: these move together and
+      # each would otherwise need its own build and review.
+      go-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  # The documentation site is a separate module with its own lockfile, and
+  # CI installs from that lockfile with `npm ci` — so a stale lock pins the
+  # toolchain until it is regenerated.
+  - package-ecosystem: npm
+    directory: /site
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      docs-site:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
