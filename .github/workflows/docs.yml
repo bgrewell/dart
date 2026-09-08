@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           # Matches site/package.json's engines floor, which the lockfile's
           # transitive dependencies require. A bare "22" resolves to the
