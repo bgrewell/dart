@@ -33,7 +33,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # Matches site/package.json's engines floor, which the lockfile's
+          # transitive dependencies require. A bare "22" resolves to the
+          # latest 22.x and happens to satisfy it, but does not say so.
+          node-version: "22.19"
           cache: npm
           cache-dependency-path: site/package-lock.json
       - run: npm ci
