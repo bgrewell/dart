@@ -43,7 +43,7 @@ jobs:
         working-directory: site
       - run: npm run build
         working-directory: site
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         # Only the default branch publishes; pull requests build to prove the
         # site still compiles.
         if: github.ref == 'refs/heads/main'
