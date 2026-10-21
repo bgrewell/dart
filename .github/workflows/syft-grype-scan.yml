@@ -162,7 +162,7 @@ jobs:
       # Release notes are owned by release.yml and must not be regenerated here.
       - name: Attach SBOM and VEX to release
         if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             sbom-cyclonedx.json
