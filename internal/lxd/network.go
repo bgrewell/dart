@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"time"
 
 	lxd "github.com/canonical/lxd/client"
 	"github.com/canonical/lxd/shared/api"
@@ -47,7 +48,54 @@ func CreateNetwork(ctx context.Context, server lxd.InstanceServer, name, network
 		return fmt.Errorf("failed to create network %s: %w", name, err)
 	}
 
-	return nil
+	return waitForNetwork(ctx, server, name, true)
+}
+
+// Networks are polled this often, for at most this long, after a create or
+// delete request. Variables rather than constants so tests can shorten them.
+var (
+	networkPollInterval = 200 * time.Millisecond
+	networkWaitTimeout  = 60 * time.Second
+)
+
+// waitForNetwork blocks until the named network is fully created
+// (present=true) or no longer exists (present=false).
+//
+// Newer LXD servers create and delete networks asynchronously: the request is
+// answered with a background operation, which the client's CreateNetwork and
+// DeleteNetwork neither return nor wait for. Without this wait, an instance
+// created straight after its network fails with "Network not found", and a
+// suite can exit while its networks are still being created or removed.
+func waitForNetwork(ctx context.Context, server lxd.InstanceServer, name string, present bool) error {
+	want := "created"
+	if !present {
+		want = "removed"
+	}
+
+	deadline := time.Now().Add(networkWaitTimeout)
+	for {
+		network, _, err := server.GetNetwork(name)
+		switch {
+		case err != nil && !IsNotFound(err):
+			return fmt.Errorf("failed to check network %s while waiting for it to be %s: %w", name, want, err)
+		case err != nil && !present:
+			return nil
+		case err == nil && present && network.Status == api.NetworkStatusCreated:
+			return nil
+		case err == nil && present && network.Status == api.NetworkStatusErrored:
+			return fmt.Errorf("network %s was created in the %s state", name, network.Status)
+		}
+
+		if !time.Now().Before(deadline) {
+			return fmt.Errorf("timed out after %s waiting for network %s to be %s", networkWaitTimeout, name, want)
+		}
+
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("stopped waiting for network %s to be %s: %w", name, want, ctx.Err())
+		case <-time.After(networkPollInterval):
+		}
+	}
 }
 
 // CreateBridgeNetwork creates a bridge network with specific subnet and gateway.
@@ -104,7 +152,7 @@ func DeleteNetwork(ctx context.Context, server lxd.InstanceServer, name string) 
 	if err != nil {
 		return fmt.Errorf("failed to delete network %s: %w", name, err)
 	}
-	return nil
+	return waitForNetwork(ctx, server, name, false)
 }
 
 // GetNetworkState returns the current state of a network
